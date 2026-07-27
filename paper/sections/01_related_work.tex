@@ -1,0 +1,65 @@
+% =====================================================================
+% Related work.
+% Adapted from RESEARCH_PLAN.md §2 (prior art table + differentiators).
+% =====================================================================
+\section{Related Work}
+\label{sec:related}
+
+\paragraph{Independent context encoding.}
+Fusion-in-Decoder~\citep{izacard2021fid} encodes retrieved passages
+independently in the encoder and fuses them in the decoder cross-attention.
+Parallel Context Windows~\citep{ratner2023pcw} realizes an analogous idea in
+a decoder-only model without training, by partitioning positions into
+independent windows and merging them at generation time. Contextual Position
+Encoding for Extrapolation (CEPE)~\citep{yen2024cepe} adds a trained adapter
+for parallel context encoding at long context lengths. Our work is the
+decoder-only characterization of the same idea: rather than fixing one
+independent-context design, we sweep the query/document bridge width and
+report the full quality/cost frontier. PCW is the closest prior work and
+serves as a baseline (Section~\ref{sec:failure-envelope}), not merely a
+citation.
+
+\paragraph{Fixed-pattern sparse attention.}
+Sparse Transformers~\citep{child2019sparse},
+Longformer~\citep{beltagy2020longformer}, and
+BigBird~\citep{zaheer2020bigbird} sparsify attention using patterns fixed by
+position: local windows, strided offsets, random blocks, and global tokens.
+These patterns are agnostic to the document boundaries in a RAG prompt: a
+Longformer window straddles two retrieved documents just as readily as it
+sits inside one. Decoupled Document Inference sparsifies along the boundary
+the retriever already knows about, which yields cache reuse rather than only
+compute reduction.
+
+\paragraph{Attention sinks.}
+StreamingLLM~\citep{xiao2024streamingllm} shows that transformer language
+models allocate substantial attention mass to the first few tokens of a
+sequence, and that these ``sinks'' are load-bearing. A block-diagonal mask
+gives each document its own first tokens: $N$ sinks compete for the role
+that a single sink held under full causal attention. This is a diagnostic
+lens for the failure mode of \texttt{ddi\_strict}, in which the query is
+also isolated and only a single bridge row carries cross-document
+information.
+
+\paragraph{Practical caching alternatives.}
+PagedAttention~\citep{kwon2023pagedattention} reduces the memory cost of KV
+caches under existing (dense) attention and enables sharing of exact-match
+prefixes. It is the practical alternative to DDI for the caching claim
+(Section~\ref{sec:results-caching}); we compare rather than compete.
+DDI's addressable case is broader --- any repeated document at any position
+--- but requires a different attention pattern, so the two are complementary
+rather than substitutes.
+
+\paragraph{Controllable-$N$ evaluation.}
+The Lost-in-the-Middle protocol~\citep{liu2023lostmiddle} manipulates the
+position of a gold document within a variable-length distractor set, and
+shows that models degrade non-monotonically with position. We adopt the same
+design as our controllable-$N$ probe, since it isolates the dimension
+(number and position of documents) that DDI most directly changes.
+
+\paragraph{Differentiators.}
+Relative to the above, DDI is (i) a decoder-only characterization at 7--8B
+parameters, evaluated both with and without fine-tuning; (ii) a measured
+sweep of \emph{how much} isolation is affordable across the query/document
+bridge width, rather than a binary work/does-not-work test of a single
+independent-context design; and (iii) an explicit report of the gap between
+analytical and realized speedup, which prior work does not quantify.

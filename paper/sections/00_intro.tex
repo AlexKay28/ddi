@@ -1,0 +1,69 @@
+% =====================================================================
+% Introduction.
+% Adapted from RESEARCH_PLAN.md §1. Tighter, third-person, present tense.
+% =====================================================================
+\section{Introduction}
+\label{sec:intro}
+
+A retrieval-augmented generation (RAG) prompt is a concatenation of retrieved
+documents followed by the dialog:
+\begin{equation*}
+\underbrace{[\mathrm{doc}_1][\mathrm{doc}_2] \cdots [\mathrm{doc}_N]}_{\text{retrieved evidence}}
+\; [\mathrm{query}]\;[\mathrm{answer}].
+\end{equation*}
+Standard causal attention makes prefill quadratic in the length of the
+entire concatenation, but the retrieved documents are mutually independent
+artifacts: they were selected by a retriever, they share no discourse
+relationship, and $\mathrm{doc}_7$ attending into $\mathrm{doc}_2$ encodes
+a dependency that does not exist in the data. The prefill step pays $O(T^2)$
+to model interactions that are largely spurious.
+
+Two costs follow, and the second dominates in production:
+\begin{enumerate}
+    \item \textbf{Compute.} Cross-document attention becomes the dominant term
+          once $N$ grows.
+    \item \textbf{Cache invalidation.} Under lower-triangular attention,
+          $\mathrm{doc}_2$'s keys and values depend on $\mathrm{doc}_1$, so
+          no document's KV block is reusable. Changing a single document in
+          the retrieved set --- or even its position --- invalidates the
+          entire prefix. A document that appears in a thousand requests is
+          prefilled a thousand times.
+\end{enumerate}
+Prefix caching~\citep{kwon2023pagedattention} mitigates the second cost only
+when \emph{exact} prefixes repeat; it does not admit the more common case in
+which the same document appears at a different position or in a different
+retrieved set.
+
+\paragraph{Contribution.}
+We characterize a mask family that isolates each retrieved document from
+every other. The two design points explored in the prior literature ---
+Fusion-in-Decoder~\citep{izacard2021fid} and Parallel Context
+Windows~\citep{ratner2023pcw} --- correspond to a single choice on this axis;
+we instead measure the full family and locate the knee. Concretely:
+\begin{itemize}
+    \item We formalize the mask family (Section~\ref{sec:method}) and its
+          cost model, including a bridge-width parameter $k$ that
+          continuously interpolates between full query--document attention
+          and a single SEP-row bridge.
+    \item We fix a non-inferiority margin $\Delta$ from the seed variance of
+          the full-causal baseline (Section~\ref{sec:method}) so parity
+          claims are falsifiable rather than eyeballed.
+    \item We measure how much cross-document attention can be removed at each
+          bridge width, on parity-detection benchmarks
+          (Section~\ref{sec:results-quality}), and pair every quality point
+          with a realized prefill speedup on the same
+          axes (Section~\ref{sec:results-efficiency}).
+    \item We measure per-document KV-cache reuse under a position-restart
+          layout (Section~\ref{sec:results-caching}). This is co-headline: a
+          cache hit skips prefill entirely, which no kernel improvement under
+          full causal attention can match.
+    \item We report the failure envelope
+          (Section~\ref{sec:failure-envelope}): degradation on questions that
+          require composing evidence across documents, versus questions that
+          do not. This bounds the operating regime and is the honest
+          counterweight to the parity claim.
+\end{itemize}
+The framing throughout is a characterization study rather than a benchmark
+win. If one variant --- \texttt{ddi\_strict} --- turns out to be non-viable,
+the negative result is a contribution: it is the ablation that makes the
+positive result meaningful.

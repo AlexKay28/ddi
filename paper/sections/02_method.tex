@@ -1,0 +1,104 @@
+% =====================================================================
+% Method.
+% Adapted from RESEARCH_PLAN.md §2 (mask diagram), §7 (cost model),
+% §4 (Δ non-inferiority margin), §6 axis P (position layouts).
+% =====================================================================
+\section{Method}
+\label{sec:method}
+
+\subsection{Mask family}
+\label{sec:method-masks}
+
+Let a prompt consist of $N$ documents of lengths $\ell_1, \dots, \ell_N$,
+a query block of length $Q$, and an answer block. Write
+$T = \sum_i \ell_i + Q + \text{answer length}$. Under standard causal
+attention every token attends to every earlier token. Decoupled Document
+Inference restricts this pattern to a block-diagonal structure over the
+document region, parameterized by which query rows are allowed to bridge
+the blocks.
+
+Table~\ref{tab:mask-taxonomy} enumerates the mask variants: \texttt{full}
+(baseline), \texttt{ddi\_qf} (documents isolated, whole query bridges),
+\texttt{ddi\_strict} (documents isolated, only the last query row bridges),
+\texttt{ddi\_bridge\_k} (a continuous family with the last $k$ query rows
+bridging, so $k=1$ recovers \texttt{ddi\_strict} and $k=Q$ recovers
+\texttt{ddi\_qf}), and \texttt{blind} (all-zero mask over documents,
+retained as a control that verifies each metric measures retrieval).
+
+\begin{table}[t]
+\centering
+\caption{Mask taxonomy (T1). Regenerated from
+    \texttt{paper/generated/T1\_mask\_taxonomy.md} on every build.}
+\label{tab:mask-taxonomy}
+\IfFileExists{generated/T1_mask_taxonomy.tex}{%
+    \input{generated/T1_mask_taxonomy.tex}%
+}{%
+    \todoreport{T1 mask taxonomy missing}{make paper}%
+}
+\end{table}
+
+The \texttt{ddi\_bridge\_k} family is the pivot of the study: sweeping $k$
+traces the quality/cost frontier as a curve rather than picking a single
+design point, and locates the operating knee (Section~\ref{sec:results-quality}).
+
+\subsection{Cost model}
+\label{sec:method-cost}
+
+Counting attended (query,\,key) pairs, treating all documents as equal
+length $\ell$ for readability, and writing $T = N\ell + Q$:
+\begin{align}
+\text{full}       \;&\approx\; \tfrac{1}{2}\, T^2, \label{eq:cost-full} \\
+\text{\texttt{ddi\_qf}}     \;&\approx\; \tfrac{N}{2}\, \ell^2 \;+\; Q\,N\ell \;+\; \tfrac{1}{2}\, Q^2, \label{eq:cost-qf} \\
+\text{\texttt{ddi\_strict}} \;&\approx\; \tfrac{N}{2}\, \ell^2 \;+\; \tfrac{1}{2}\, Q^2 \;+\; T. \label{eq:cost-strict}
+\end{align}
+As $Q \to 0$ the analytical speedup approaches $N$: independent
+same-length blocks are the setting in which DDI's asymptotic advantage is
+maximal. At finite $Q$ the $Q\,N\ell$ term dominates once $Q$ is comparable
+to $\ell$, which sets a lower bound on the speedup DDI can realize for
+short-document, long-query workloads.
+
+The gap between the analytical prediction (Equations~\ref{eq:cost-full}--\ref{eq:cost-strict})
+and the realized wall-clock speedup is itself a measurement target:
+Section~\ref{sec:results-efficiency} reports the ratio as a function of $N$
+and $\ell$, isolating where realization is bottlenecked by per-block launch
+overhead versus memory bandwidth versus non-prefill time.
+
+\subsection{Position layouts and caching}
+\label{sec:method-positions}
+
+We consider two layouts for the RoPE position indices assigned to document
+tokens:
+\begin{itemize}
+    \item \textbf{Sequential.} Documents occupy consecutive absolute
+          positions, as in standard concatenation. A document's KV block is
+          then a function of both its content and its position in the
+          retrieved set; changing either invalidates the cache.
+    \item \textbf{Restart.} Each document's positions restart at zero.
+          Under a block-diagonal mask, a document's KV block is now a
+          function of that document alone. Blocks become keyable by
+          document content hash, order-independent, and reusable across
+          requests.
+\end{itemize}
+The restart layout is what turns DDI's structural sparsity into a caching
+mechanism. It is untested in the prior work and is the axis that unlocks
+the co-headline result of Section~\ref{sec:results-caching}.
+
+\subsection{Non-inferiority margin \texorpdfstring{$\Delta$}{Delta}}
+\label{sec:method-delta}
+
+The claim ``DDI matches full-causal quality on parity benchmarks'' has no
+falsifier without a threshold. Any real gap smaller than the seed-to-seed
+noise of the full baseline hides inside ``we could not detect a
+difference,'' which is not a claim. Before any DDI number is interpreted we
+fix a non-inferiority margin $\Delta$ from the full baseline's own seed
+variance, on the same metric and the same evaluation set. A DDI candidate
+satisfies the parity claim iff its gap to full is smaller than $\Delta$ at
+the seed count used. Any benchmark whose noise floor exceeds $\Delta$
+cannot support the parity claim and moves to the failure-envelope side of
+the study (Section~\ref{sec:failure-envelope}).
+
+Concretely, $\Delta$ is computed as $k\cdot \sigma_{\text{full}}$ for a
+fixed $k$ committed alongside the baseline it was derived from, using the
+in-repo \texttt{ddi-delta} tool. Every parity-side table in
+Section~\ref{sec:results-quality} carries $\Delta$ as an explicit column
+so the reader can locate the parity band directly.
