@@ -35,6 +35,16 @@ number enters the store before that.
 
 ---
 
+## 2026-07-27 — [1.2] hop labels + ddi-audit CLI
+
+`ddi.hop_labels`: `hop_type(record)` reads the native field; `register_heuristic(dataset)` lets
+later loaders (HotpotQA, Open RAG Bench) plug in a labeler for `hop_type == "unknown"` records
+without touching the loaders themselves; `apply_heuristic` yields shallow-copied dicts so
+callers can iterate loaders directly. `sample_for_audit` + `load_audit` + `agreement_rate` wire
+the hand-audit workflow. `ddi-audit sample` writes a JSONL for review; `ddi-audit score`
+re-samples, applies the heuristic, loads human labels, prints the rate + disagreements +
+skipped count. Closes #10.
+
 ## 2026-07-27 — [1.1] dataset framework + NQ + synthetic
 
 `ddi.data`: registry-based loaders yielding a common record shape (`info_contexts`, `dialog`,
