@@ -31,8 +31,8 @@ def _record_rng(seed: int, record_idx: int) -> random.Random:
 
 def _make_record(record_idx: int, seed: int) -> dict:
     rng = _record_rng(seed, record_idx)
-    answer = f"answer_{record_idx:04d}_{rng.randint(0, 9999):04d}"
-    question_nonce = f"nonce_{record_idx:04d}"
+    answer_prefix = f"answer_{record_idx:04d}_"
+    answer = f"{answer_prefix}{rng.randint(0, 9999):04d}"
     gold_doc_idx = rng.randrange(_DOCS_PER_RECORD)
 
     docs: list[str] = []
@@ -43,18 +43,29 @@ def _make_record(record_idx: int, seed: int) -> dict:
             words.insert(insert_pos, answer)
         docs.append(" ".join(words))
 
+    # The question must (a) not collide with a real-world concept an instruct model already
+    # has a strong prior about — "nonce" made models answer from cryptography knowledge and
+    # never look at the passages at all — and (b) explicitly tell the model the passages above
+    # are the only source of truth and give it a literal, matchable search key, since the docs
+    # are unrelated random-word noise with no natural-language link back to the question.
+    question = (
+        "The passages above are random words, except exactly one of them also contains a "
+        f"single token starting with {answer_prefix!r} followed by 4 more digits. "
+        "Reply with only that exact token and nothing else."
+    )
+
     record_id = f"synthetic_qa-{seed}-{record_idx:04d}"
     return {
         "id": record_id,
         "info_contexts": docs,
         "dialog": [
-            {"role": "user", "content": f"What is {question_nonce}?"},
+            {"role": "user", "content": question},
             {"role": "assistant", "content": answer},
         ],
         "possible_answers": [answer],
         "hop_type": "single",
         "gold_position": None,
-        "meta": {"gold_doc_idx": gold_doc_idx, "question_nonce": question_nonce},
+        "meta": {"gold_doc_idx": gold_doc_idx, "answer_prefix": answer_prefix},
     }
 
 
