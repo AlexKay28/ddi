@@ -83,7 +83,10 @@ def load_nq(split: Split, seed: int) -> Iterator[dict]:
         name: (len(recs), hash_split([r["id"] for r in recs]))
         for name, recs in by_split.items()
     }
-    validate_or_write("nq", hashes)
+    # Split membership is a function of `seed` (val/test are a random half-split of NQ's
+    # validation set); key the manifest per seed so seeds 1/2 don't collide with seed 0's
+    # frozen split (issue #40).
+    validate_or_write(f"nq__seed{seed}", hashes)
 
     for rec in sorted(by_split[split], key=lambda r: r["id"]):
         yield rec

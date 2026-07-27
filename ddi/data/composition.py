@@ -262,7 +262,9 @@ def _load_composition(split: Split, seed: int) -> Iterator[dict]:
     by_split = split_ids(all_ids, val_frac=_VAL_FRAC, test_frac=_TEST_FRAC, seed=seed)
 
     hashes = {name: (len(ids), hash_split(ids)) for name, ids in by_split.items()}
-    validate_or_write("composition", hashes)
+    # Record IDs and split partition are both a function of `seed`; key the manifest per seed
+    # so seeds 1/2 don't collide with seed 0's frozen split (issue #40).
+    validate_or_write(f"composition__seed{seed}", hashes)
 
     wanted = set(by_split[split])
     by_id = {r["id"]: r for r in records}
