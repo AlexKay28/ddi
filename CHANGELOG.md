@@ -35,6 +35,14 @@ number enters the store before that.
 
 ---
 
+## 2026-07-27 — Makefile refocused on serverless surface
+
+`Makefile` narrowed to what a serverless container actually needs: install (`setup`, `setup-gpu`),
+tests (`test`, `gates`), **datasets upload** (`upload-dataset` — pushes frozen split manifest to
+HF hub), **models upload** (`upload-model` — pushes a checkpoint to HF hub), experiments (Phase
+1–5 targets), results collection (`report`). Dropped: `test-fast`, `lint`, `format`, `clean` —
+not part of experiment orchestration.
+
 ## 2026-07-27 — **Phase 1 complete**
 
 All four Phase 1 sub-issues closed: #9 datasets, #11 metrics, #10 hop labels, #12 baseline
