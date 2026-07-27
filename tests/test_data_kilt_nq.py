@@ -107,14 +107,15 @@ def test_normalize_shape_matches_spec() -> None:
     }
 
 
-def test_normalize_pads_when_provenance_thin() -> None:
+def test_normalize_shrinks_when_provenance_thin() -> None:
     row = _fake_kilt_row(n_prov=2)
     rec = kilt_nq._normalize(row, n_passages=5)
-    assert len(rec["info_contexts"]) == 5
-    # First two are real; the trailing pads are empty strings so downstream length checks
-    # remain honest without lying about content.
+    # Only 2 real passages available; no empty-placeholder padding (build_mask rejects
+    # zero-length documents), so info_contexts and meta["n_passages"] both shrink to 2.
+    assert len(rec["info_contexts"]) == 2
     assert rec["info_contexts"][0].startswith("passage text 0")
-    assert rec["info_contexts"][2:] == ["", "", ""]
+    assert rec["info_contexts"][1].startswith("passage text 1")
+    assert rec["meta"]["n_passages"] == 2
 
 
 def test_normalize_gold_position_none_when_gold_outside_top_n() -> None:
