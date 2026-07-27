@@ -8,6 +8,7 @@ renderer is available in `list_reports()` / `render()`.
 from ddi.reports import phase2_base_vs_instruct  # noqa: F401
 from ddi.reports import phase2_bridge  # noqa: F401
 from ddi.reports import phase2_pareto  # noqa: F401
+from ddi.reports import phase2_quality  # noqa: F401
 from ddi.reports import phase3_realization  # noqa: F401
 from ddi.reports import phase4_throughput  # noqa: F401
 from ddi.reports import phase5_composition  # noqa: F401

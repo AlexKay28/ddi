@@ -24,6 +24,7 @@ dev = ["pytest", "pytest-cov", "ruff"]
 ddi-run = "ddi.cli:main"
 ddi-audit = "ddi.audit_cli:main"
 ddi-delta = "ddi.delta_cli:main"
+ddi-report = "ddi.report_cli:main"
 
 [build-system]
 requires = ["setuptools>=68"]

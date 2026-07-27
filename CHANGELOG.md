@@ -35,6 +35,30 @@ number enters the store before that.
 
 ---
 
+## 2026-07-27 — **Roadmap complete for all experimental phases**
+
+Phases 0 → 5 all closed; only #29 (writeup) and the debt-tracker #30 (transformers-4.53 API
+migration) remained after Phase 5, and #29 lands in this cycle. Every C1–C6 claim in
+RESEARCH_PLAN §4 has an executable runner path and a rendered result artifact behind it.
+
+## 2026-07-27 — [6] preprint scaffold — Phase 6 done
+
+arxiv-submittable LaTeX skeleton in `paper/preprint.tex` + `paper/sections/00_intro.tex` through
+`08_limitations_conclusion.tex`, drafted from RESEARCH_PLAN in paper voice. `paper/build.sh`
+regenerates every table (markdown via `ddi-report --name X` piped through `pandoc`) and figure
+(pdf via `ddi-report --name X --output ...`), stubs on empty store, then runs
+`pdflatex → bibtex → pdflatex → pdflatex` when a TeX toolchain is available. `\todoreport{...}`
+macro flags every cell that awaits data. Ground rule 3 enforced by construction: no hand-typed
+numbers in the .tex sources. Bibliography wired to `paper/references.bib`. Root `Makefile`
+gains `make paper`. Closes #29.
+
+Follow-ups landed in the same cycle:
+- `ddi-report` script entry added to `[project.scripts]` (agent flagged this — the scaffold's
+  `build.sh` used the `python -m ddi.report_cli` form; both now work).
+- **T2 renderer** (`ddi.reports.phase2_quality`) — the Phase 2 quality summary table referenced
+  by `sections/04_results_quality.tex`. Rows per `(model, dataset, variant)`, columns for EM /
+  F1 / presence / loss (median ± σ across seeds).
+
 ## 2026-07-27 — **Phase 5 complete**
 
 All three Phase 5 sub-issues closed: #26 hop-split renderers (T5, F4), #27 PCW baseline, #28
