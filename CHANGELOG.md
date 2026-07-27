@@ -35,6 +35,29 @@ number enters the store before that.
 
 ---
 
+## 2026-07-27 — [4.2] per-doc KV cache
+
+`ddi.cache.DocCache`: disk-backed cache keyed by `sha256(model_id\0dtype\0doc_text)[:16]`; atomic
+`.tmp` + `os.replace` writes; per-key `fcntl.flock` sentinel prevents concurrent-write races.
+`compute_doc_kv(model, tokenizer, doc_text, layout)` runs a single-doc `variant="full"` prefill
+with `build_positions(..., layout)` and extracts per-layer K/V from HF's `past_key_values`
+(handles both `DynamicCache` and legacy tuple formats). Runner `phase4_cache_correctness`: for
+each retrieved doc, asserts (a) two cold computes agree within tolerance and (b) the KV block
+round-trips through the cache. End-to-end injection into a full prompt lives in Phase 4.3 (#24)
+and 4.4 (#25). Closes #23.
+
+## 2026-07-27 — [3.2–3.4] Phase 3 timing sweeps
+
+`ddi.runners.phase3_timing` covers issues #18, #19, #20 with one runner. One invocation =
+one grid cell `(N, L, Q, mask variant, backend, seed)`. Every row carries the shape in `run_id`,
+the analytical speedup target from RESEARCH_PLAN §7 (`T²/2` for full; `Nℓ²/2 + Q·Nℓ + Q²/2` for
+`ddi_qf`; `Nℓ²/2 + Q²/2 + T` for `ddi_strict`), and mask sparsity (`1 − allow_pairs / causal_pairs`
+— matches §7's 90.6% at N=13/L=512/Q=64), so Phase 3.5's realized-vs-analytical is a store query,
+not a re-derivation. Backend selection routes via `load_model(..., attn_implementation=...)`;
+FA2-on-CPU fails fast before any download. Three config templates (`phase3_timing_N.yaml`,
+`phase3_timing_L.yaml`, `phase3_backends_NxL.yaml`) that the orchestrator overrides per cell.
+Closes #18, #19, #20.
+
 ## 2026-07-27 — [4.1] position restart layout + phase4_restart_quality
 
 `ddi.positions.build_positions` returns a `[T]` long tensor: `sequential` = `arange(T)`,
