@@ -35,6 +35,28 @@ number enters the store before that.
 
 ---
 
+## 2026-07-27 — [4.1] position restart layout + phase4_restart_quality
+
+`ddi.positions.build_positions` returns a `[T]` long tensor: `sequential` = `arange(T)`,
+`restart` = each doc's tokens start at 0, query+answer block starts at `max(doc_lengths)`. The
+`max` offset keeps query→doc RoPE distances well-defined without any RoPE collision into doc
+rows. `ddi.model.forward_with_mask` gains an optional `position_ids` kwarg (2D `[batch, T]` long,
+default `None` preserves HF's default). Runner `phase4_restart_quality` runs both layouts on the
+same records and writes rows carrying the layout in the run_id (`...:{variant_tag}:{layout}:...`),
+so downstream analysis can compare directly whether restart costs anything at eval time —
+ground-truth for whether Phase 4.2's cache is a win at any quality level. Closes #22.
+
+## 2026-07-27 — [3.1] timing harness
+
+`ddi.timing.measure`: `warmup + n_repeats` calls; CUDA-event timing when `torch.cuda.is_available()`
+else `time.perf_counter`; `torch.cuda.empty_cache()` before every iteration (warmup included) so
+each repeat starts cold, `torch.cuda.synchronize()` after so timing captures full compute.
+`Timing` dataclass carries `median_ms`, IQR bounds, and every post-warmup sample for auditability.
+Thin wrappers `measure_prefill` (FTT via `forward_with_mask`) and `measure_decode` (TPOT — full
+prefill+decode time divided by `n_new_tokens`). `append_timing` writes four rows to the store
+(`{metric}_median_ms`, `_iqr_low_ms`, `_iqr_high_ms`, `_repeats_ms` as JSON-encoded list per
+ground rule 4). CPU fallback keeps CI green without a GPU. Reuses `ddi.report._quantile`. Closes #17.
+
 ## 2026-07-27 — **Phase 2 complete**
 
 All four Phase 2 sub-issues closed: #13 train-free primary result, #14 conditional finetuned
