@@ -5,8 +5,8 @@ must run to earn the claim, and which models / methods / setups go into the comp
 Everything here is either (a) a measured number with a source, or (b) explicitly marked
 `PENDING`. Nothing in between.
 
-Companion to the repo write-up in [`../README.md`](../README.md).
-Working tree: `/home/alexkay28/alexkay28/tickets/ALIGNMENT-2445`. Ticket: ALIGNMENT-2445.
+Companion to the repo write-up in [`../README.md`](../README.md) and the operational roadmap in
+[issue #1](https://github.com/AlexKay28/ddi/issues/1) (source of truth for phase structure).
 
 ---
 
@@ -44,7 +44,7 @@ itself and blind to every other document. The dialog region is the only place wh
 is allowed to mix.
 
 ```
-full causal                 DDI-QF                      DDI-strict
+full causal                 ddi_qf                      ddi_strict
 (baseline)                  docs isolated,              docs isolated,
                             query sees all              query isolated
 d1 ██                       d1 ██                       d1 ██
@@ -98,13 +98,13 @@ test and useful as **sanity targets** for the new harness — not because they a
 | mask | best val loss | Δ vs baseline | final train loss |
 |---|---|---|---|
 | `full` (baseline) | **0.2355** | — | 0.0170 |
-| `block-sparsed-query-full` (DDI-QF) | 0.2773 | **+0.042** | 0.0178 |
-| `block-sparsed` (DDI-strict) | 1.4801 | **+1.245** | 0.0543 |
+| `block-sparsed-query-full` (ddi_qf) | 0.2773 | **+0.042** | 0.0178 |
+| `block-sparsed` (ddi_strict) | 1.4801 | **+1.245** | 0.0543 |
 
 **The hypothesis that shapes the whole paper:** document↔document isolation is nearly free. Query
 isolation is catastrophic. Whatever a single SEP bridge row can carry, it is not enough — a
-6× loss increase. If it survives re-evaluation, DDI-strict is a *negative result* and we report it
-as one; it is the ablation that makes DDI-QF meaningful.
+6× loss increase. If it survives re-evaluation, ddi_strict is a *negative result* and we report it
+as one; it is the ablation that makes ddi_qf meaningful.
 
 **Hypothesis H3.** `v2/README.md` reports 1.20× prefill (720 ms → 600 ms) at 13 contexts,
 91.6% sparsity. Single configuration, single run, no variance, unverified by re-run. Analytically
@@ -130,16 +130,34 @@ mask rather than of a reimplementation of attention.
 
 | # | claim | evidence needed | status |
 |---|---|---|---|
-| C1 | Document↔document isolation costs little quality | val loss + EM/F1 across ≥2 model families, ≥2 datasets | **unverified** (H1 only) |
-| C2 | Query isolation is not viable | same grid, DDI-strict arm | **unverified** (H2 only) |
-| C3 | DDI reduces prefill cost, scaling with `N` | latency sweep over `N`, with variance | **unverified** (H3, 9× below theory) |
-| C4 | DDI makes per-document KV caching possible | cache-reuse throughput experiment | **not started** |
+| C1 | Document↔document isolation costs little quality | val loss + EM/F1 across ≥2 model families, ≥2 datasets, gap to `full` within `Δ` | **unverified** (H1 only) |
+| C2 | Query isolation is not viable | same grid, `ddi_strict` arm | **unverified** (H2 only) |
+| C3 | DDI reduces prefill cost, scaling with `N` | latency sweep over `N`, with variance; end-to-end and prefill-only both reported | **unverified** (H3, 9× below theory) |
+| C4 | DDI makes per-document KV caching possible | cache-reuse throughput experiment; identical logits on cache hit | **not started** — **co-headline** |
 | C5 | DDI degrades specifically on cross-document reasoning | multi-hop vs single-hop split | **not started** |
 
 C5 is a prediction of *failure*, and we should chase it deliberately. If documents cannot see each
 other, a question whose answer requires composing `doc_2` with `doc_7` must be answered in the
 dialog region alone. The honest version of this paper measures that boundary and reports it as the
 method's operating envelope. If we do not, a reviewer will find it for us.
+
+### The non-inferiority margin `Δ`
+
+C1 says "costs little quality" — that has no falsifier without a threshold. Enough seed noise hides
+any real gap inside "couldn't detect a difference," which is not a claim. Before any DDI quality
+number is interpreted, we measure `full`'s seed-to-seed variance (Phase 1) and fix `Δ` from that
+alone. A DDI candidate satisfies C1 iff its gap to `full` is `< Δ` at the seed count used. Any
+benchmark whose noise floor exceeds `Δ` cannot support C1 and moves to the failure-envelope side
+(C5). This is [issue #1](https://github.com/AlexKay28/ddi/issues/1) ground rule 9, and it is what
+turns C1 from an eyeballed judgment into a falsifiable test.
+
+### C4 is a co-headline, not a nice-to-have
+
+A per-document cache hit skips prefill entirely, which no prefill-kernel improvement under `full`
+causal attention can match at any quality level. Under a parity-then-speedup framing, C4 is the
+speedup that survives even if Phase 3's realization gap (§7) turns out to be structural rather
+than fixable. Phase 4.1/4.2 (position restart + per-document cache) is part of the minimum viable
+paper, not an appendix.
 
 ---
 
@@ -161,7 +179,7 @@ Two deliberate decisions:
 
 - **Base *and* instruct for both primaries.** v1 already split these. The interesting question is
   whether instruction tuning has already taught the model to route information through the query
-  region — if so, DDI-QF should cost instruct models less than base models. Cheap to test, and it
+  region — if so, ddi_qf should cost instruct models less than base models. Cheap to test, and it
   is a mechanism claim rather than a benchmark number.
 - **YandexGPT moves to the appendix.** It cannot be downloaded by a reviewer. Keeping it in the
   main tables makes the central claims unverifiable; keeping it in an appendix as a third-family
@@ -184,9 +202,9 @@ Six axes. We are **not** running the full cross-product — §8 prioritizes.
 
 **Axis M — mask** (the independent variable)
 1. `full` — causal baseline
-2. `DDI-QF` — docs isolated, whole query block sees all docs ← *the proposal*
-3. `DDI-strict` — docs isolated, query isolated, single SEP bridge row
-4. `DDI-bridge-k` — generalizes 2↔3: last `k` prefix rows see everything. `k=1` is strict,
+2. `ddi_qf` — docs isolated, whole query block sees all docs ← *the proposal*
+3. `ddi_strict` — docs isolated, query isolated, single SEP bridge row
+4. `ddi_bridge_k` — generalizes 2↔3: last `k` prefix rows see everything. `k=1` is strict,
    `k=Q` is QF. **New, and the most informative single sweep we can run** — it turns the
    hypothesised 0.2355 / 0.2773 / 1.4801 step function into a curve and locates the knee.
 5. `blind` — all-zero mask control. Non-negotiable: if a model scores well seeing nothing, the
@@ -224,7 +242,7 @@ object, so they double as each other's correctness tests.
 - **Prefix caching** — the practical alternative for the caching claim. Can be cited-and-discussed
   rather than run, but must be addressed.
 - **Retrieval-order shuffle** — same documents, permuted. Full causal is order-sensitive;
-  `DDI-QF + restart` should be provably order-*invariant*. A clean, cheap, striking result.
+  `ddi_qf + restart` should be provably order-*invariant*. A clean, cheap, striking result.
 
 ---
 
@@ -234,8 +252,8 @@ With `N` documents of length `ℓ`, query block `Q`, total `T = Nℓ + Q`, count
 
 ```
 full      ≈ T² / 2
-DDI-QF    ≈ N·ℓ²/2  +  Q·Nℓ  +  Q²/2
-DDI-strict≈ N·ℓ²/2  +  Q²/2  +  T
+ddi_qf    ≈ N·ℓ²/2  +  Q·Nℓ  +  Q²/2
+ddi_strict≈ N·ℓ²/2  +  Q²/2  +  T
 ```
 
 As `Q → 0` the speedup is exactly `N`. At `ℓ = 512, Q = 64`:
@@ -262,47 +280,82 @@ at all. Axis L × axis K is designed to separate these.
 
 ## 8. Experiment grid and phasing
 
-Phase 1 is the minimum viable paper. Later phases strengthen it.
+Phases 0 + 1 + 2 (especially 2.3) + 3.5 + **4.1/4.2** is the minimum viable paper — 4.1/4.2 is
+part of the MVP, not an appendix (see C4 above). Later phases strengthen it. Phases 2, 3, 4 are
+independent once 0 and 1 land. Full sub-issue breakdown in
+[issue #1](https://github.com/AlexKay28/ddi/issues/1).
 
 **Phase 0 — clean implementation and correctness gates (must precede everything)**
 One `ddi/` package written from zero: a single mask builder, kernel backends behind one interface,
 masks injected into HF's own forward (not a hand-rolled decoder loop), provenance capture, and a
 results store that tables generate from. Three required gates: `N=1` DDI ≡ full-causal equivalence,
-backend cross-check on fixed input, and a document-length regression test. Full breakdown in
-[issue #1](https://github.com/AlexKay28/ddi/issues/1) steps 0.1–0.7.
+backend cross-check on fixed input, and a document-length regression test.
 
-**Phase 1 — core quality claim (C1, C2)**
-Grid: `{Qwen2.5-7B, Llama-3.1-8B} × {base, instruct} × {full, DDI-QF, DDI-strict, blind} ×
-{train-free, finetuned}` on 2 datasets. 64 quality runs.
-Metrics: val loss, EM, token-F1, answer-presence.
+**Phase 1 — datasets, metrics, `full` baseline, fix `Δ`**
+Load and freeze the datasets in the table below with committed split hashes. Implement metrics
+(§9) with unit tests. Run `full` on each primary model with ≥3 seeds — **this is where `Δ` is
+fixed**, from `full`'s seed-to-seed variance alone, before any DDI number is looked at. `Δ` is
+committed alongside the baseline it was derived from and becomes the parity threshold for C1.
 
-**Phase 2 — the bridge curve (C1, sharpened)**
-`DDI-bridge-k` for `k ∈ {1, 2, 4, 8, 16, 32, Q}` on Qwen2.5-7B. Locates the knee between 0.2773
-and 1.4801. This is the paper's most quotable figure and it is one model, one sweep.
+**Phase 2 — mask family quality (C1, C2)**
+Four sub-phases, ordered by cost:
+
+- **2.1 Train-free sweep — the primary result.**
+  `{Qwen2.5-7B, Llama-3.1-8B} × {base, instruct} × {full, ddi_qf, ddi_strict, blind}`, mask swapped
+  at inference on stock weights, ≥3 seeds, on the parity-detection datasets. If the gap to `full`
+  is within `Δ`, this alone supports C1 and 2.2 becomes confirmatory. Diagnostic if it doesn't:
+  every document gets its own first-token attention sink under block-diagonal masking, so `N`
+  sinks compete instead of one — cheap check is `ddi_qf` with one shared global sink token, still
+  train-free.
+- **2.2 Light-adaptation and fine-tuned sweep — conditional.**
+  Runs only if 2.1 leaves a gap exceeding `Δ`. Two rungs, cheapest first: a few hundred adaptation
+  steps or LoRA (separates "needs a nudge" from "information destroyed"); then full SFT with the
+  mask present throughout. The train-free vs. light vs. fine-tuned gap is itself a result.
+- **2.3 Bridge-width curve — the centerpiece.**
+  `ddi_bridge_k` for `k ∈ {1, 2, 4, 8, 16, 32, 64, Q}` on Qwen2.5-7B, ≥3 seeds. Pair each point
+  with its realized speedup from Phase 3 to plot the **quality/speed Pareto frontier** (F6) with
+  the `Δ` margin and the parity point marked. This is the POC's actual deliverable.
+- **2.4 Base vs instruct mechanism probe.**
+  Hypothesis: instruction tuning already routes context through the query region, so `ddi_qf`
+  costs instruct models less than base models. Effect size with variance, or an explicit null.
 
 **Phase 3 — efficiency (C3)**
 Axis N × L × K, ≥5 repeats with variance, warmup discarded. Report realized *and* theoretical on
-the same axes. This is where the 9× gap gets explained or bounded.
+the same axes. **Phase 3.5** is where the 9× gap gets explained or bounded, with end-to-end
+latency reported alongside prefill-only speedup for every cell — a prefill-only win can dilute to
+near-nothing end-to-end.
 
-**Phase 4 — caching and order-invariance (C4)**
-`restart` positions + per-document KV cache. Metrics: cache hit rate, end-to-end throughput under
-a realistic document-reuse distribution, and quality-under-`restart` (does it cost anything?).
-Plus the retrieval-order shuffle invariance check.
+**Phase 4 — caching and order-invariance (C4) — co-headline**
+- **4.1 Position-restart variant.** Quality under `restart` vs. `sequential` — does restarting
+  cost anything?
+- **4.2 Per-document KV cache.** Keyed by document content hash. A cache hit must yield logits
+  identical to cold compute within tolerance.
+- **4.3 Retrieval-order shuffle.** `ddi_qf + restart` should be provably order-invariant.
+- **4.4 Throughput under document reuse.** End-to-end QPS vs. full-causal recompute and vs.
+  prefix caching as the practical alternative.
 
 **Phase 5 — the failure envelope (C5)**
-Split every dataset into single-document-answerable vs. requires-cross-document-composition.
-Report DDI-QF degradation separately per split. MoNaCo is multi-hop and is the natural probe.
+Split every dataset into single-document-answerable vs. requires-cross-document-composition and
+report every Phase 2 cell separately per split. Needs the labels from issue #1 §1.2. Also runs the
+Parallel Context Windows baseline on ≥1 shared dataset and a synthetic composition probe with
+distance/position varied.
 
 ### Datasets
 
-| dataset | role | status |
-|---|---|---|
-| Open RAG Bench (`vectara/open_ragbench`) | primary, RAG-native | sourced, `datasets/revision.ipynb` |
-| MoNaCo (`allenai/MoNaCo_Benchmark`) | multi-hop → C5 probe | sourced |
-| Natural Questions / HotpotQA / 2WikiMultiHop | comparability with FiD & PCW literature | `PENDING` — add |
+Split by function — a parity-detection benchmark and a failure-envelope benchmark are different
+instruments (issue #1 §1.1):
 
-The third row matters more than it looks: without at least one dataset the prior work also reports
-on, we cannot place DDI-QF against PCW's published numbers.
+| purpose | dataset | status |
+|---|---|---|
+| Parity detection (headroom, low seed variance; C1) | NQ, TriviaQA, HotpotQA | `PENDING` — load and freeze |
+| Controllable `N` + gold-document position | Lost-in-the-Middle-style multi-doc QA (Liu et al. 2023) | `PENDING` — add |
+| Cross-document stress (C5) | MoNaCo (`allenai/MoNaCo_Benchmark`); optionally 2WikiMultiHop, MuSiQue | MoNaCo sourced; the rest `PENDING` |
+| Comparability with prior work | ≥1 dataset that PCW / FiD report on (likely NQ or TriviaQA) | overlap with row 1 |
+| General RAG-native | Open RAG Bench (`vectara/open_ragbench`) | sourced |
+
+Every dataset used as a parity instrument needs `full`'s seed variance measured and confirmed
+smaller than `Δ` in Phase 1 before it is trusted for C1. Without the comparability row, we cannot
+place `ddi_qf` against PCW's published numbers.
 
 ---
 
@@ -329,16 +382,17 @@ Every efficiency number needs ≥5 repeats, discarded warmup, and reported varia
 | # | artifact | source | status |
 |---|---|---|---|
 | T1 | mask taxonomy (mask × what-sees-what) | §2 | ready |
-| T2 | quality: model × mask × train-free/finetuned | phase 1 | `PENDING` |
-| T3 | theoretical vs. realized speedup vs. `N` | §7 + phase 3 | 1 of 6 rows |
-| F1 | mask diagrams (full / QF / strict / bridge-k) | hand-drawn, TikZ | ready |
-| F2 | **bridge curve**: val loss vs. bridge width `k` | phase 2 | `PENDING` |
+| T2 | quality: model × mask × train-free (+ finetuned if 2.2 triggers) | phase 2.1 (+ 2.2) | `PENDING` |
+| T3 | theoretical vs. realized speedup vs. `N` | §7 + phase 3 | `PENDING` (H3 is not a filled cell — every measurement predates the correctness gates) |
+| F1 | mask diagrams (full / qf / strict / bridge-k) | hand-drawn, TikZ | ready |
+| F2 | **bridge curve**: val loss vs. bridge width `k` | phase 2.3 | `PENDING` |
 | F3 | realization ratio vs. `N`, one line per `ℓ` | phase 3 | `PENDING` |
 | F4 | quality degradation: single-hop vs. multi-hop | phase 5 | `PENDING` |
-| F5 | throughput vs. document reuse rate | phase 4 | `PENDING` |
+| F5 | throughput vs. document reuse rate | phase 4.4 | `PENDING` |
+| F6 | **quality/speed Pareto frontier** with `Δ` and parity point marked | phase 2.3 × phase 3 | `PENDING` |
 
-F2 is the paper's centerpiece: one model, one sweep, and it converts the three-point step function
-we already have into a mechanism.
+F6 is the POC's actual deliverable — the bridge sweep paired with realized speedups, not a single
+"same quality" number. F2 is F6 collapsed to quality alone; both come from the same phase 2.3 run.
 
 ---
 
@@ -349,7 +403,7 @@ we already have into a mechanism.
 2. **Related work** — FiD, PCW, CEPE, fixed-pattern sparsity, prefix caching. *(§2 table)*
 3. **Method** — mask family, bridge width `k` as the unifying parameter, cost model. *(§2, §7)*
 4. **Experimental design** — models, datasets, axes, protocol. *(§5, §6, §8)*
-5. **Results** — quality (phase 1–2), efficiency (phase 3), caching (phase 4).
+5. **Results** — quality (phase 2, esp. 2.3 bridge sweep), efficiency (phase 3), caching (phase 4).
 6. **When DDI fails** — the cross-document reasoning envelope (phase 5). *Own section, not a
    limitations footnote.*
 7. **Limitations** — batch size 1; 7–8B only; realization gap unresolved if phase 3 does not close it.
@@ -371,8 +425,10 @@ re-measurement they are a paper's spine — and the mystery is interesting which
 
 Phase 0 is the real cost here: building the clean implementation and the provenance discipline that
 makes any subsequent number defensible. It is also the thing that was missing the first time.
-Phases 1–2 then make C1 and C2 defensible; Phase 3 makes the efficiency claim honest rather than
-aspirational.
+Phase 1 fixes `Δ` from `full`'s seed variance so C1 has a threshold to be tested against; Phase 2
+(train-free first, fine-tuning only if 2.1 misses `Δ`, then the bridge sweep) makes C1 and C2
+defensible; Phase 3 makes the efficiency claim honest rather than aspirational; Phase 4.1/4.2 makes
+the caching co-headline stand up.
 
 Recommended framing for the preprint: **a characterization study**, not a method-wins paper. "How
 much cross-document attention can be removed, and what does removing it actually buy" is a claim we
