@@ -35,6 +35,13 @@ number enters the store before that.
 
 ---
 
+## 2026-07-27 — [0.6] provenance and append-only store
+
+`ddi.provenance.capture` returns a `Provenance` (git SHA/dirty, config hash, seed, model/dataset
+revisions, GPU model, driver/CUDA/torch versions, UTC timestamp). `ddi.store.append` writes one
+`fcntl.flock`-protected JSONL row per metric. Two-process concurrent-write test verifies parallel
+sweeps do not interleave. Closes #7.
+
 ## 2026-07-27 — Makefile added
 
 Root `Makefile` collects install / test / lint / format / run / clean targets and pins overridable
