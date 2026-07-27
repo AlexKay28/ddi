@@ -136,3 +136,63 @@ def test_f7_renders_pdf(tmp_path: Path) -> None:
     render("F7", store=store, output=out)
     assert out.exists()
     assert out.stat().st_size > 0
+
+
+def test_t6_renders_em_only_metric_present(tmp_path: Path) -> None:
+    """EM alone is enough to render — F1/presence columns are added only when present."""
+    store = tmp_path / "runs.jsonl"
+    rid = _rid(variant="ddi_qf", layout="restart", distance=1, pair_position="middle", rec_id="comp_0_0")
+    _write_row(store, rid, "em", 0.0)
+
+    table = render("T6", store=store)
+    assert "EM (mean)" in table
+    assert "F1 (mean)" not in table
+    assert "presence (mean)" not in table
+
+
+def test_t6_adds_f1_and_presence_columns_when_present(tmp_path: Path) -> None:
+    """The #37 shape: EM is flat/degenerate on composition but F1/presence carry separation."""
+    store = tmp_path / "runs.jsonl"
+    values = {
+        ("full", 0): {"em": 0.0, "f1": 0.60, "presence": 0.95},
+        ("ddi_qf", 4): {"em": 0.0, "f1": 0.10, "presence": 0.50},
+    }
+    for (variant, distance), metrics in values.items():
+        rid = _rid(
+            variant=variant, layout="restart", distance=distance, pair_position="middle",
+            rec_id=f"comp_0_{variant}",
+        )
+        for metric, value in metrics.items():
+            _write_row(store, rid, metric, value)
+
+    table = render("T6", store=store)
+    assert "F1 (mean)" in table
+    assert "presence (mean)" in table
+    lines = table.strip().splitlines()
+    full_row = next(ln for ln in lines if ln.startswith("| full |"))
+    ddi_qf_row = next(ln for ln in lines if ln.startswith("| ddi_qf |"))
+    assert "0.6000" in full_row
+    assert "0.1000" in ddi_qf_row
+
+
+def test_f7_plots_em_f1_and_presence_together(tmp_path: Path) -> None:
+    """The #37 shape: three metric panels, one per present metric."""
+    matplotlib = pytest.importorskip("matplotlib")
+    matplotlib.use("Agg")
+
+    store = tmp_path / "runs.jsonl"
+    for variant in ("full", "ddi_qf"):
+        for layout in ("sequential", "restart"):
+            for distance in (0, 4):
+                for j in range(2):
+                    rid = _rid(
+                        variant=variant, layout=layout, distance=distance,
+                        pair_position="middle", rec_id=f"comp_{j}_{variant}_{layout}_{distance}",
+                    )
+                    for metric, base in (("em", 0.0), ("f1", 0.3), ("presence", 0.7)):
+                        _write_row(store, rid, metric, base + j * 0.01)
+
+    out = tmp_path / "F7.pdf"
+    render("F7", store=store, output=out)
+    assert out.exists()
+    assert out.stat().st_size > 0

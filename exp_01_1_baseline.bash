@@ -4,7 +4,7 @@ set -euo pipefail
 
 SEEDS=(0 1 2)
 MODEL="Qwen/Qwen2.5-7B-Instruct"
-DATASET="nq"
+DATASET="composition"
 MAX_RECORDS=100
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
