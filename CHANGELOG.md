@@ -35,6 +35,16 @@ number enters the store before that.
 
 ---
 
+## 2026-07-27 — [1.1] dataset framework + NQ + synthetic
+
+`ddi.data`: registry-based loaders yielding a common record shape (`info_contexts`, `dialog`,
+`possible_answers`, `hop_type`, `gold_position`, `meta`). `splits.py` provides deterministic
+`split_ids` + order-invariant `hash_split`; `manifest.py` reads/writes/validates a JSON manifest
+at `results/splits/<name>.json` per ground rule 1 — mismatch raises `RuntimeError` with a diff.
+Two initial loaders: `synthetic_qa` (deterministic, offline, 100 records / 60·20·20 split) for
+tests and smoke runs, and `nq` (via `google-research-datasets/nq_open`) as the first real
+dataset. `pyproject.toml` gains `datasets>=2.14`. Closes #9.
+
 ## 2026-07-27 — [1.3] metrics
 
 `ddi.metrics`: SQuAD-style `normalize` (lowercase → punctuation strip → whole-token article
