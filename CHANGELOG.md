@@ -35,6 +35,32 @@ number enters the store before that.
 
 ---
 
+## 2026-07-27 — **Phase 1 complete**
+
+All four Phase 1 sub-issues closed: #9 datasets, #11 metrics, #10 hop labels, #12 baseline
+runner + Δ. The harness can now: load a frozen dataset with verifiable split hashes, tokenize
+and score model output against SQuAD-style metrics, and run a `phase1_full_baseline` that writes
+per-record loss + EM/F1/presence to `results/runs.jsonl` under a `full` mask routed through the
+same `build_mask → to_additive → forward_with_mask` path every DDI variant will use (no
+baseline-vs-variant implementation drift). `compute_delta` reads those rows and returns
+`Δ = k × std_across_seeds(per_seed_mean(metric))` — this is what makes ground rule 9 real. Ready
+for Phase 2 (issues #13 train-free primary, #14 conditional finetuned, #15 bridge sweep
+centerpiece, #16 base-vs-instruct probe).
+
+## 2026-07-27 — [1.4] baseline runner + Δ
+
+`ddi.runners.phase1_baseline`: registers `task=phase1_full_baseline`. For each record: builds a
+`variant="full"` mask via `build_mask` + `to_additive`, runs it through `forward_with_mask` for
+answer-only cross-entropy (next-token-shifted), then `model.generate` (greedy) for EM/F1/presence.
+Every metric writes a row to `results/runs.jsonl` with full provenance. Skips records with empty
+`possible_answers` (loud print). The baseline shares the mask-injection path with future DDI
+variants, so any drift between "baseline" and "DDI" numbers is a code bug, not an implementation
+difference. `ddi.delta`: `compute_delta` filters by `phase1_baseline:{model}:{dataset}:` +
+metric, groups by `provenance.seed`, computes sample std (ddof=1), returns `Δ = k × std`
+(default `k=2`, requires ≥3 seeds). `record_delta` writes per-seed-mean rows AND a `delta_{metric}`
+row so the whole computation is auditable per ground rule 3. `ddi-delta` CLI wraps it. Makefile
+gains `phase1-baseline` and `delta` targets. Closes #12.
+
 ## 2026-07-27 — [1.2] hop labels + ddi-audit CLI
 
 `ddi.hop_labels`: `hop_type(record)` reads the native field; `register_heuristic(dataset)` lets
