@@ -5,7 +5,10 @@ description = "Decoupled Document Inference — block-diagonal attention over re
 requires-python = ">=3.11"
 dependencies = [
     "torch>=2.4",
-    "transformers>=4.44",
+    # Upper-bounded: 4.53 dropped the per-model `_update_causal_mask` method (moved to
+    # `masking_utils.create_causal_mask`) that ddi/model.py's patch_model() monkey-patches.
+    # Bump once model.py migrates to the new masking API — tracked in issue #30.
+    "transformers>=4.44,<4.53",
     "datasets>=2.14",
     "numpy",
     "pyyaml",
