@@ -35,6 +35,17 @@ number enters the store before that.
 
 ---
 
+## 2026-07-27 — [5.2] Parallel Context Windows baseline
+
+`ddi.runners.phase5_pcw` — registered as `task=phase5_pcw`. Reproduces Ratner et al. (ACL 2023):
+each doc is an independent context window, positions restart at 0, query attends to all
+windows. In DDI's machinery this is exactly `variant=ddi_qf` + `layout=restart`; the runner
+hard-codes that combo and writes rows under a distinct `phase5_pcw:{model}:{dataset}:...`
+prefix so the paper's PCW column is a first-class citizen in tables (rather than getting mixed
+into phase2_train_free or phase4_restart rows). No mask/layout knobs in the config — the paper
+defines the setup. Greedy prefill+cached-KV generation helper copied from
+`phase4_restart_quality`; a follow-up should factor both into `_shared.py`. Closes #27.
+
 ## 2026-07-27 — **Phase 3 and Phase 4 complete**
 
 Nine sub-issues closed: #17 timing harness, #18/#19/#20 timing sweeps + configs, #21
