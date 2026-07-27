@@ -35,6 +35,16 @@ number enters the store before that.
 
 ---
 
+## 2026-07-27 — [0.4] HF model wrapper with mask-preservation patch
+
+`ddi.model.load_model` returns `(model, tokenizer)` and applies `patch_model` which installs an
+instance-level `_update_causal_mask` (via `types.MethodType` on `model` or `model.model`) that
+returns a supplied **4D float** mask unchanged and delegates every other shape/dtype to the
+original. `unpatch_model` deletes the instance attribute to unshadow the class descriptor cleanly.
+`forward_with_mask` validates 4D + floating-point and calls HF's own forward with `use_cache=False`.
+No hand-rolled decoder loop. Integration test gated on `DDI_INTEGRATION=1`; unit tests use a mock.
+Closes #5.
+
 ## 2026-07-27 — Makefile as serverless entry point + CI
 
 `Makefile` reworked to use `uv` throughout (`uv pip install --system`, `uv run <cmd>`) and
