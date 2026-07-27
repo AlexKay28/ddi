@@ -81,6 +81,9 @@ def main(argv: list[str] | None = None) -> int:
 
     config, config_hash = load_config(args.config)
     set_seed(args.seed)
+    from ddi import gpu  # local import so tests that don't need torch stay light
+
+    gpu.configure()
     dispatch(config, config_hash, args.seed)
     return 0
 

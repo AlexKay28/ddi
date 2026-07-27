@@ -38,8 +38,9 @@ setup:  ## Install CPU dev environment (uv pip install -e ".[dev]").
 	$(UV) pip install --system -e ".[dev]"
 
 .PHONY: setup-gpu
-setup-gpu:  ## setup + FlashAttention-2 + report extras (for GPU boxes).
+setup-gpu:  ## setup + FlashAttention-2 + report extras (for GPU boxes; expects CUDA torch pre-installed on the image).
 	$(UV) pip install --system -e ".[dev,fa2,report]"
+	@$(MAKE) --no-print-directory gpu-check
 
 # ===================================================================
 # tests (preflight; gates are the ground-rule-6 enforcement)
@@ -52,6 +53,10 @@ test:  ## Full test suite.
 .PHONY: gates
 gates:  ## Correctness gates only — cheap serverless preflight.
 	$(PYTEST) -m gate
+
+.PHONY: gpu-check
+gpu-check:  ## Print GPU info and exit non-zero if CUDA is not available.
+	@$(UV) run python -c "from ddi.gpu import configure, require_cuda; configure(); require_cuda()"
 
 # ===================================================================
 # datasets upload (freeze + publish so every subsequent run pulls identical splits)

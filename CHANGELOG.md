@@ -35,6 +35,25 @@ number enters the store before that.
 
 ---
 
+## 2026-07-27 — GPU usage + [3.5] realization ratio + [2.3 pairing] Pareto
+
+**GPU:** new `ddi/gpu.py` — `is_available()`, `require_cuda()`, `gpu_info()` (device name,
+compute capability, VRAM, bf16 support), `configure()` (prints one-line stderr summary,
+enables TF32 on Ampere+, idempotent). `ddi.cli.main` calls `configure()` between `set_seed`
+and `dispatch` so every runner prints device facts and gets TF32 without any per-runner change.
+`make gpu-check` runs the check as a standalone preflight; `make setup-gpu` chains it so a
+missed CUDA install fails at container-boot time, not mid-sweep.
+
+**[3.5] realization ratio (T3, F3).** `ddi.reports.phase3_realization`: T3 tabulates
+analytical vs realized vs realization ratio per N (RESEARCH_PLAN §7 shape) — the "9× gap"
+story per cell. F3 plots realization ratio vs N with one line per L. Both read the store
+only; `n/a` when a cell's arms are missing; entirely-empty store raises. Closes #21.
+
+**[2.3 pairing] F6 Pareto frontier.** `ddi.reports.phase2_pareto`: pairs Phase 2.3 bridge EM
+rows (`ddi_bridge_k_k{K}`) with Phase 3.2 timing rows at the same K; x = realized speedup,
+y = median EM; annotates points with `k`, draws dashed lines at the `full` baseline and at
+`full − Δ` when `delta_em` is in the store. Paper centerpiece.
+
 ## 2026-07-27 — [4.2] per-doc KV cache
 
 `ddi.cache.DocCache`: disk-backed cache keyed by `sha256(model_id\0dtype\0doc_text)[:16]`; atomic
