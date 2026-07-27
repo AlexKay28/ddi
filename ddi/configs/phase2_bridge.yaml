@@ -1,0 +1,21 @@
+# [2.3] Bridge-width curve — paper centerpiece (issue #15).
+#
+# Runner registration lands with issue #15. Sweeps bridge_k across the endpoints
+# ddi_strict (k=1) ↔ ddi_qf (k=query_len) to locate the knee and produce F2
+# (quality-only curve) and F6 (quality/speed Pareto frontier paired with the
+# realized speedups from Phase 3.2).
+
+task: phase2_bridge_sweep
+
+model: Qwen/Qwen2.5-7B
+
+bridge_ks: [1, 2, 4, 8, 16, 32, 64, query]
+
+datasets: [nq, triviaqa, hotpotqa]
+
+kernel: sdpa
+train_free: true
+num_seeds: 3
+
+# Paired with Phase 3.2's realized-speedup rows for the F6 Pareto frontier.
+pair_with_phase3: timing_N

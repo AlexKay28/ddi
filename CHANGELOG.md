@@ -35,6 +35,15 @@ number enters the store before that.
 
 ---
 
+## 2026-07-27 — Makefile as experiment shortcuts
+
+Reframed root `Makefile` around experiment shortcuts. Setup collapsed to two targets (`setup`,
+`setup-gpu`); every phase gets its own labeled targets (`sweep-train-free`, `sweep-bridge`,
+`timing-N`, `realization`, `cache-throughput`, `pcw-baseline`, ...), each pointing at a config
+under `ddi/configs/phase*.yaml`. `help` output is sectioned. `run-seeds` added for one-VM seed
+loops. `report` target wraps `ddi.report_cli` (new module). Two config stubs seeded
+(`phase2_train_free.yaml`, `phase2_bridge.yaml`) to demonstrate the shape.
+
 ## 2026-07-27 — [0.4] HF model wrapper with mask-preservation patch
 
 `ddi.model.load_model` returns `(model, tokenizer)` and applies `patch_model` which installs an
