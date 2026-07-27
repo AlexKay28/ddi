@@ -35,6 +35,15 @@ number enters the store before that.
 
 ---
 
+## 2026-07-27 — [1.3] metrics
+
+`ddi.metrics`: SQuAD-style `normalize` (lowercase → punctuation strip → whole-token article
+removal to avoid eating `"the"` inside `"theatre"` → whitespace collapse), then `exact_match`,
+`token_f1` (Counter-multiset overlap, canonical SQuAD formula, max across candidates), and
+`answer_presence` (refuses trivial empty-candidate hits). `make_answer_labels` returns a
+`[batch, seq]` long tensor that is `input_ids` inside `[answer_start:answer_end)` and `-100`
+elsewhere — feeds HF's own answer-only cross-entropy path. Closes #11.
+
 ## 2026-07-27 — **Phase 0 complete**
 
 All seven Phase 0 sub-issues closed: #2 skeleton, #3 masks, #6 attention backends, #5 HF model
