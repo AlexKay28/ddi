@@ -1,0 +1,25 @@
+# [3.4] Backend comparison across the (N, L) grid (issue #20).
+#
+# Orchestrator invokes with (N, L, backend) drawn from the cross product
+#   {1, 3, 5, 9, 13, 25} x {128, 512, 2048} x {sdpa, fa2, triton}
+# with >=5 seeds each. Three implementations of the same mathematical object
+# double as each other's correctness tests (RESEARCH_PLAN §6 axis K).
+#
+# Note: `triton` cells will fail — `ddi.attention._triton_backend` raises
+# NotImplementedError until the block-diagonal kernel lands. That's expected;
+# the orchestrator should record the failure and move on. `fa2` cells require
+# CUDA and will fail with a clear RuntimeError on CPU workers.
+
+task: phase3_timing
+model: Qwen/Qwen2.5-7B-Instruct
+mask:
+  variant: ddi_qf
+  bridge_k: null
+N: 13                          # overridden per invocation by the orchestrator
+L: 512                         # overridden per invocation by the orchestrator
+Q: 64
+answer_len: 16
+backend: sdpa                  # overridden per invocation: sdpa | fa2 | triton
+n_repeats: 5
+warmup: 3
+n_new_tokens: 16
