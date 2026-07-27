@@ -35,6 +35,12 @@ number enters the store before that.
 
 ---
 
+## 2026-07-27 — Makefile added
+
+Root `Makefile` collects install / test / lint / format / run / clean targets and pins overridable
+variables (`PYTHON`, `CONFIG`, `SEED`). Placeholder comments mark where phase-specific sweep
+targets will land as their sub-issues close.
+
 ## 2026-07-27 — [0.1] package skeleton
 
 `pyproject.toml`, `ddi/` package with stub modules (`masks`, `attention`, `model`, `provenance`,
