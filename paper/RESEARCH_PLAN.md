@@ -87,8 +87,13 @@ Our differentiators, stated plainly: (i) decoder-only, at 7–8B, with and witho
 
 ## 3. What we already know
 
-**Trustworthy.** One epoch of Qwen2.5-7B fine-tuning per mask, best validation loss, from
-`v2/logs/`. Masks built by `v2/fine_tune.py:create_learning_sample()` using real token spans:
+**Nothing, as evidence.** See [issue #1](https://github.com/AlexKay28/ddi/issues/1): the `v1`–`v4`
+exploratory code is being replaced by one clean implementation, and every number below is demoted
+from *result* to *hypothesis to re-test*. They stay listed because they are the right things to
+test and useful as **sanity targets** for the new harness — not because they are findings.
+
+**Hypotheses H1, H2.** One epoch of Qwen2.5-7B fine-tuning per mask, best validation loss, from
+`v2/logs/`. `n=1`, one model, one dataset, no seed control, no provenance:
 
 | mask | best val loss | Δ vs baseline | final train loss |
 |---|---|---|---|
@@ -96,23 +101,28 @@ Our differentiators, stated plainly: (i) decoder-only, at 7–8B, with and witho
 | `block-sparsed-query-full` (DDI-QF) | 0.2773 | **+0.042** | 0.0178 |
 | `block-sparsed` (DDI-strict) | 1.4801 | **+1.245** | 0.0543 |
 
-**The finding that shapes the whole paper:** document↔document isolation is nearly free. Query
+**The hypothesis that shapes the whole paper:** document↔document isolation is nearly free. Query
 isolation is catastrophic. Whatever a single SEP bridge row can carry, it is not enough — a
-6× loss increase. DDI-strict is a *negative result* and we report it as one; it is the ablation
-that makes DDI-QF meaningful.
+6× loss increase. If it survives re-evaluation, DDI-strict is a *negative result* and we report it
+as one; it is the ablation that makes DDI-QF meaningful.
 
-**Weakly supported.** `v2/README.md` reports 1.20× prefill (720 ms → 600 ms) at 13 contexts,
+**Hypothesis H3.** `v2/README.md` reports 1.20× prefill (720 ms → 600 ms) at 13 contexts,
 91.6% sparsity. Single configuration, single run, no variance, unverified by re-run. Analytically
 that configuration should give ~10.6× (§7). **A 9× gap between theory and measurement is the most
 scientifically interesting thing we have** and the microbenchmarks in
 `notebooks/flasattention_tests*.py` (per-block launch overhead, "actual vs. theoretical speedup")
 already point at why.
 
-**Not evidence at all.** No generation-quality numbers (EM / F1 / answer-presence) survive from
-any run. And note: `v3/v4/infer_model.py` computes `documents_sizes_in_tokens` with `len()` on a
-`[1, L]` tensor, so every document is treated as one token long — the v3/v4 DDI inference path has
-been inert. **Any quality number collected through v3/v4 serving is void.** The v2 fine-tuning
-numbers above are unaffected (different code path, correct spans).
+**Never existed.** No generation-quality numbers (EM / F1 / answer-presence) survive from any run.
+
+**Why the rebuild, specifically.** Beyond `n=1` and missing provenance: the same mask semantics were
+reimplemented six times across `v1`–`v4` and disagree in detail, so there is no single definition of
+"the DDI mask" to point at. `v3`/`v4` additionally hand-roll the decoder loop — reimplementing RoPE,
+GQA repeat and KV layout, which must exactly match HF's forward or every number is silently wrong —
+and computed `documents_sizes_in_tokens` with `len()` on a `[1, L]` tensor, treating every document
+as one token long. Any metric from that path is void. The clean implementation injects masks into
+HF's own forward instead (issue #1, step 0.4), which makes the `N=1` equivalence test a test of the
+mask rather than of a reimplementation of attention.
 
 ---
 
@@ -120,9 +130,9 @@ numbers above are unaffected (different code path, correct spans).
 
 | # | claim | evidence needed | status |
 |---|---|---|---|
-| C1 | Document↔document isolation costs little quality | val loss + EM/F1 across ≥2 model families, ≥2 datasets | partial (1 model, 1 dataset, loss only) |
-| C2 | Query isolation is not viable | same grid, DDI-strict arm | partial (1 model, loss only) |
-| C3 | DDI reduces prefill cost, scaling with `N` | latency sweep over `N`, with variance | 1 point, 9× below theory |
+| C1 | Document↔document isolation costs little quality | val loss + EM/F1 across ≥2 model families, ≥2 datasets | **unverified** (H1 only) |
+| C2 | Query isolation is not viable | same grid, DDI-strict arm | **unverified** (H2 only) |
+| C3 | DDI reduces prefill cost, scaling with `N` | latency sweep over `N`, with variance | **unverified** (H3, 9× below theory) |
 | C4 | DDI makes per-document KV caching possible | cache-reuse throughput experiment | **not started** |
 | C5 | DDI degrades specifically on cross-document reasoning | multi-hop vs single-hop split | **not started** |
 
@@ -141,7 +151,7 @@ axis; and — important for arXiv — **primary claims must rest on publicly rep
 
 | model | role | why | in repo? |
 |---|---|---|---|
-| `Qwen/Qwen2.5-7B` + `-Instruct` | **primary** | already the workhorse; all v2 results are here | yes |
+| `Qwen/Qwen2.5-7B` + `-Instruct` | **primary** | the model H1/H2 were measured on; keeps the sanity target comparable | yes |
 | `meta-llama/Llama-3.1-8B` + `-Instruct` | **primary** | independent family; rules out Qwen-specific effects | yes |
 | `Qwen/Qwen2.5-1.5B` | ablation sweeps | cheap enough to run the full mask × N × ℓ grid | no — add |
 | `Qwen/Qwen2.5-14B` (or 32B) | scale trend | does the affordable-isolation gap shrink or grow with scale? | no — add |
@@ -157,8 +167,14 @@ Two deliberate decisions:
   main tables makes the central claims unverifiable; keeping it in an appendix as a third-family
   confirmation is strictly better for the paper.
 
-Fixed across all runs: bf16, `batch_size=1` with gradient accumulation (v3/v4 `generate` hard-fails
-above 1), greedy decoding for quality metrics, temperature as-configured for any sampling runs.
+Fixed across all runs: bf16, greedy decoding for quality metrics, temperature as-configured for any
+sampling runs.
+
+Note on batching: the old `v3`/`v4` code hard-failed above `batch_size=1`, and the exploratory
+results inherited that limit. The clean implementation should **not** — batched prefill with
+per-sample block-diagonal masks is exactly what FlashAttention varlen is for, and lifting the limit
+materially cuts the cost of the Phase 2–3 grids. If it stays at 1, that is a limitation to state,
+not a constraint to inherit.
 
 ---
 
@@ -172,13 +188,13 @@ Six axes. We are **not** running the full cross-product — §8 prioritizes.
 3. `DDI-strict` — docs isolated, query isolated, single SEP bridge row
 4. `DDI-bridge-k` — generalizes 2↔3: last `k` prefix rows see everything. `k=1` is strict,
    `k=Q` is QF. **New, and the most informative single sweep we can run** — it turns the
-   0.2355 / 0.2773 / 1.4801 step function into a curve and locates the knee.
-5. `blind` — all-zero mask control, from `v1/evaluate_models__blind.py`. Non-negotiable: if a
-   model scores well seeing nothing, the metric is not measuring retrieval.
+   hypothesised 0.2355 / 0.2773 / 1.4801 step function into a curve and locates the knee.
+5. `blind` — all-zero mask control. Non-negotiable: if a model scores well seeing nothing, the
+   metric is not measuring retrieval.
 
 **Axis T — how the mask is introduced**
-- `train-free` — swap the mask at inference on a stock checkpoint (v2 patched path)
-- `finetuned` — mask present during SFT, so the model adapts to it (v2 `fine_tune.py`, v4 `train.py`)
+- `train-free` — swap the mask at inference on a stock checkpoint
+- `finetuned` — mask present during SFT, so the model adapts to it
 
 This 2× axis is the paper's second-most-important comparison. Train-free is what practitioners can
 deploy today; fine-tuned is the achievable ceiling. The gap between them is a result.
@@ -188,8 +204,7 @@ deploy today; fine-tuned is the achievable ceiling. The gap between them is a re
 - `restart` — every document's RoPE positions start at 0
 
 `restart` is what makes a KV block genuinely reusable: order-independent and cache-keyable by
-document hash alone. `notebooks/KV-cache-and-position-analysis.ipynb` already built the probe for
-this. Untested and high-value.
+document hash alone. Untested and high-value.
 
 **Axis N — document count:** `{1, 3, 5, 9, 13, 25}`. `N=1` is a correctness check — DDI and full
 causal must be *numerically identical* there. Any divergence at `N=1` is a bug, and it is the
@@ -198,10 +213,9 @@ cheapest regression test we have.
 **Axis L — document length:** `{128, 512, 2048}` tokens. Drives the launch-overhead story: small
 blocks are where FlashAttention varlen should lose to a dense kernel.
 
-**Axis K — kernel:** dense SDPA + explicit `-inf` mask (reference semantics) · FlashAttention-2
-varlen (`v2/utils/flash_attention_sparse.py`) · Triton block-diagonal
-(`notebooks/triton_block_attention.py`). Three implementations of *one* mathematical object, so
-they double as each other's correctness tests.
+**Axis K — kernel backend:** dense SDPA + explicit `-inf` mask (reference semantics) ·
+FlashAttention-2 varlen · Triton block-diagonal. Three implementations of *one* mathematical
+object, so they double as each other's correctness tests.
 
 ### Baselines that are not DDI variants
 
@@ -250,11 +264,12 @@ at all. Axis L × axis K is designed to separate these.
 
 Phase 1 is the minimum viable paper. Later phases strengthen it.
 
-**Phase 0 — unblock (must precede everything)**
-- Fix `documents_sizes_in_tokens` in `v3/v4/infer_model.py` (`len()` → `.shape[-1]`). Until this
-  lands, the serving path produces no valid DDI measurement.
-- Add the `N=1` DDI ≡ full-causal numerical equivalence test.
-- Cross-check the three kernels (axis K) agree on logits for one fixed input.
+**Phase 0 — clean implementation and correctness gates (must precede everything)**
+One `ddi/` package written from zero: a single mask builder, kernel backends behind one interface,
+masks injected into HF's own forward (not a hand-rolled decoder loop), provenance capture, and a
+results store that tables generate from. Three required gates: `N=1` DDI ≡ full-causal equivalence,
+backend cross-check on fixed input, and a document-length regression test. Full breakdown in
+[issue #1](https://github.com/AlexKay28/ddi/issues/1) steps 0.1–0.7.
 
 **Phase 1 — core quality claim (C1, C2)**
 Grid: `{Qwen2.5-7B, Llama-3.1-8B} × {base, instruct} × {full, DDI-QF, DDI-strict, blind} ×
@@ -294,8 +309,9 @@ on, we cannot place DDI-QF against PCW's published numbers.
 ## 9. Metrics
 
 **Quality:** validation loss (answer tokens only, `-100` elsewhere) · exact match · token-F1 ·
-answer-presence (from `notebooks/results_analysis*.ipynb`) · degradation vs. `full` as the
-headline, since absolute scores are dataset-specific.
+answer-presence · degradation vs. `full` as the headline, since absolute scores are
+dataset-specific. All implemented fresh with unit tests; the old notebook definitions are worth
+consulting but not lifting.
 
 **Efficiency:** FTT (prefill, CUDA-event timed) · TPOT · realized speedup vs. `full` ·
 theoretical speedup from §7 · **realization ratio** = realized / theoretical, the number that
@@ -343,15 +359,20 @@ we already have into a mechanism.
 
 ## 12. Honest assessment of where we stand
 
-One model, one dataset, one epoch, loss-only, on two of five claims. One efficiency datapoint,
-9× below its own theory, `n=1`. The headline caching benefit is unmeasured. The serving path had a
-bug that voided its measurements.
+**Zero verified results.** Every claim C1–C5 is unverified. What exists is exploratory code across
+six divergent mask implementations, three loss numbers at `n=1` on one model, and one timing
+datapoint 9× below its own theory. The headline caching benefit has never been measured. We are
+starting the measurement work, not finishing it.
 
-What we *do* have is unusually clean for this stage: a sharp positive (isolation is affordable at
-+0.042 loss), a sharp negative (query isolation is not, +1.245), and a quantified mystery (10.59×
-available, 1.20× realized). Those three facts are a paper's spine. Phases 0–2 are perhaps a week of
-GPU time and would make C1 and C2 defensible; phase 3 is what makes the efficiency claim honest
-rather than aspirational.
+What we *do* have is a good set of questions, and they are unusually well-shaped: a hypothesised
+sharp positive (isolation affordable at +0.042 loss), a hypothesised sharp negative (query isolation
+not, +1.245), and a quantified mystery (10.59× available, 1.20× realized). If those three survive
+re-measurement they are a paper's spine — and the mystery is interesting whichever way it resolves.
+
+Phase 0 is the real cost here: building the clean implementation and the provenance discipline that
+makes any subsequent number defensible. It is also the thing that was missing the first time.
+Phases 1–2 then make C1 and C2 defensible; Phase 3 makes the efficiency claim honest rather than
+aspirational.
 
 Recommended framing for the preprint: **a characterization study**, not a method-wins paper. "How
 much cross-document attention can be removed, and what does removing it actually buy" is a claim we

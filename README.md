@@ -7,6 +7,12 @@ Ticket: **ALIGNMENT-2445**. The working tree this document describes lives outsi
 `/home/alexkay28/alexkay28/tickets/ALIGNMENT-2445` (`datasets/`, `notebooks/`, `v1/`–`v4/`);
 this README is the write-up of that work.
 
+> **Status: superseded.** `v1`–`v4` were successive debugging iterations, not a codebase to build
+> on. They are kept as **read-only archaeology** — what was attempted, and what it suggested. A
+> single clean implementation is being written from zero, and every number below is demoted to a
+> hypothesis to re-test. See [issue #1](https://github.com/AlexKay28/ddi/issues/1) for the plan and
+> [`paper/RESEARCH_PLAN.md`](paper/RESEARCH_PLAN.md) for the research design.
+
 ---
 
 ## 1. The idea
