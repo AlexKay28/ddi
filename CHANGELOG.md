@@ -35,6 +35,25 @@ number enters the store before that.
 
 ---
 
+## 2026-07-27 — **Phase 5 complete**
+
+All three Phase 5 sub-issues closed: #26 hop-split renderers (T5, F4), #27 PCW baseline, #28
+composition probe (dataset + runner + T6 + F7). Every experiment described in RESEARCH_PLAN
+§4's C1–C6 now has an executable path. Remaining on the roadmap: **Phase 6** (#29 writeup) and
+the transformers-4.53 migration debt (#30). All eight prior phases' sub-issues (0.1 through 5.3)
+are closed on GitHub.
+
+## 2026-07-27 — [5.3] composition probe (dataset + runner + T6 + F7)
+
+New dataset `composition` (`ddi.data.composition`): each record has entity `X` living in `<CITY>`
+(doc_A) and `<CITY> is in <COUNTRY>` (doc_B) plus `N−2` leakage-checked distractors placed at
+controlled `distance` and `pair_position`. Answer = `<COUNTRY>`. `hop_type="multi"` by
+construction. `phase5_composition` runner mirrors `phase4_restart_quality` and encodes the
+probe knobs in the `run_id` (`...:d{distance}:p{pair_position}:...`) so downstream slicing is
+free. `T6` markdown groups by `(variant, layout, distance)` with EM mean/median/IQR/n; `F7`
+plots median EM vs distance, one line per `(variant, layout)` — the picture that shows where
+`ddi_qf` starts to fail as gold docs move apart. Closes #28.
+
 ## 2026-07-27 — [5.1] hop-split renderers T5 + F4
 
 `ddi.reports.phase5_hop_split`: joins `phase2_train_free` EM rows with the record's `hop_type`
