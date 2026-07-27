@@ -19,6 +19,7 @@ dev = ["pytest", "pytest-cov", "ruff"]
 
 [project.scripts]
 ddi-run = "ddi.cli:main"
+ddi-audit = "ddi.audit_cli:main"
 
 [build-system]
 requires = ["setuptools>=68"]
