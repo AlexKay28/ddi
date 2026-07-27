@@ -3,14 +3,12 @@
 Research code for **DDI (Decoupled Document Inference)**: making RAG-style prefill cheaper by
 *not* letting retrieved documents attend to each other.
 
-Ticket: **ALIGNMENT-2445**. The working tree this document describes lives outside the repo at
-`/home/alexkay28/alexkay28/tickets/ALIGNMENT-2445` (`datasets/`, `notebooks/`, `v1/`–`v4/`);
-this README is the write-up of that work.
-
-> **Status: superseded.** `v1`–`v4` were successive debugging iterations, not a codebase to build
-> on. They are kept as **read-only archaeology** — what was attempted, and what it suggested. A
-> single clean implementation is being written from zero, and every number below is demoted to a
-> hypothesis to re-test. See [issue #1](https://github.com/AlexKay28/ddi/issues/1) for the plan and
+> **Status: clean-room rebuild in progress.** The prior working tree (`v1`–`v4`, kept outside
+> this repo) was a sequence of debugging iterations, not a codebase to build on. It is
+> **read-only archaeology** — consulted for what was attempted and what it suggested, never
+> imported from. A single clean implementation is being written from zero, and every prior number
+> is demoted to a **hypothesis to re-test**. See
+> [issue #1](https://github.com/AlexKay28/ddi/issues/1) for the roadmap and
 > [`paper/RESEARCH_PLAN.md`](paper/RESEARCH_PLAN.md) for the research design.
 
 ---
@@ -47,7 +45,9 @@ d3 ██████                  d3     ██                  d3     █
 Two properties make this attractive:
 
 - **Sparsity → speed.** With 13 contexts, `v2/README.md` reports 91.6% mask sparsity and a
-  **1.20× faster prefill** (720 ms → 600 ms) using FlashAttention-2 varlen.
+  **1.20× faster prefill** (720 ms → 600 ms) using FlashAttention-2 varlen. Analytical arithmetic
+  predicts ~10.6× at the same shape; that ~9× gap is hypothesis **H3** below and is what Phase 3.5
+  is designed to explain or bound.
 - **Cacheability.** Because a document's KV block does not depend on its neighbours, each
   document's KV cache is position-shiftable and reusable across requests. The
   `notebooks/KV-cache-and-position-analysis.ipynb` experiment probes exactly this: it perturbs
@@ -58,8 +58,15 @@ Two properties make this attractive:
 | name | documents | query / dialog | answer |
 |---|---|---|---|
 | `full` | causal over everything (baseline) | causal | causal |
-| `block-sparsed` | block-diagonal, mutually blind | attends only to itself; **last token** ("SEP trick") sees all | sees all |
-| `block-sparsed-query-full` | block-diagonal, mutually blind | whole query block sees all documents | sees all |
+| `ddi_strict` (a.k.a. `block-sparsed`) | block-diagonal, mutually blind | attends only to itself; **last token** ("SEP trick") sees all | sees all |
+| `ddi_qf` (a.k.a. `block-sparsed-query-full`) | block-diagonal, mutually blind | whole query block sees all documents | sees all |
+| `ddi_bridge_k` | block-diagonal, mutually blind | last **k** query rows see all documents (interpolates strict ↔ qf) | sees all |
+| `blind` | all-zero mask over documents (control) | sees dialog only | sees dialog only |
+
+The clean rebuild ([issue #1](https://github.com/AlexKay28/ddi/issues/1) §0.2) treats these as
+one parameterised family with a single boolean allow-matrix builder. `ddi_bridge_k` sweeps the
+bridge width between the two prior endpoints; `blind` is the retrieval-measurement control from
+`v1/evaluate_models__blind.py`.
 
 `v1` additionally explored `DDI_3` / `DDI_3_blind` — appending a fixed assistant "intro" span
 (*"Well, well well. Its a very good question. Answer according to what I see in documents is: "*)
@@ -68,7 +75,53 @@ context (see `v1/main_2.py`, `v1/evaluate_models__blind.py`).
 
 ---
 
-## 2. Layout
+## 2. Scope — models, benchmarks, roadmap
+
+### Models
+
+Two primary models, base and instruct variants (per
+[issue #1](https://github.com/AlexKay28/ddi/issues/1) §2.1):
+
+- **Qwen2.5-7B** — `Qwen/Qwen2.5-7B` and `Qwen/Qwen2.5-7B-Instruct`
+- **Llama-3.1-8B** — `meta-llama/Llama-3.1-8B` and `meta-llama/Llama-3.1-8B-Instruct`
+
+The archaeology (`v1`, `v2`) additionally exercised `YandexGPT-5-Lite-8B` in both flavours; not in
+scope for the clean rebuild.
+
+### Benchmarks
+
+Split by function rather than a single list — a parity-detection benchmark and a
+failure-envelope benchmark are different instruments
+([issue #1](https://github.com/AlexKay28/ddi/issues/1) §1.1):
+
+| purpose | dataset |
+|---|---|
+| Parity detection (headroom, low seed variance) | NQ, TriviaQA, HotpotQA |
+| Controllable `N` + gold-document position | Lost-in-the-Middle-style multi-doc QA (Liu et al. 2023) |
+| Cross-document stress | MoNaCo (`allenai/MoNaCo_Benchmark`); optionally 2WikiMultiHop, MuSiQue |
+| Comparability with prior work | ≥1 dataset that Parallel Context Windows (PCW) or Fusion-in-Decoder (FiD) reports on (likely NQ or TriviaQA) |
+| General RAG-native | Open RAG Bench (`vectara/open_ragbench`) |
+
+Prior work (`v1`, `v2`) sourced only Open RAG Bench and MoNaCo, via `datasets/revision.ipynb`.
+
+### Roadmap
+
+Six phases in [issue #1](https://github.com/AlexKay28/ddi/issues/1); Phase 0 is blocking. Phases
+2, 3, 4 are independent once 0 and 1 land.
+
+| phase | goal |
+|---|---|
+| 0 | Clean implementation + correctness gates (`N=1` equivalence, backend cross-check, doc-length regression) |
+| 1 | Datasets, metrics, `full` baseline, non-inferiority margin `Δ` fixed from seed variance |
+| 2 | Mask family quality — train-free primary, fine-tuned conditional, bridge-width sweep (paper centerpiece) |
+| 3 | Efficiency + realization-ratio analysis (the ~9× gap between analytical and measured speedup) |
+| 4 | Per-document caching + retrieval-order invariance — **co-headline** with the prefill speedup |
+| 5 | Failure envelope: single-hop vs multi-hop, PCW baseline, cross-document composition probe |
+| 6 | Writeup |
+
+---
+
+## 3. Layout
 
 ```
 datasets/       revision.ipynb — benchmark sourcing (Open RAG Bench, MoNaCo) → upload to YT
@@ -87,7 +140,7 @@ harnesses, which `v3`/`v4` never reimplemented.
 
 ---
 
-## 3. Version by version
+## 4. Version by version
 
 ### v1 — masks by hand, offline evaluation
 
@@ -183,7 +236,7 @@ Same three model classes, plus:
 
 ---
 
-## 4. Data format
+## 5. Data format
 
 Records are uniform across versions (`v4/dummy_data.jsonl` is a 50-line smoke set):
 
@@ -213,35 +266,48 @@ GET  /health
 
 ---
 
-## 5. Results so far
+## 6. Reference hypotheses (from the archaeology, **not** results)
 
-**Prefill speed** — `v2/README.md`: 1.20× (720 ms → 600 ms) at 13 contexts / 91.6% sparsity.
-The microbenchmarks in `notebooks/flasattention_tests*.py` and
-`notebooks/flash_attention_blocks_eval.ipynb` explore where that speedup does and doesn't
-materialize (per-block launch overhead can dominate at small block sizes — hence the "actual vs.
-theoretical speedup" plots and the Triton kernel attempt in `notebooks/triton_block_attention.py`).
+> These numbers came from the prior working tree. They are not results — the harness that produced
+> them predates the correctness gates in [issue #1](https://github.com/AlexKay28/ddi/issues/1)
+> §0.5, and every implementation detail is being rebuilt. They are kept as **sanity targets**:
+> if the clean harness reproduces them, that raises confidence in the rebuild. Nothing here is
+> claimed as a finding.
 
-**Quality cost of the mask** — one epoch of Qwen2.5-7B fine-tuning, best validation loss
+**H1 / H2 — quality cost of the mask** — one epoch of Qwen2.5-7B fine-tuning, best validation loss
 (`v2/logs/`):
 
-| mask | best val loss | final train loss |
-|---|---|---|
-| `full` (baseline) | **0.2355** | 0.0170 |
-| `block-sparsed-query-full` | 0.2773 | 0.0178 |
-| `block-sparsed` | 1.4801 | 0.0543 |
+| id | mask | prior best val loss | prior final train loss |
+|---|---|---|---|
+| H1 | `full` (baseline) | 0.2355 | 0.0170 |
+| H1 | `ddi_qf` (`block-sparsed-query-full`) | 0.2773 | 0.0178 |
+| H2 | `ddi_strict` (`block-sparsed`) | 1.4801 | 0.0543 |
 
-Read: isolating documents from *each other* is nearly free (**+0.04** val loss) as long as the
-query can still read all of them. Isolating the query too — leaving only the SEP-token row as a
-bridge — is **not** viable (0.24 → 1.48). That result is what motivates `block-sparsed-query-full`
-being the default `--mask_type` in `fine_tune.py`.
+The story the numbers *suggested*: isolating documents from each other is nearly free (+0.04) as
+long as the query still sees all of them; isolating the query too — leaving only the SEP-token
+row as a bridge — is not viable (0.24 → 1.48). This is what motivated `ddi_qf` being the default
+mask in `v2/fine_tune.py`, and what the bridge-width sweep in Phase 2.3 is designed to turn from
+a three-point step function into a mechanism with a located knee.
 
-Scoring for the generation-side evaluation (EM / token-F1 / answer-presence, against FTT and TPOT)
-lives in `notebooks/results_analysis.ipynb` and `results_analysis_v2.ipynb`; the `*.html` files are
-exported plotly dashboards from those runs.
+**H3 — prefill speed** — `v2/README.md`: 1.20× (720 ms → 600 ms) at 13 contexts / 91.6% mask
+sparsity. Analytical arithmetic at `ℓ=512, Q=64`
+([`paper/RESEARCH_PLAN.md`](paper/RESEARCH_PLAN.md) §7) predicts 10.59×; the ~9× gap between
+analytical and measured is Phase 3.5's job to explain or bound. Microbenchmarks in
+`notebooks/flasattention_tests*.py`, `notebooks/flash_attention_blocks_eval.ipynb`, and the
+Triton kernel in `notebooks/triton_block_attention.py` are where the launch-overhead vs.
+memory-boundedness questions were first raised.
+
+Generation-side scoring (EM / token-F1 / answer-presence, against FTT and TPOT) lives in
+`notebooks/results_analysis.ipynb` and `results_analysis_v2.ipynb`; the `*.html` files are the
+exported plotly dashboards from those runs. No EM / F1 / presence number has ever been produced by
+a validated harness — this is Phase 2's job.
 
 ---
 
-## 6. Running things
+## 7. Running things (archaeology)
+
+The commands below run the prior working tree, not the clean rebuild. Kept for reference until the
+Phase 0 CLI (`run.py --config <file> --seed <n>`) lands.
 
 Everything assumes CUDA, `transformers`, `torch`, and — for v2 — `flash-attn`.
 v1/v2 additionally need `yt.wrapper` with `YT_PROXY`/`YT_TOKEN` set, and an `HF_TOKEN` in `.env`
@@ -270,14 +336,18 @@ make -C v1 parallel-all
 
 ---
 
-## 7. Known gaps
+## 8. Known gaps (in the archaeology)
 
 Carried forward as-is; worth knowing before extending this code.
 
 - **`documents_sizes_in_tokens` is wrong in `v3/v4/infer_model.py`.** `tokenizer.encode(...,
   return_tensors="pt")` returns a `[1, L]` tensor, so `len(ctx_indices)` evaluates to `1` for every
   document. `DDIModel` therefore builds a mask of N one-token documents rather than the real spans
-  — the DDI path is effectively inert at inference. Should be `ctx.shape[-1]`.
+  — the DDI path is effectively inert at inference. Should be `ctx.shape[-1]`. Encoded as a
+  permanent regression test in [issue #1](https://github.com/AlexKay28/ddi/issues/1) §0.5.
+- **`v4/run_train.sh` runs `causal` only.** The DDI branch is commented out in the script, so no
+  clean run of the v4 SFT loop under the DDI mask exists. Combined with the bullet above, the DDI
+  path in `v4` is inert at both training and inference.
 - **`v3/v4/source/model_shadow.py` doesn't import** — needs a `reference/` package
   (`compute_representatives`, `select_representatives`, `compute_dist`) that isn't in the tree.
 - **`v2/validate_triton.py` doesn't import** — wants `utils/triton_block_sparse_attention.py`;
@@ -290,7 +360,7 @@ Carried forward as-is; worth knowing before extending this code.
 
 ---
 
-## 8. Glossary
+## 9. Glossary
 
 | term | meaning |
 |---|---|
@@ -301,3 +371,7 @@ Carried forward as-is; worth knowing before extending this code.
 | **SEP trick** | forcing the last prefix row of an otherwise-isolated mask to attend to everything, so a single token bridges the blocks |
 | **classic / patched** | unmodified model vs. one with `F.scaled_dot_product_attention` swapped for the block-sparse implementation |
 | **shadow** | the separate landmark-based sparse-KV line of work vendored into `v3`/`v4` for comparison |
+| **`Δ`** | non-inferiority margin — the maximum quality loss vs `full` still called parity. Fixed from `full`'s seed-to-seed variance in Phase 1.4 before any DDI number is interpreted |
+| **PCW** | Parallel Context Windows (Ratner et al., ACL 2023) — training-free independent context windows; closest prior work |
+| **FiD** | Fusion-in-Decoder (Izacard & Grave, 2021) — encode passages independently, fuse in the decoder |
+| **H1 / H2 / H3** | prior-work numbers demoted to hypotheses: quality of `full` / `ddi_qf` (H1), quality of `ddi_strict` (H2), prefill speed (H3). See §6 |
