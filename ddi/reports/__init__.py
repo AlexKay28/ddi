@@ -10,4 +10,5 @@ from ddi.reports import phase2_bridge  # noqa: F401
 from ddi.reports import phase2_pareto  # noqa: F401
 from ddi.reports import phase3_realization  # noqa: F401
 from ddi.reports import phase4_throughput  # noqa: F401
+from ddi.reports import phase5_composition  # noqa: F401
 from ddi.reports import phase5_hop_split  # noqa: F401

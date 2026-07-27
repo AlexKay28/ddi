@@ -15,6 +15,7 @@ from ddi.runners import phase4_cache_correctness as _phase4_cache_correctness  #
 from ddi.runners import phase4_order_invariance as _phase4_order_invariance  # noqa: F401
 from ddi.runners import phase4_restart_quality as _phase4_restart_quality  # noqa: F401
 from ddi.runners import phase4_throughput as _phase4_throughput  # noqa: F401
+from ddi.runners import phase5_composition as _phase5_composition  # noqa: F401
 from ddi.runners import phase5_pcw as _phase5_pcw  # noqa: F401
 
 __all__: list[str] = []
