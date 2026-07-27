@@ -35,6 +35,16 @@ number enters the store before that.
 
 ---
 
+## 2026-07-27 — **Phase 3 and Phase 4 complete**
+
+Nine sub-issues closed: #17 timing harness, #18/#19/#20 timing sweeps + configs, #21
+realization ratio (T3/F3) + F6 Pareto pairing, #22 position restart, #23 per-doc KV cache,
+#24 order invariance, #25 throughput (F5). The harness can now run every efficiency
+measurement (FTT/TPOT with median+IQR, realized-vs-analytical per cell, backend cross-check),
+route DDI's masked prefill through a content-keyed KV cache, and measure end-to-end QPS under
+three reuse regimes — plus GPU is required by default so a broken container fails at boot.
+Remaining sub-issues: Phase 5 (#26/#27/#28 failure envelope) and Phase 6 (#29 writeup).
+
 ## 2026-07-27 — [4.3/4.4] order invariance and throughput under reuse (F5)
 
 `phase4_order_invariance`: prefills a record's prompt under `(variant, layout)`, then compares
