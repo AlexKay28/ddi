@@ -152,8 +152,14 @@ def _run(config: dict[str, Any], config_hash: str, seed: int) -> None:
         answer_end = full_ids.shape[-1]
         labels = make_answer_labels(full_ids, answer_start, answer_end).to(model.device)
 
+        # `build_mask`'s T = sum(doc_lengths) + query_len + answer_len already accounts for the
+        # query/answer span, so `doc_lengths` must stay `[]` for no-doc records — substituting
+        # `full_ids.shape[-1]` here would double-count query+answer into T (issue found via #35's
+        # `nq` sweep: `nq` has no info_contexts, so every record hit this and broke on shape).
+        # `build_mask([], ...)` already yields plain causal for every variant (empty sum, and its
+        # own `len(doc_lengths) <= 1` collapse), so no substitution is needed at all.
         allow = build_mask(
-            doc_lengths or [full_ids.shape[-1]],
+            doc_lengths,
             query_len=query_len,
             answer_len=answer_len,
             variant=variant_here,
@@ -169,7 +175,7 @@ def _run(config: dict[str, Any], config_hash: str, seed: int) -> None:
 
         prefill_ids = torch.cat(doc_ids_list + [query_ids], dim=-1).to(model.device)
         prefill_allow = build_mask(
-            doc_lengths or [prefill_ids.shape[-1]],
+            doc_lengths,
             query_len=query_len,
             answer_len=0,
             variant=variant_here,

@@ -100,6 +100,7 @@ FIXTURES = [
     ([3, 3], 4, 1),
     ([1], 4, 1),  # N=1
     ([5], 3, 2),  # N=1, another shape
+    ([], 3, 2),  # N=0 (no info_contexts, e.g. nq) — must collapse to plain causal
 ]
 
 
