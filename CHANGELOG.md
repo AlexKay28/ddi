@@ -35,6 +35,29 @@ number enters the store before that.
 
 ---
 
+## 2026-07-27 — [4.3/4.4] order invariance and throughput under reuse (F5)
+
+`phase4_order_invariance`: prefills a record's prompt under `(variant, layout)`, then compares
+last-token query logits against `n_permutations − 1` deterministic random doc-order permutations
+via `torch.allclose(atol=tolerance)`. Writes per-`(record, layout)` `invariance` (1.0/0.0) and
+`max_delta`. Restricted to `ddi_qf` / `ddi_bridge_k` where the invariance claim is well-defined.
+Hypothesis (restart → invariant, sequential → not) is left to the report layer.
+
+`phase4_throughput`: three modes (`ddi_cache`, `ddi_recompute`, `full_causal`) over a synthetic
+doc universe with `zipf` / `uniform` / `fixed` reuse. First-pass cache path skips doc prefill on
+hit; full KV-injection is a follow-up. Writes `qps`, `hit_rate`, `n_requests`, `total_elapsed_s`
+per run and `per_request_latency_ms` per request. `F5` renderer joins qps + hit_rate per base
+run_id and plots log-scale QPS vs hit rate with one series per mode. Closes #24, #25.
+
+## 2026-07-27 — GPU-required by default at CLI startup
+
+`ddi.cli.main` now calls `gpu.require_cuda()` after `gpu.configure()` when the config's
+`require_gpu` key is truthy (default `true`). Silently running a real DDI sweep on CPU would
+burn hours and produce meaningless numbers, so misconfigured serverless containers fail at boot
+with a clear "CUDA not available" message. Opt-out via `require_gpu: false` in the config;
+`ddi/configs/example.yaml` and the CLI smoke test set that opt-out because they don't need a
+real model.
+
 ## 2026-07-27 — GPU usage + [3.5] realization ratio + [2.3 pairing] Pareto
 
 **GPU:** new `ddi/gpu.py` — `is_available()`, `require_cuda()`, `gpu_info()` (device name,

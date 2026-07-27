@@ -84,6 +84,11 @@ def main(argv: list[str] | None = None) -> int:
     from ddi import gpu  # local import so tests that don't need torch stay light
 
     gpu.configure()
+    # Default: every experiment run REQUIRES CUDA — silently running a real DDI sweep on CPU
+    # would burn hours and produce meaningless numbers. Opt out with `require_gpu: false` in the
+    # config for smoke tests and dry-runs.
+    if config.get("require_gpu", True):
+        gpu.require_cuda()
     dispatch(config, config_hash, args.seed)
     return 0
 

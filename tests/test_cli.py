@@ -68,6 +68,7 @@ def test_main_end_to_end(tmp_path: Path) -> None:
     path.write_text(textwrap.dedent("""\
         task: smoke_e2e
         payload: 7
+        require_gpu: false
     """))
 
     seen: dict = {}
