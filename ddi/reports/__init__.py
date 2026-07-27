@@ -5,4 +5,5 @@ Importing this package (done from `ddi/report.py` at module load) ensures every
 renderer is available in `list_reports()` / `render()`.
 """
 
+from ddi.reports import phase2_base_vs_instruct  # noqa: F401
 from ddi.reports import phase2_bridge  # noqa: F401

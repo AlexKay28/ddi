@@ -35,6 +35,59 @@ number enters the store before that.
 
 ---
 
+## 2026-07-27 — **Phase 2 complete**
+
+All four Phase 2 sub-issues closed: #13 train-free primary result, #14 conditional finetuned
+sweep, #15 bridge sweep centerpiece, #16 base-vs-instruct probe. The harness can now: evaluate
+one cell of the `{model} × {mask} × {dataset}` sweep on stock weights, fine-tune with the mask
+present and save a reloadable checkpoint, sweep bridge widths for the F2 curve, and produce a
+base-vs-instruct effect-size table (T4_probe_instruct). All quality metrics share the same
+`build_mask → to_additive → forward_with_mask` code path as the baseline (Phase 1.4) so any
+gap is a semantic effect, not implementation drift. Ready for Phase 3 (efficiency + realization
+gap) and Phase 4 (per-document caching) in parallel.
+
+## 2026-07-27 — [2.4] base-vs-instruct probe
+
+`ddi.reports.phase2_base_vs_instruct`: registered as `T4_probe_instruct`. Parses
+phase2_train_free run_ids to identify (model, dataset, variant); pairs base and instruct
+versions of each family (strip `-Instruct` / `-instruct` suffix); reports per-family
+`gap = mean(full) − mean(ddi_qf)` for base and instruct with per-seed σ, plus the effect
+(base − instruct). Hypothesis in RESEARCH_PLAN §2.4: negative effect means instruct is more
+DDI-friendly. Closes #16.
+
+## 2026-07-27 — [2.3] bridge sweep + F2
+
+`ddi/reports/` package introduced (mirrors `ddi/runners/` — side-effect registration).
+`ddi/report.py` imports it at module bottom so every renderer is discoverable via
+`list_reports()`. `phase2_bridge.yaml` matches the phase2_train_free schema with
+`variant=ddi_bridge_k` and a `bridge_k` placeholder that the orchestrator overrides per
+invocation across `{1, 2, 4, 8, 16, 32, 64, query_len}`. `F2` renderer (registered by
+`ddi.reports.phase2_bridge`): reads bridge rows from the store, groups by k, plots median EM
+with IQR error bars on a log-2 x-axis. Lazy matplotlib import; parent path is created on demand.
+Closes #15.
+
+## 2026-07-27 — [2.2] SFT training loop + phase2_finetune_train
+
+`ddi.train`: from-scratch SFT loop (no `Trainer`/`trl`/`peft`) — AdamW, linear warmup then
+constant LR, configurable gradient accumulation, gradient checkpointing, non-finite-loss step
+skip that keeps the LR schedule honest, periodic validation loss logged as `train_val_loss` to
+the store. Deterministic dataloader by re-invoking the loader per pass (no `itertools.cycle`
+buffering). Checkpoint saved via `model.save_pretrained` under a hashed `_run_tag` that
+sanitises model/dataset slashes. Runner `phase2_finetune_train` wraps it; eval reuses
+`phase2_train_free` by pointing its `model:` at the checkpoint dir. LoRA / light-adaptation
+rung deferred with a `TODO` in the config. Closes #14.
+
+## 2026-07-27 — [2.1] train-free mask sweep runner
+
+`ddi.runners.phase2_train_free`: reads mask variant + bridge_k from config so the orchestrator
+fills the sweep grid one cell per invocation. `ddi/runners/_shared.py` factors out
+`shifted_cross_entropy` so Phase 1.4 (`phase1_baseline`) and Phase 2.1 (`phase2_train_free`)
+use bit-identical loss — Δ is only meaningful if the formula is shared. `_generate_with_prefill_mask`:
+DDI-masked prefill via `forward_with_mask`, then greedy cached-KV argmax steps. Records with
+empty `info_contexts` coerce to `variant="full"` with a per-run summary count. Config validation
+fails loudly on missing keys and on `bridge_k` / variant mismatch before touching the model.
+Closes #13.
+
 ## 2026-07-27 — Makefile refocused on serverless surface
 
 `Makefile` narrowed to what a serverless container actually needs: install (`setup`, `setup-gpu`),
