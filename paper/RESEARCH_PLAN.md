@@ -135,6 +135,7 @@ mask rather than of a reimplementation of attention.
 | C3 | DDI reduces prefill cost, scaling with `N` | latency sweep over `N`, with variance; end-to-end and prefill-only both reported | **unverified** (H3, 9× below theory) |
 | C4 | DDI makes per-document KV caching possible | cache-reuse throughput experiment; identical logits on cache hit | **not started** — **co-headline** |
 | C5 | DDI degrades specifically on cross-document reasoning | multi-hop vs single-hop split | **not started** |
+| C6 | `ddi_qf` is robust to distractor documents | quality vs. distractor count on the Lost-in-the-Middle-style set | **not started** — obtained "for free" alongside Phase 2.1 |
 
 C5 is a prediction of *failure*, and we should chase it deliberately. If documents cannot see each
 other, a question whose answer requires composing `doc_2` with `doc_7` must be answered in the
