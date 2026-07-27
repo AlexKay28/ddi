@@ -35,6 +35,14 @@ number enters the store before that.
 
 ---
 
+## 2026-07-27 — Makefile as serverless entry point + CI
+
+`Makefile` reworked to use `uv` throughout (`uv pip install --system`, `uv run <cmd>`) and
+reframed as the single interface for serverless experiment runs: fresh container → `make setup`
+→ `make <phase-target>`. GitHub Actions workflow at `.github/workflows/test.yml` installs via
+`make setup`, runs `make lint test` on Python 3.11 and 3.12, matches the serverless first-run
+sequence so CI green ≡ the container will boot cleanly.
+
 ## 2026-07-27 — [0.3] attention backends
 
 `ddi.attention.get_backend` dispatches to three implementations of one mathematical object: SDPA
