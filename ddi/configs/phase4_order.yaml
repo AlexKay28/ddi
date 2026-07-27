@@ -1,0 +1,24 @@
+# [4.3] Retrieval-order invariance — ddi_qf + restart is order-invariant (issue #24).
+#
+# Runs the `phase4_order_invariance` runner: prefills the prompt under a reference
+# retrieval order, records last-token query logits, then reorders info_contexts and
+# re-prefills for `n_permutations - 1` random permutations. Writes per-(record, layout)
+# `invariance` (1.0 iff every permutation matched the reference within `tolerance`) and
+# `max_delta` (worst absolute logit deviation across permutations).
+#
+# The point is the *contrast* between the two layouts: restart should give
+# `invariance == 1.0` uniformly; sequential should give `< 1.0` on records with
+# `len(info_contexts) > 1`. The runner does not assert this — the F-report layer does.
+#
+# See RESEARCH_PLAN §8 Phase 4.3; issue #1 §4.3; issue #24.
+
+task: phase4_order_invariance
+model: Qwen/Qwen2.5-7B-Instruct
+mask:
+  variant: ddi_qf              # only ddi_qf / ddi_bridge_k make sense here
+  bridge_k: null               # required only when variant == ddi_bridge_k
+layouts: [sequential, restart] # both — restart is the claim, sequential is the control
+dataset: nq
+n_permutations: 4              # number of orders to compare (reference + n-1 permutations)
+tolerance: 1.0e-3              # allclose atol for "same logits"
+max_records: 20
