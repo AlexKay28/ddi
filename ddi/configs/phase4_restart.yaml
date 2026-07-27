@@ -1,0 +1,20 @@
+# [4.1] Position-restart quality — does restart cost anything? (issue #22).
+#
+# Runs the `phase4_restart_quality` runner: per-record loss + EM/F1/presence under BOTH
+# layout=sequential and layout=restart at the same mask variant. Downstream analysis
+# compares the two layouts directly. Restart is the position layout that makes each
+# document's KV block a pure function of its content — the primitive that unlocks C4
+# (per-document caching, Phase 4.2). This runner is the quality gate for that primitive.
+#
+# See RESEARCH_PLAN §6 (axis P) and §8 Phase 4.1.
+
+task: phase4_restart_quality
+model: Qwen/Qwen2.5-7B-Instruct
+mask:
+  variant: ddi_qf              # default to the DDI variant restart is designed for
+  bridge_k: null               # required only when variant == ddi_bridge_k
+layouts: [sequential, restart]
+dataset: nq
+split: val
+max_new_tokens: 64
+max_records: 100  # smoke run; remove or raise for full-scale sweeps

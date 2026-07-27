@@ -10,5 +10,6 @@ from __future__ import annotations
 from ddi.runners import phase1_baseline as _phase1_baseline  # noqa: F401
 from ddi.runners import phase2_finetune as _phase2_finetune  # noqa: F401
 from ddi.runners import phase2_train_free as _phase2_train_free  # noqa: F401
+from ddi.runners import phase4_restart_quality as _phase4_restart_quality  # noqa: F401
 
 __all__: list[str] = []

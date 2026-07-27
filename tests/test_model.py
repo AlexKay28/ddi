@@ -33,6 +33,7 @@ class _MockInner(nn.Module):
         super().__init__()
         self.called_with: object = self._SENTINEL
         self.forwarded_with: torch.Tensor | None = None
+        self.positions_forwarded_with: torch.Tensor | None = None
 
     def _update_causal_mask(self, attention_mask, *args, **kwargs):  # noqa: ARG002
         self.called_with = attention_mask
@@ -52,6 +53,7 @@ class _MockModel(nn.Module):
         self,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
         use_cache: bool = False,  # noqa: ARG002
     ):
         # Route through inner so tests can assert the mask reached the layer that would run
@@ -59,6 +61,7 @@ class _MockModel(nn.Module):
         # short-circuit is exercised on the real call path.
         prepared = self.model._update_causal_mask(attention_mask)
         self.model.forwarded_with = prepared
+        self.model.positions_forwarded_with = position_ids
         return SimpleNamespace(logits=torch.zeros(input_ids.shape + (10,)))
 
 
@@ -237,6 +240,74 @@ def test_forward_with_mask_passes_mask_through() -> None:
     # the point where attention would consume it. Identity — same object, not a copy.
     assert mock.model.forwarded_with is mask4d
     assert logits.shape == (1, 4, 10)
+
+
+# ---------------------------------------------------------------------------
+# forward_with_mask — position_ids kwarg (Phase 4.1, issue #22)
+# ---------------------------------------------------------------------------
+
+
+def test_forward_with_mask_accepts_positions() -> None:
+    """`position_ids` reaches the model's forward as the same tensor we passed."""
+    mock = _MockModel()
+    patch_model(mock)
+
+    input_ids = torch.zeros(1, 4, dtype=torch.long)
+    mask4d = torch.zeros(1, 1, 4, 4, dtype=torch.float32)
+    positions = torch.tensor([[0, 1, 0, 1]], dtype=torch.long)
+
+    forward_with_mask(mock, input_ids, mask4d, position_ids=positions)
+
+    assert mock.model.positions_forwarded_with is positions
+
+
+def test_forward_with_mask_omitting_positions_forwards_none() -> None:
+    """Default `position_ids=None` preserves HF's own position handling (backwards-compat)."""
+    mock = _MockModel()
+    patch_model(mock)
+
+    input_ids = torch.zeros(1, 4, dtype=torch.long)
+    mask4d = torch.zeros(1, 1, 4, 4, dtype=torch.float32)
+
+    forward_with_mask(mock, input_ids, mask4d)
+
+    assert mock.model.positions_forwarded_with is None
+
+
+def test_forward_with_mask_rejects_wrong_dim_positions() -> None:
+    mock = _MockModel()
+    patch_model(mock)
+
+    input_ids = torch.zeros(1, 4, dtype=torch.long)
+    mask4d = torch.zeros(1, 1, 4, 4, dtype=torch.float32)
+    positions_1d = torch.tensor([0, 1, 2, 3], dtype=torch.long)
+
+    with pytest.raises(ValueError, match="2D"):
+        forward_with_mask(mock, input_ids, mask4d, position_ids=positions_1d)
+
+
+def test_forward_with_mask_rejects_wrong_shape_positions() -> None:
+    mock = _MockModel()
+    patch_model(mock)
+
+    input_ids = torch.zeros(1, 4, dtype=torch.long)
+    mask4d = torch.zeros(1, 1, 4, 4, dtype=torch.float32)
+    positions_bad = torch.zeros(1, 5, dtype=torch.long)
+
+    with pytest.raises(ValueError, match="must match"):
+        forward_with_mask(mock, input_ids, mask4d, position_ids=positions_bad)
+
+
+def test_forward_with_mask_rejects_non_long_positions() -> None:
+    mock = _MockModel()
+    patch_model(mock)
+
+    input_ids = torch.zeros(1, 4, dtype=torch.long)
+    mask4d = torch.zeros(1, 1, 4, 4, dtype=torch.float32)
+    positions_float = torch.zeros(1, 4, dtype=torch.float32)
+
+    with pytest.raises(ValueError, match="torch.long"):
+        forward_with_mask(mock, input_ids, mask4d, position_ids=positions_float)
 
 
 # ---------------------------------------------------------------------------
