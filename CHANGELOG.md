@@ -35,6 +35,22 @@ number enters the store before that.
 
 ---
 
+## 2026-07-27 — [0.3] attention backends
+
+`ddi.attention.get_backend` dispatches to three implementations of one mathematical object: SDPA
+with explicit additive mask (**reference** — defines correct), FlashAttention-2 varlen scoped to
+doc-only prefill (uses `cu_seqlens`, CUDA-only, lazy-imported), and Triton deferred as
+`NotImplementedError`. Cross-backend equivalence is verified by the Phase 0.5 gate. Closes #6.
+
+## 2026-07-27 — [0.7] report generation
+
+`ddi.report` provides the `@register` decorator (mirrors `ddi.cli.register_runner`), sorted
+`list_reports`, and `render(name, store, output=None)` dispatching tables (markdown) vs figures
+(write to output) by `T*` / `F*` naming. Store reader `iter_rows` in file order plus
+`filter_rows` (metric / run_id / provenance subset). Helpers: `median_with_iqr` with linear
+interpolation, `group_by` with dotted-path lookup. Idempotent by construction. Renderers for
+T2/T3/F2–F6 register from later-phase modules as their data lands. Closes #8.
+
 ## 2026-07-27 — [0.2] masks.py
 
 `ddi.masks.build_mask` returns a boolean `[T, T]` allow-matrix for all five variants (`full`,
