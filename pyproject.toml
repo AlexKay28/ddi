@@ -19,13 +19,14 @@ dev = ["pytest", "pytest-cov", "ruff"]
 
 [project.scripts]
 ddi-run = "ddi.cli:main"
+ddi-delta = "ddi.delta_cli:main"
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["ddi", "ddi.configs", "ddi.data"]
+packages = ["ddi", "ddi.configs", "ddi.data", "ddi.runners"]
 
 [tool.setuptools.package-data]
 "ddi.configs" = ["*.yaml"]

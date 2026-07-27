@@ -38,6 +38,12 @@ def register_runner(name: str) -> Callable[[Runner], Runner]:
     return wrap
 
 
+# Side-effect import: pulls in every runner module so their `@register_runner` calls
+# populate `_RUNNERS` before `dispatch()` is invoked. Must be below `register_runner`
+# because the runner modules import that name from here.
+import ddi.runners  # noqa: F401, E402
+
+
 def load_config(path: Path) -> tuple[dict[str, Any], str]:
     raw = path.read_bytes()
     config_hash = hashlib.sha256(raw).hexdigest()[:16]
