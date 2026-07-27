@@ -13,6 +13,8 @@ from ddi.data.loaders import list_datasets, load, register_loader
 # Import loader modules for their register_loader side-effects. Order matters: loaders.py must
 # import first so the registry decorator exists.
 from ddi.data import composition as _composition  # noqa: F401, E402
+from ddi.data import ddi_stress as _ddi_stress  # noqa: F401, E402
+from ddi.data import hotpot_qa as _hotpot_qa  # noqa: F401, E402
 from ddi.data import kilt_nq as _kilt_nq  # noqa: F401, E402
 from ddi.data import musique as _musique  # noqa: F401, E402
 from ddi.data import nq as _nq  # noqa: F401, E402
