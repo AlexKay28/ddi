@@ -140,3 +140,9 @@ def _lookup(row: dict, path: str) -> Any:
             return None
         node = node.get(part)
     return node
+
+
+# Side-effect import: pulls in every renderer module in ddi/reports/ so their
+# `@register` calls populate `_RENDERERS` before `render()` is invoked.
+# Must be at module bottom because the renderer modules import from this file.
+from ddi import reports as _reports  # noqa: E402, F401
