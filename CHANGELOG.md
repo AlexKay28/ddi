@@ -35,6 +35,24 @@ number enters the store before that.
 
 ---
 
+## 2026-07-27 — **Phase 0 complete**
+
+All seven Phase 0 sub-issues closed: #2 skeleton, #3 masks, #6 attention backends, #5 HF model
+wrapper, #4 correctness gates, #7 provenance + store, #8 report generation. The DDI harness now
+has a single mask definition (ground rule 8), three attention backends verified equivalent by the
+Phase 0.5 gates (ground rule 6), mask injection into HF's own forward (no hand-rolled decoder),
+run identity + append-only store (ground rules 1, 2), and idempotent report rendering from the
+store (ground rule 3). Ready for Phase 1 (datasets + `full` baseline + fix `Δ`).
+
+## 2026-07-27 — [0.5] correctness gates
+
+`tests/test_gates.py`: three parametrized gates, all `@pytest.mark.gate`. Gate 1 — N=1 mask
+equivalence + output equivalence over available backends. Gate 2 — SDPA-referenced backend
+cross-check on doc-only fixed input; skips (never passes vacuously) when only SDPA is available.
+Gate 3 — mask shape sanity plus the `len()`-vs-`.shape[-1]` regression encoded permanently. Meta
+test verifies every `test_gate*` carries the marker. `gate` marker registered in `pyproject.toml`.
+`make gates` runs just the gate suite. Closes #4.
+
 ## 2026-07-27 — Makefile as experiment shortcuts
 
 Reframed root `Makefile` around experiment shortcuts. Setup collapsed to two targets (`setup`,
