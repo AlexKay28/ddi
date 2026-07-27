@@ -32,6 +32,9 @@ packages = ["ddi", "ddi.configs"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
+markers = [
+    "gate: correctness gate that must pass before any DDI number is admitted (issue #4, ground rule 6)",
+]
 
 [tool.ruff]
 line-length = 100

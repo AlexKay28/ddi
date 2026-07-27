@@ -49,6 +49,10 @@ test:  ## Run the test suite.
 test-fast:  ## Stop on first failure.
 	$(PYTEST) -x
 
+.PHONY: gates
+gates:  ## Run the Phase 0.5 correctness gates only.
+	$(PYTEST) -m gate
+
 .PHONY: lint
 lint:  ## ruff check.
 	$(RUFF) check .
@@ -70,7 +74,6 @@ run:  ## Run one experiment. Override CONFIG=<path> SEED=<n>.
 # expand to one or more `run` invocations and live behind a task registered in
 # ddi.cli.register_runner. Kept as documentation until then:
 #
-#   gates              # Phase 0.5, issue #4 — three correctness gates (harness sanity)
 #   report             # Phase 0.7, issue #8 — regenerate tables/figures from the store
 #   sweep-train-free   # Phase 2.1, issue #13 — primary quality result
 #   sweep-bridge       # Phase 2.3, issue #15 — Pareto frontier (paper centerpiece)
