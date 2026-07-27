@@ -45,6 +45,14 @@ setup-gpu:  ## setup + FlashAttention-2 + report extras (for serverless GPU boxe
 test:  ## Full test suite.
 	$(PYTEST)
 
+.PHONY: test-fast
+test-fast:  ## Stop on first failure.
+	$(PYTEST) -x
+
+.PHONY: gates
+gates:  ## [0.5] Correctness gates only — cheap serverless preflight (issue #4).
+	$(PYTEST) -m gate
+
 .PHONY: lint
 lint:  ## ruff check.
 	$(UV) run ruff check .
