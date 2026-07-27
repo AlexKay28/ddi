@@ -49,3 +49,13 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+# Pin torch to a cu121 build — this box's driver (535.129.03, CUDA 12.2 max) can't run the
+# +cu130 wheel the default PyPI index resolves to for an unpinned `torch>=2.4` (issue #31).
+[[tool.uv.index]]
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu121" }
