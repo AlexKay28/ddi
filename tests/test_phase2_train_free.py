@@ -146,6 +146,32 @@ def test_config_bridge_variant_without_bridge_k_raises() -> None:
 
 
 # ---------------------------------------------------------------------------
+# No-doc records (e.g. `nq`, which has no info_contexts) must not double-count
+# query/answer length into the mask's T.
+# ---------------------------------------------------------------------------
+
+
+def test_no_doc_record_mask_matches_full_ids_length() -> None:
+    """Regression test for the bug the #35 `nq` sweep surfaced.
+
+    The runner used to substitute `doc_lengths or [full_ids.shape[-1]]` for records with no
+    info_contexts. Since `full_ids.shape[-1]` for a no-doc record already equals
+    `query_len + answer_len`, `build_mask`'s own `T = sum(doc_lengths) + query_len + answer_len`
+    then double-counted it, producing a mask twice the length of the actual sequence. The fix is
+    to pass `doc_lengths` (i.e. `[]`) straight through — `build_mask` already collapses an empty
+    doc list to plain causal on its own.
+    """
+    from ddi.masks import build_mask
+
+    query_len, answer_len = 5, 3
+    full_len = query_len + answer_len  # what `full_ids.shape[-1]` actually is for a no-doc record
+
+    for variant in ("full", "ddi_qf", "ddi_strict", "blind"):
+        allow = build_mask([], query_len=query_len, answer_len=answer_len, variant=variant)
+        assert allow.shape == (full_len, full_len)
+
+
+# ---------------------------------------------------------------------------
 # Integration: greedy prefill-mask generation on a tiny random model.
 # ---------------------------------------------------------------------------
 
