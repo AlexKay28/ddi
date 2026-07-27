@@ -181,11 +181,12 @@ def test_manifest_default_root_monkeypatched(manifest_root: Path) -> None:
 
 
 def test_synthetic_manifest_written_on_first_load(manifest_root: Path) -> None:
+    # Manifest is keyed per seed (issue #40): split membership is a function of `seed`.
     list(load("synthetic_qa", "train", 0))
-    path = manifest_root / "synthetic_qa.json"
+    path = manifest_root / "synthetic_qa__seed0.json"
     assert path.exists()
     payload = json.loads(path.read_text())
-    assert payload["dataset"] == "synthetic_qa"
+    assert payload["dataset"] == "synthetic_qa__seed0"
     assert set(payload["splits"]) == {"train", "val", "test"}
     assert payload["splits"]["train"]["n"] == 60
 
@@ -194,13 +195,23 @@ def test_synthetic_manifest_mismatch_raises(manifest_root: Path) -> None:
     # First load writes.
     list(load("synthetic_qa", "train", 0))
     # Tamper with the committed hash so the next load should refuse.
-    path = manifest_root / "synthetic_qa.json"
+    path = manifest_root / "synthetic_qa__seed0.json"
     payload = json.loads(path.read_text())
     payload["splits"]["train"]["sha256"] = "0" * 16
     path.write_text(json.dumps(payload))
 
-    with pytest.raises(RuntimeError, match=r"synthetic_qa/train"):
+    with pytest.raises(RuntimeError, match=r"synthetic_qa__seed0/train"):
         list(load("synthetic_qa", "train", 0))
+
+
+def test_synthetic_manifest_independent_per_seed(manifest_root: Path) -> None:
+    # Issue #40: different seeds must not collide against each other's frozen split.
+    list(load("synthetic_qa", "train", 0))
+    list(load("synthetic_qa", "train", 1))
+    list(load("synthetic_qa", "train", 2))
+    assert (manifest_root / "synthetic_qa__seed0.json").exists()
+    assert (manifest_root / "synthetic_qa__seed1.json").exists()
+    assert (manifest_root / "synthetic_qa__seed2.json").exists()
 
 
 # ---------------------------------------------------------------------------
