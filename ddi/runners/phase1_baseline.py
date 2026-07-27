@@ -23,6 +23,7 @@ from ddi.masks import build_mask, to_additive
 from ddi.metrics import answer_presence, exact_match, make_answer_labels, token_f1
 from ddi.model import forward_with_mask, load_model
 from ddi.provenance import capture
+from ddi.runners._shared import shifted_cross_entropy
 from ddi.store import append
 
 
@@ -90,14 +91,9 @@ def _run(config: dict[str, Any], config_hash: str, seed: int) -> None:
         with torch.no_grad():
             logits = forward_with_mask(model, full_ids, additive)
 
-        # Standard next-token shift: predict position t from logits at position t-1.
-        shift_logits = logits[..., :-1, :].contiguous()
-        shift_labels = labels[..., 1:].contiguous()
-        loss = torch.nn.functional.cross_entropy(
-            shift_logits.view(-1, shift_logits.size(-1)),
-            shift_labels.view(-1),
-            ignore_index=-100,
-        ).item()
+        # Shared next-token-shifted CE — Phase 2.1 must use the exact same formula so `Δ`
+        # (baseline vs. train-free) measures the mask, not a divergent loss formulation.
+        loss = shifted_cross_entropy(logits, labels).item()
 
         # Generation metrics — greedy decode. `model.generate` handles its own mask; on the
         # full baseline we do not need to inject one. Later phases will need a

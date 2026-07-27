@@ -1,24 +1,23 @@
 # [2.1] Train-free mask sweep — primary quality result (issue #13).
 #
-# Runner registration lands with issue #13. Until then, `make sweep-train-free`
-# fails at dispatch with a clear "no runner registered for task=..." message.
+# One cell of the sweep per invocation: the serverless orchestrator fills the
+# {model} x {mask variant} x {dataset} grid by rendering this file with each
+# combination and calling `ddi-run` per seed. If the gap to `full` stays within
+# `Δ` (fixed in Phase 1.4) for `ddi_qf`, C1 is supported and Phase 2.2
+# (finetuned sweep) becomes confirmatory — see RESEARCH_PLAN §8 Phase 2.1.
 #
-# Sweep grid (RESEARCH_PLAN §8 Phase 2.1):
-#   {Qwen2.5-7B, Llama-3.1-8B} × {base, instruct} × {full, ddi_qf, ddi_strict, blind}
-#   on parity-detection datasets (NQ / TriviaQA / HotpotQA), >=3 seeds.
+# Sweep grid:
+#   {Qwen2.5-7B, Llama-3.1-8B} x {base, instruct}
+#     x {full, ddi_qf, ddi_strict, blind}
+#     x {nq, triviaqa, hotpotqa}
+#     x >=3 seeds
 
-task: phase2_train_free_sweep
-
-models:
-  - Qwen/Qwen2.5-7B
-  - Qwen/Qwen2.5-7B-Instruct
-  - meta-llama/Llama-3.1-8B
-  - meta-llama/Llama-3.1-8B-Instruct
-
-masks: [full, ddi_qf, ddi_strict, blind]
-
-datasets: [nq, triviaqa, hotpotqa]
-
-kernel: sdpa
-train_free: true
-num_seeds: 3
+task: phase2_train_free
+model: Qwen/Qwen2.5-7B-Instruct
+mask:
+  variant: ddi_qf              # override to full / ddi_strict / ddi_bridge_k / blind
+  bridge_k: null               # required only when variant == ddi_bridge_k
+dataset: nq
+split: val
+max_new_tokens: 64
+max_records: 100  # smoke run; remove or raise for full-scale sweeps
