@@ -8,15 +8,22 @@ PCW (Ratner et al., ACL 2023) reports — the paper's C1 comparability column de
 this.
 
 Passages are drawn from KILT's precomputed provenance list on each row. This yields a
-richer-than-Tier-A stream (N passages per query, not just the single gold snippet), while
-avoiding the operational cost of running a fresh DPR retrieval in this loader. If the
+richer-than-Tier-A stream (up to N passages per query, not just the single gold snippet),
+while avoiding the operational cost of running a fresh DPR retrieval in this loader. If the
 provenance list turns out too thin at higher N in practice, a private
 ``_retrieve_top_n(question, n)`` helper can be added here later; a shared retrieval module
 will only be worth extracting once a second loader needs the same code path.
 
+Rows with fewer than N provenance entries carrying extractable text yield fewer than N
+passages rather than padding with an empty placeholder — `ddi.masks.build_mask` requires
+every document to be non-empty, so a zero-length "document" would crash the run.
+``meta["n_passages"]`` always reflects the actual count delivered, which may be less than
+the configured N.
+
 Configurable N passages
 -----------------------
-The default is 5. To override without editing code::
+The default is 5 (an upper bound; thin rows may yield fewer). To override without editing
+code::
 
     DDI_KILT_N_PASSAGES=10 python -m ddi.cli ...
 
@@ -146,13 +153,12 @@ def _normalize(row: dict, n_passages: int) -> dict:
     raw_id = row.get("id")
     record_id = str(raw_id) if raw_id is not None else _stable_id(question)
 
-    all_prov = _collect_provenance(row)
+    # Drop provenance entries with no extractable text before capping at n_passages, so a
+    # thin KILT row yields fewer real passages rather than padding with an empty "document"
+    # that downstream masking (build_mask) rejects outright (each doc must be non-empty).
+    all_prov = [p for p in _collect_provenance(row) if _passage_text(p)]
     top = all_prov[:n_passages]
     passages = [_passage_text(p) for p in top]
-    # Pad if KILT gave us fewer than n; downstream code (info_contexts length as N) stays
-    # honest. Empty strings tag as "no passage available".
-    while len(passages) < n_passages:
-        passages.append("")
 
     gold_title = _gold_title(row)
     gold_position: int | None = None
@@ -175,7 +181,7 @@ def _normalize(row: dict, n_passages: int) -> dict:
         "gold_position": gold_position,
         "meta": {
             "retriever": "kilt_provenance",
-            "n_passages": n_passages,
+            "n_passages": len(passages),
             "gold_title": gold_title,
         },
     }
