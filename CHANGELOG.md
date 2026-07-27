@@ -35,6 +35,17 @@ number enters the store before that.
 
 ---
 
+## 2026-07-27 — [5.1] hop-split renderers T5 + F4
+
+`ddi.reports.phase5_hop_split`: joins `phase2_train_free` EM rows with the record's `hop_type`
+(fetched from `ddi.data.load` and cached per `(dataset, seed)` since the full split re-materialises
+for each row). T5 markdown: per `(dataset, variant)`, columns for EM on single / multi / all,
+plus `Δ EM (multi − single)`; adds an `EM (unknown)` column and an inline `<!-- N rows dropped -->`
+note whenever any row falls to `hop_type=unknown`. F4 figure: grouped bar chart, median height,
+IQR error bars, matplotlib lazy-imported. Both raise loudly on entirely-empty stores; missing
+splits render `n/a`, and the degradation column is `n/a` unless both hop buckets have data —
+numbers are never fabricated. Report-only; no new runner or store row. Closes #26.
+
 ## 2026-07-27 — [5.2] Parallel Context Windows baseline
 
 `ddi.runners.phase5_pcw` — registered as `task=phase5_pcw`. Reproduces Ratner et al. (ACL 2023):
