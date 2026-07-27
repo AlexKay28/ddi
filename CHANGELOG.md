@@ -35,6 +35,14 @@ number enters the store before that.
 
 ---
 
+## 2026-07-27 — [0.2] masks.py
+
+`ddi.masks.build_mask` returns a boolean `[T, T]` allow-matrix for all five variants (`full`,
+`ddi_qf`, `ddi_strict`, `ddi_bridge_k`, `blind`) via vectorised boolean-tensor ops over row/col
+index grids. `to_additive` converts to `-inf` form preserving bf16 representability. N=1 collapse
+to `full` for the qf/strict/bridge_k family is explicit and matches the correctness-gate semantics
+in issue #1 §0.5. Independent triple-loop reference in `tests/test_masks.py`. Closes #3.
+
 ## 2026-07-27 — [0.6] provenance and append-only store
 
 `ddi.provenance.capture` returns a `Provenance` (git SHA/dirty, config hash, seed, model/dataset
