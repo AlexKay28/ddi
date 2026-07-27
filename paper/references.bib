@@ -1,0 +1,82 @@
+% DDI references. One canonical entry per work cited in paper/RESEARCH_PLAN.md §2
+% and referenced elsewhere. Camera-ready details (arXiv IDs, DOIs, page ranges)
+% should be re-verified before submission.
+
+% --- Closest prior work: decoder-only independent contexts ---
+
+@inproceedings{ratner2023pcw,
+  title     = {Parallel Context Windows for Large Language Models},
+  author    = {Ratner, Nir and Levine, Yoav and Belinkov, Yonatan and Ram, Ori
+               and Magar, Inbal and Abend, Omri and Karpas, Ehud and Shashua, Amnon
+               and Leyton-Brown, Kevin and Shoham, Yoav},
+  booktitle = {Proceedings of the Annual Meeting of the Association for Computational Linguistics (ACL)},
+  year      = {2023},
+}
+
+@inproceedings{yen2024cepe,
+  title     = {Long-Context Language Modeling with Parallel Context Encoding},
+  author    = {Yen, Howard and Gao, Tianyu and Chen, Danqi},
+  booktitle = {Proceedings of the Annual Meeting of the Association for Computational Linguistics (ACL)},
+  year      = {2024},
+}
+
+@inproceedings{izacard2021fid,
+  title     = {Leveraging Passage Retrieval with Generative Models for Open Domain Question Answering},
+  author    = {Izacard, Gautier and Grave, Edouard},
+  booktitle = {Proceedings of the European Chapter of the Association for Computational Linguistics (EACL)},
+  year      = {2021},
+}
+
+% --- Sparse / long-context transformers (fixed-pattern, contrast to DDI) ---
+
+@article{child2019sparse,
+  title   = {Generating Long Sequences with Sparse Transformers},
+  author  = {Child, Rewon and Gray, Scott and Radford, Alec and Sutskever, Ilya},
+  journal = {arXiv preprint},
+  year    = {2019},
+}
+
+@article{beltagy2020longformer,
+  title   = {Longformer: The Long-Document Transformer},
+  author  = {Beltagy, Iz and Peters, Matthew E. and Cohan, Arman},
+  journal = {arXiv preprint},
+  year    = {2020},
+}
+
+@inproceedings{zaheer2020bigbird,
+  title     = {Big Bird: Transformers for Longer Sequences},
+  author    = {Zaheer, Manzil and Guruganesh, Guru and Dubey, Kumar Avinava and Ainslie, Joshua
+               and Alberti, Chris and Onta{\~n}{\'o}n, Santiago and Pham, Philip and Ravula, Anirudh
+               and Wang, Qifan and Yang, Li and Ahmed, Amr},
+  booktitle = {Advances in Neural Information Processing Systems (NeurIPS)},
+  year      = {2020},
+}
+
+% --- Attention sinks: motivates the SEP-row failure mode analysis ---
+
+@inproceedings{xiao2024streamingllm,
+  title     = {Efficient Streaming Language Models with Attention Sinks},
+  author    = {Xiao, Guangxuan and Tian, Yuandong and Chen, Beidi and Han, Song and Lewis, Mike},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2024},
+}
+
+% --- Practical alternative for the caching claim (C4) ---
+
+@inproceedings{kwon2023pagedattention,
+  title     = {Efficient Memory Management for Large Language Model Serving with PagedAttention},
+  author    = {Kwon, Woosuk and Li, Zhuohan and Zhuang, Siyuan and Sheng, Ying and Zheng, Lianmin
+               and Yu, Cody Hao and Gonzalez, Joseph E. and Zhang, Hao and Stoica, Ion},
+  booktitle = {Proceedings of the ACM Symposium on Operating Systems Principles (SOSP)},
+  year      = {2023},
+}
+
+% --- Datasets and evaluation-setup references ---
+
+@article{liu2023lostmiddle,
+  title   = {Lost in the Middle: How Language Models Use Long Contexts},
+  author  = {Liu, Nelson F. and Lin, Kevin and Hewitt, John and Paranjape, Ashwin
+             and Bevilacqua, Michele and Petroni, Fabio and Liang, Percy},
+  journal = {Transactions of the Association for Computational Linguistics},
+  year    = {2024},
+}
