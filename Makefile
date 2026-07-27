@@ -74,6 +74,18 @@ run-seeds:  ## Same config across SEEDS (default: 0 1 2). Useful on one big VM.
 	@for seed in $(SEEDS); do $(RUN) --config $(CONFIG) --seed $$seed; done
 
 # ===================================================================
+# Phase 1 — datasets, metrics, baseline (issues #9-#12)
+# ===================================================================
+
+.PHONY: phase1-baseline
+phase1-baseline:  ## [1.4] Full-causal baseline for delta computation (issue #12).
+	$(RUN) --config ddi/configs/phase1_baseline.yaml --seed $(SEED)
+
+.PHONY: delta
+delta:  ## [1.4] Compute delta from stored baseline runs. Override MODEL DATASET METRIC [K].
+	$(UV) run ddi-delta --model $(MODEL) --dataset $(DATASET) --metric $(METRIC) $(if $(K),--k $(K),) --record
+
+# ===================================================================
 # Phase 2 — mask family quality (C1, C2, C6)
 # ===================================================================
 
