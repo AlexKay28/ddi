@@ -1,0 +1,41 @@
+[project]
+name = "ddi"
+version = "0.0.0"
+description = "Decoupled Document Inference — block-diagonal attention over retrieved documents for cheaper RAG prefill."
+requires-python = ">=3.11"
+dependencies = [
+    "torch>=2.4",
+    "transformers>=4.44",
+    "numpy",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+fa2 = ["flash-attn>=2.6"]
+triton = ["triton>=3.0"]
+report = ["pandas", "matplotlib"]
+dev = ["pytest", "pytest-cov", "ruff"]
+
+[project.scripts]
+ddi-run = "ddi.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["ddi", "ddi.configs"]
+
+[tool.setuptools.package-data]
+"ddi.configs" = ["*.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

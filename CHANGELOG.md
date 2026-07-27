@@ -35,6 +35,12 @@ number enters the store before that.
 
 ---
 
+## 2026-07-27 — [0.1] package skeleton
+
+`pyproject.toml`, `ddi/` package with stub modules (`masks`, `attention`, `model`, `provenance`,
+`store`, `report`), working `ddi.cli` with runner registry, `ddi/configs/example.yaml`, `tests/`
+with CLI smoke tests, `results/` directory. Closes #2.
+
 ## 2026-07-27 — CHANGELOG created
 
 Repo scaffolded for the clean-room rebuild. Awaiting Phase 0.

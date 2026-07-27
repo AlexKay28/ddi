@@ -1,0 +1,8 @@
+# Example config. The `task:` key selects the runner (see ddi.cli.register_runner);
+# runners define their own schema.
+task: example_placeholder
+model: Qwen/Qwen2.5-7B-Instruct
+mask:
+  variant: ddi_qf
+  bridge_k: null
+kernel: sdpa
