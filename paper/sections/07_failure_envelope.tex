@@ -1,0 +1,86 @@
+% =====================================================================
+% Failure envelope. Phase 5 of RESEARCH_PLAN.md.
+% Own section, not a limitations footnote.
+% =====================================================================
+\section{Failure Envelope: When DDI Loses}
+\label{sec:failure-envelope}
+
+Block-diagonal document masking makes a testable prediction of failure.
+If documents cannot see each other, any question whose answer requires
+composing information across two documents can be answered only by the
+query and answer regions --- and only via whichever bridge the mask
+permits. The honest version of this study measures that boundary and
+reports it as the method's operating envelope.
+
+\subsection{Single-hop versus multi-hop split}
+\label{sec:failure-envelope-hop}
+
+Every parity dataset admits a split into single-document-answerable
+questions and questions that require cross-document composition. We
+label each evaluation instance accordingly and report every mask cell
+separately on the two splits. The single-hop split is where the parity
+claim of Section~\ref{sec:results-quality} is expected to hold; the
+multi-hop split is where DDI is expected to degrade, and the size of the
+degradation is the width of the operating envelope.
+
+\begin{table}[t]
+\centering
+\caption{T5 --- quality on the single-hop versus multi-hop split of every
+    parity dataset, per mask variant. The gap between the columns is the
+    failure-envelope signal.}
+\label{tab:t5}
+\IfFileExists{generated/T5.tex}{%
+    \input{generated/T5.tex}%
+}{%
+    \todoreport{T5 hop-split table}{make split-hop}%
+}
+\end{table}
+
+\figureifexists{generated/F4.pdf}{%
+    F4 --- degradation vs.\ full baseline on the single-hop versus
+    multi-hop split. A large gap between the two panels is the operating
+    envelope of the method.%
+}{fig:f4}
+
+\subsection{Parallel Context Windows baseline}
+\label{sec:failure-envelope-pcw}
+
+Parallel Context Windows~\citep{ratner2023pcw} is the closest prior work
+in the independent-context-window family and is the correct external
+baseline for the parity claim. We evaluate PCW on at least one shared
+dataset with matched retrieval, so the DDI number and the PCW number can
+be read against a common yardstick. The two methods disagree on the
+detail --- PCW uses positional partitioning without an explicit mask
+family, while DDI parameterizes the query--document bridge --- so a
+direct comparison at matched shapes clarifies which effect is doing the
+work.
+
+\subsection{Cross-document composition probe}
+\label{sec:failure-envelope-composition}
+
+The parity/multi-hop split relies on labels that inherit noise from the
+dataset. As a controlled complement, we synthesize a cross-document
+composition probe: pairs of documents whose combination is required for
+the answer, with distractors and gold positions varied along the
+Lost-in-the-Middle axes~\citep{liu2023lostmiddle}. Table~\ref{tab:t6} and
+Figure~\ref{fig:f7} report quality as a function of the position and
+count of the two gold documents; a monotone degradation in the
+compositional axis is the signature we look for.
+
+\begin{table}[t]
+\centering
+\caption{T6 --- synthetic composition probe. Quality as a function of the
+    distance between the two gold documents and the number of distractors
+    interposed.}
+\label{tab:t6}
+\IfFileExists{generated/T6.tex}{%
+    \input{generated/T6.tex}%
+}{%
+    \todoreport{T6 composition table}{make composition-probe}%
+}
+\end{table}
+
+\figureifexists{generated/F7.pdf}{%
+    F7 --- composition-probe accuracy versus the distance between the two
+    gold documents, one line per mask variant.%
+}{fig:f7}

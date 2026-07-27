@@ -174,3 +174,7 @@ report:  ## Render one report. `make report NAME=T2` or `make report LIST=1`. Fi
 		$(if $(LIST),--list,) \
 		$(if $(NAME),--name $(NAME),) \
 		$(if $(OUT),--output $(OUT),)
+
+.PHONY: paper
+paper:  ## Regenerate all tables/figures from the store, then compile paper/preprint.pdf if pdflatex is available.
+	@bash paper/build.sh

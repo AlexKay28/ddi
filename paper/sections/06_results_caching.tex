@@ -1,0 +1,65 @@
+% =====================================================================
+% Results — caching (co-headline). Phase 4 of RESEARCH_PLAN.md.
+% =====================================================================
+\section{Results: Per-Document Caching}
+\label{sec:results-caching}
+
+Per-document caching is the second half of the paper's contribution.
+Under full causal attention, no document's KV block is reusable across
+requests: $\mathrm{doc}_2$'s keys and values depend on $\mathrm{doc}_1$,
+so changing any earlier document invalidates the prefix. Under a
+block-diagonal mask with the restart position layout
+(Section~\ref{sec:method-positions}), a document's KV block is a function
+of that document alone. Blocks become keyable by document content hash,
+order-independent, and reusable across requests.
+
+A cache hit skips prefill entirely. This is the sense in which the
+caching result is co-headline with the compute result: no kernel
+improvement to full-causal prefill can match ``skip prefill'', so this
+speedup floor survives even if the realization gap of
+Section~\ref{sec:results-efficiency} is structural rather than fixable.
+
+\subsection{Prerequisites}
+\label{sec:results-caching-prereq}
+
+Three conditions must hold before the throughput measurement is trusted.
+\emph{Quality under restart} (Phase~4.1) confirms that restarting RoPE
+positions per document does not itself cost quality relative to a
+sequential layout. \emph{Per-document cache correctness} (Phase~4.2)
+verifies that logits computed from a cache hit are numerically identical
+(within bf16 tolerance) to logits computed from a cold prefill of the
+same input; the round-trip test is the correctness gate that makes any
+throughput number meaningful. \emph{Order invariance} (Phase~4.3)
+verifies that permuting the retrieved document list produces identical
+outputs under \texttt{ddi\_qf + restart}, which the mask family alone
+predicts and prior work does not.
+
+\subsection{Throughput under document reuse}
+\label{sec:results-caching-throughput}
+
+Figure~\ref{fig:f5} reports end-to-end throughput as a function of the
+document reuse rate --- the fraction of retrieved documents in the
+current request that also appeared in a previous request and are
+therefore cache hits. The comparison lines are full-causal recompute
+(the status quo), prefix caching (the practical alternative when exact
+prefix matches happen), and DDI with a per-document cache. At any
+non-trivial reuse rate the per-document line is expected to dominate the
+prefix-caching line, because document-level cache hits do not require
+exact prefix matches; the position layout (\texttt{restart}) removes the
+position dependence that would otherwise break the hit.
+
+\figureifexists{generated/F5.pdf}{%
+    F5 --- throughput versus document reuse rate. One line per mode:
+    full-causal recompute, prefix caching, DDI per-document cache.%
+}{fig:f5}
+
+We frame this as the co-headline result because it survives failure
+modes elsewhere in the paper. If the bridge-width sweep of
+Section~\ref{sec:results-quality-bridge} shows that quality parity
+requires a wide bridge (small compute speedup), the caching result still
+holds --- the mask that unlocks caching is the same
+document-block-diagonal mask, and the bridge width does not affect
+cacheability of document blocks. If the realization gap of
+Section~\ref{sec:results-efficiency-gap} does not close, cache hits
+still skip prefill entirely, so the throughput floor at any positive
+reuse rate is independent of the kernel's realization efficiency.

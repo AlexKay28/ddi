@@ -1,0 +1,59 @@
+% =====================================================================
+% Limitations & conclusion.
+% Adapted from RESEARCH_PLAN.md §11 point 7 (limitations) and §12
+% (characterization framing).
+% =====================================================================
+\section{Limitations}
+\label{sec:limitations}
+
+Three limitations bound the interpretation of every result in this paper.
+
+\paragraph{Batch size.}
+The current harness runs with batch size~1. Batched prefill with
+per-sample block-diagonal masks is what FlashAttention varlen is
+designed for, and lifting the constraint would materially cut the cost
+of the quality and efficiency sweeps. As stated, however, the reported
+efficiency numbers are for the single-request setting; server-side
+throughput at higher batch sizes is out of scope.
+
+\paragraph{Model scale.}
+Primary claims rest on 7--8B parameter models
+(Section~\ref{sec:design-models}). The ablation model at 1.5B and the
+scale model at 14B (or 32B) give one dimension of scale evidence, but
+the study does not claim scaling laws. A trend across the three sizes
+is a data point, not an extrapolation.
+
+\paragraph{Realization gap.}
+If the analytical/realized gap of Section~\ref{sec:results-efficiency-gap}
+does not close under the Phase~3 diagnostics --- if it is a structural
+property of small-block varlen kernels on current hardware --- the
+compute headline of DDI is smaller than the arithmetic suggests, and
+the co-headline caching result of Section~\ref{sec:results-caching}
+carries proportionally more of the paper. We flag this in the results
+sections rather than only here, so a reader cannot miss the constraint.
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+We present a characterization of block-diagonal attention over retrieved
+documents in decoder-only language models. Rather than testing a single
+independent-context design, we sweep the query--document bridge width
+and pair every quality point with its realized speedup, so the paper's
+central artifact is the quality/speed frontier (Figure~\ref{fig:f6})
+rather than a single ``ours-wins'' number. We also measure the failure
+envelope explicitly: what DDI cannot answer, on questions that require
+cross-document composition (Section~\ref{sec:failure-envelope}). The
+caching co-headline (Section~\ref{sec:results-caching}) turns the
+structural sparsity of the mask into a reusability property of KV
+blocks, which no kernel improvement under full-causal attention can
+match.
+
+Within this framing, the negative results are contributions. If
+\texttt{ddi\_strict} --- documents isolated, query isolated, single
+SEP-row bridge --- turns out to be non-viable relative to the parity
+margin $\Delta$, that is the ablation that makes the \texttt{ddi\_qf}
+and bridge-$k$ results meaningful: it demonstrates that document
+isolation is affordable while query isolation is not, and it locates
+the boundary between the two. The value of the paper does not depend
+on any variant beating a baseline; it depends on the frontier being
+mapped honestly.

@@ -1,0 +1,127 @@
+% =====================================================================
+% Decoupled Document Inference — arXiv preprint scaffold.
+%
+% Ground rules (paper/RESEARCH_PLAN.md, issue #1):
+%   1. Every empirical claim is backed by an artifact rendered from
+%      ddi/reports/ into paper/generated/. No hand-typed numbers.
+%   2. If the store is empty for a given renderer, paper/build.sh emits a
+%      \todoreport stub so the document still compiles.
+%   3. Framing throughout is a *characterization study*: how much
+%      cross-document attention can be removed, and what does removing it
+%      buy? (RESEARCH_PLAN §12.)
+%
+% Regenerate + compile:  make paper
+% =====================================================================
+
+\documentclass[11pt]{article}
+
+% --- geometry & layout ------------------------------------------------
+\usepackage[letterpaper,margin=1in]{geometry}
+\usepackage{parskip}
+
+% --- graphics, colour, links ------------------------------------------
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+
+% --- tables & typography ----------------------------------------------
+\usepackage{booktabs}
+\usepackage{xspace}
+
+% --- math -------------------------------------------------------------
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+% --- bibliography (author-year) ---------------------------------------
+\usepackage[round,authoryear]{natbib}
+\bibliographystyle{plainnat}
+
+% =====================================================================
+% Placeholder helpers.
+%
+% \todoreport{human message}{regeneration hint}
+%   Rendered in place of any table / figure the store cannot yet
+%   populate. paper/build.sh emits stubs that call this macro so the
+%   compiled PDF advertises exactly which sweep unblocks each cell.
+% =====================================================================
+\newcommand{\todoreport}[2]{%
+    \begin{center}%
+        \fbox{\parbox{0.9\linewidth}{%
+            \textbf{TODO:} #1 --- run \texttt{#2} and re-render.%
+        }}%
+    \end{center}%
+}
+
+% \figureifexists{path}{caption}{label} — include a generated figure if
+% build.sh actually produced it; otherwise fall back to a \todoreport
+% stub. Keeps the paper compilable in a container with an empty store.
+\newcommand{\figureifexists}[3]{%
+    \IfFileExists{#1}{%
+        \begin{figure}[t]%
+            \centering%
+            \includegraphics[width=\linewidth]{#1}%
+            \caption{#2}%
+            \label{#3}%
+        \end{figure}%
+    }{%
+        \todoreport{figure \texttt{#1} missing}{make paper}%
+    }%
+}
+
+% =====================================================================
+% Title block.
+%
+% AUTHORS: replace the two "Placeholder Author" entries below with real
+% names and affiliations before circulating; keep the \and separator so
+% arXiv's parser is happy.
+% =====================================================================
+\title{Decoupled Document Inference: A Characterization Study of
+       Block-Diagonal Attention in RAG Prefill}
+
+\author{Placeholder Author \and Placeholder Author}
+
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Retrieval-augmented prompts concatenate mutually independent documents, then pay
+quadratic prefill cost to model the resulting cross-document interactions.
+\emph{Decoupled Document Inference} (DDI) replaces the lower-triangular causal
+mask with a block-diagonal one: each document is causal within itself and blind
+to every other document, while the query and answer regions bridge the blocks.
+We frame the study as a characterization rather than a method-wins result:
+we ask how much cross-document attention can be removed before answer quality
+degrades on parity benchmarks, and what removing it actually buys in terms of
+prefill cost and per-document key/value cache reuse. The mask family is
+parameterized by a bridge width $k$ that continuously interpolates between full
+query--document attention and a single SEP-row bridge, letting us locate the
+knee of the quality/speed frontier rather than test a single design point.
+All tables and figures in this preprint are regenerated from the results store
+by \texttt{paper/build.sh}; empty cells are surfaced as explicit TODOs.
+\end{abstract}
+
+% ---------------------------------------------------------------------
+% Body — every section is a separate .tex under sections/. Keep the
+% split so a section can be regenerated / re-reviewed independently
+% and so build.sh's re-render step does not touch the prose.
+% ---------------------------------------------------------------------
+\input{sections/00_intro.tex}
+\input{sections/01_related_work.tex}
+\input{sections/02_method.tex}
+\input{sections/03_experimental_design.tex}
+\input{sections/04_results_quality.tex}
+\input{sections/05_results_efficiency.tex}
+\input{sections/06_results_caching.tex}
+\input{sections/07_failure_envelope.tex}
+\input{sections/08_limitations_conclusion.tex}
+
+% ---------------------------------------------------------------------
+% Bibliography — references.bib lives next to this file and is the
+% single source of truth (also read by any tooling that greps citations).
+% ---------------------------------------------------------------------
+\bibliography{references}
+
+\end{document}
