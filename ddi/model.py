@@ -88,8 +88,15 @@ def forward_with_mask(
     model: PreTrainedModel,
     input_ids: torch.Tensor,
     additive_mask: torch.Tensor,
+    position_ids: torch.Tensor | None = None,
 ) -> torch.Tensor:
-    """Forward pass with a caller-supplied 4D additive mask; returns logits."""
+    """Forward pass with a caller-supplied 4D additive mask; returns logits.
+
+    Optional `position_ids` is a `[batch, T]` long tensor forwarded straight to HF's `forward`
+    (Phase 4.1 uses this to run the same prefill under sequential and restart layouts). When
+    omitted, HF's default sequential position handling is preserved — existing callers are
+    unaffected.
+    """
     if additive_mask.dim() != 4:
         raise ValueError(
             f"additive_mask must be 4D [B, H|1, T, T]; got {additive_mask.dim()}D "
@@ -100,5 +107,25 @@ def forward_with_mask(
             f"additive_mask must be a floating-point additive mask (0 / -inf); got dtype "
             f"{additive_mask.dtype}. Use ddi.masks.to_additive to convert a bool allow-matrix."
         )
-    out = model(input_ids=input_ids, attention_mask=additive_mask, use_cache=False)
+    if position_ids is not None:
+        if position_ids.dim() != 2:
+            raise ValueError(
+                f"position_ids must be 2D [batch, T]; got {position_ids.dim()}D "
+                f"shape={tuple(position_ids.shape)}"
+            )
+        if position_ids.shape != input_ids.shape:
+            raise ValueError(
+                f"position_ids shape {tuple(position_ids.shape)} must match input_ids shape "
+                f"{tuple(input_ids.shape)}"
+            )
+        if position_ids.dtype != torch.long:
+            raise ValueError(
+                f"position_ids must be torch.long; got {position_ids.dtype}"
+            )
+    out = model(
+        input_ids=input_ids,
+        attention_mask=additive_mask,
+        position_ids=position_ids,
+        use_cache=False,
+    )
     return out.logits
