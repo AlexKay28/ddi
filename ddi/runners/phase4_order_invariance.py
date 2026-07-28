@@ -142,7 +142,24 @@ def _run(config: dict[str, Any], config_hash: str, seed: int) -> None:
     split = config.get("split", "val")
     max_records = config.get("max_records")
 
-    model, tokenizer = load_model(model_name)
+    # dtype override for #57 / EXP-02.5: fp32 rerun to distinguish bf16 rounding noise from
+    # a real position/mask leak. Default bf16 matches the rest of the harness.
+    dtype_name = str(config.get("dtype", "bf16")).lower()
+    dtype_map = {
+        "bf16": torch.bfloat16,
+        "bfloat16": torch.bfloat16,
+        "fp16": torch.float16,
+        "float16": torch.float16,
+        "fp32": torch.float32,
+        "float32": torch.float32,
+    }
+    if dtype_name not in dtype_map:
+        raise ValueError(
+            f"unknown dtype {dtype_name!r}; expected one of {sorted(dtype_map)}"
+        )
+    dtype = dtype_map[dtype_name]
+
+    model, tokenizer = load_model(model_name, dtype=dtype)
     model.eval()
     if torch.cuda.is_available():
         model = model.to("cuda")
