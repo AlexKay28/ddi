@@ -190,6 +190,215 @@ def _fmt_frac(value: float | None) -> str:
     return f"{value:.3f}"
 
 
+# ---- T_perf_* renderers (EXP-3 / #73) -------------------------------------------------------
+#
+# Each renderer emits one markdown document with a `## L=<L>, backend=<backend>` sub-block for
+# every (L, backend) pair present in the store. Within each sub-block, rows are masks (full /
+# ddi_qf / blind, plus anything else that appears, sorted) and columns are the fixed N order
+# 1, 3, 5, 9, 13, 25. Cells are the metric's mean over the seed(s) at that (model, N, L, backend).
+# Two derived metrics — realized_speedup and realization_ratio — are computed at report time by
+# pairing each variant row with the matching `full` row at the same (model, N, L, backend, seed).
+
+_PERF_N_COLUMNS: tuple[int, ...] = (1, 3, 5, 9, 13, 25)
+_PERF_PREFERRED_MASKS: tuple[str, ...] = ("full", "ddi_qf", "blind")
+_PERF_EM_DASH = "—"
+
+
+def _perf_mask_order(masks: set[str]) -> list[str]:
+    ordered = [m for m in _PERF_PREFERRED_MASKS if m in masks]
+    extras = sorted(m for m in masks if m not in _PERF_PREFERRED_MASKS)
+    return ordered + extras
+
+
+def _collect_perf_rows(
+    store: Path,
+) -> dict[tuple[str, str, int, int, str, int], dict[str, float]]:
+    """Group all phase3_timing values by (model, variant, N, L, backend, seed).
+
+    Returns a mapping cell -> {metric_short: value}. Metric shortnames are the six the T_perf
+    family renders: ttft, tpot, sparsity, analytical_speedup, realized_speedup,
+    realization_ratio. The last two are derived (see _apply_derived_metrics).
+    """
+    per_cell: dict[tuple[str, str, int, int, str, int], dict[str, float]] = {}
+    for row in iter_rows(store):
+        parsed = _parse(row.get("run_id", ""))
+        if parsed is None:
+            continue
+        metric = row.get("metric")
+        # Map store metrics to the short names we render. `ftt_median_ms` in the store is what
+        # the paper calls TTFT (time-to-first-token) — kept for backwards compatibility.
+        short: str | None = None
+        if metric == "ftt_median_ms":
+            short = "ttft"
+        elif metric == "tpot_median_ms":
+            short = "tpot"
+        elif metric == "mask_sparsity":
+            short = "sparsity"
+        elif metric == "analytical_speedup":
+            short = "analytical_speedup"
+        else:
+            continue
+        try:
+            value = float(row["value"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        seed = int((row.get("provenance") or {}).get("seed", 0))
+        key = (
+            str(parsed["model"]),
+            str(parsed["variant_tag"]),
+            int(parsed["N"]),
+            int(parsed["L"]),
+            str(parsed["backend"]),
+            seed,
+        )
+        per_cell.setdefault(key, {})[short] = value
+    return per_cell
+
+
+def _apply_derived_metrics(
+    per_cell: dict[tuple[str, str, int, int, str, int], dict[str, float]],
+) -> None:
+    """Fill realized_speedup / realization_ratio in-place by pairing variants with `full`.
+
+    WHY the pairing is per-seed: full baseline TTFT varies run-to-run (kernel timing noise) and
+    the analytical ratio only makes sense against the same-seed full to hold hardware constant.
+    """
+    # (model, N, L, backend, seed) -> full TTFT
+    full_ttft: dict[tuple[str, int, int, str, int], float] = {}
+    for (model, variant, n, l_, backend, seed), metrics in per_cell.items():
+        if variant == _FULL_VARIANT and "ttft" in metrics:
+            full_ttft[(model, n, l_, backend, seed)] = metrics["ttft"]
+
+    for (model, variant, n, l_, backend, seed), metrics in per_cell.items():
+        if variant == _FULL_VARIANT:
+            # By definition full realizes exactly analytical=1.0, so both derived metrics are 1.0.
+            metrics["realized_speedup"] = 1.0
+            metrics["realization_ratio"] = 1.0
+            # `full` also has sparsity 0 by definition; store it so cells render as 0.000 even
+            # when the runner did not emit a mask_sparsity row for the full variant.
+            metrics.setdefault("sparsity", 0.0)
+            metrics.setdefault("analytical_speedup", 1.0)
+            continue
+        base = full_ttft.get((model, n, l_, backend, seed))
+        variant_ttft = metrics.get("ttft")
+        if base is not None and variant_ttft is not None and variant_ttft > 0:
+            realized = base / variant_ttft
+            metrics["realized_speedup"] = realized
+            analytical = metrics.get("analytical_speedup")
+            if analytical is not None and analytical > 0:
+                metrics["realization_ratio"] = realized / analytical
+
+
+def _fmt_perf_cell(metric: str, value: float | None) -> str:
+    if value is None:
+        return _PERF_EM_DASH
+    if metric in ("ttft", "tpot"):
+        return f"{value:.2f}"
+    if metric in ("analytical_speedup", "realized_speedup"):
+        return f"{value:.2f}x"
+    if metric == "realization_ratio":
+        return f"{value:.3f}"
+    if metric == "sparsity":
+        return f"{value:.3f}"
+    return f"{value:.4f}"
+
+
+_PERF_METRIC_LABEL: dict[str, str] = {
+    "ttft": "TTFT (median ms)",
+    "tpot": "TPOT (median ms)",
+    "sparsity": "mask sparsity",
+    "analytical_speedup": "analytical speedup",
+    "realized_speedup": "realized speedup",
+    "realization_ratio": "realization ratio",
+}
+
+
+def _render_perf_metric(store: Path, metric_short: str) -> str:
+    """Emit one markdown document for a single perf metric across all (model, L, backend)."""
+    if not _any_phase3_rows(store):
+        raise ValueError(
+            f"T_perf_{metric_short}: store has no phase3_timing rows. "
+            "Run `make timing-N` (or the equivalent Phase 3 sweep) first."
+        )
+
+    per_cell = _collect_perf_rows(store)
+    _apply_derived_metrics(per_cell)
+
+    # Aggregate values per (model, L, backend, mask, N) by mean across seeds. Track masks
+    # separately so a variant with only derived metrics missing (e.g. no `full` to pair with)
+    # still gets a row of em-dashes rather than vanishing from the table.
+    agg: dict[tuple[str, int, str, str, int], list[float]] = {}
+    all_masks: dict[tuple[str, int, str], set[str]] = {}
+    for (model, variant, n, l_, backend, _seed), metrics in per_cell.items():
+        if n not in _PERF_N_COLUMNS:
+            # Ns outside the fixed column set are not surfaced in these tables.
+            continue
+        all_masks.setdefault((model, l_, backend), set()).add(variant)
+        val = metrics.get(metric_short)
+        if val is None:
+            continue
+        agg.setdefault((model, l_, backend, variant, n), []).append(val)
+
+    metric_label = _PERF_METRIC_LABEL[metric_short]
+    header_cols = " | ".join(f"N={n}" for n in _PERF_N_COLUMNS)
+    # +1 for the leading `mask` column; wrapper pipes are added at write time.
+    header_sep = "|".join(["---"] * (len(_PERF_N_COLUMNS) + 1))
+
+    blocks: list[str] = [f"# T_perf_{metric_short} — {metric_label}"]
+
+    triples = sorted(all_masks)
+    for (model, l_, backend) in triples:
+        masks = all_masks.get((model, l_, backend), set())
+        lines = [
+            f"## {model} — L={l_}, backend={backend}",
+            "",
+            f"| mask | {header_cols} |",
+            f"|{header_sep}|",
+        ]
+        for mask in _perf_mask_order(masks):
+            cells = []
+            for n in _PERF_N_COLUMNS:
+                vals = agg.get((model, l_, backend, mask, n))
+                if not vals:
+                    cells.append(_PERF_EM_DASH)
+                else:
+                    cells.append(_fmt_perf_cell(metric_short, sum(vals) / len(vals)))
+            lines.append(f"| {mask} | " + " | ".join(cells) + " |")
+        blocks.append("\n".join(lines))
+
+    return "\n\n".join(blocks) + "\n"
+
+
+@register("T_perf_ttft")
+def _t_perf_ttft(store: Path) -> str:
+    return _render_perf_metric(store, "ttft")
+
+
+@register("T_perf_tpot")
+def _t_perf_tpot(store: Path) -> str:
+    return _render_perf_metric(store, "tpot")
+
+
+@register("T_perf_sparsity")
+def _t_perf_sparsity(store: Path) -> str:
+    return _render_perf_metric(store, "sparsity")
+
+
+@register("T_perf_analytical")
+def _t_perf_analytical(store: Path) -> str:
+    return _render_perf_metric(store, "analytical_speedup")
+
+
+@register("T_perf_realized")
+def _t_perf_realized(store: Path) -> str:
+    return _render_perf_metric(store, "realized_speedup")
+
+
+@register("T_perf_realization")
+def _t_perf_realization(store: Path) -> str:
+    return _render_perf_metric(store, "realization_ratio")
+
+
 @register("F3")
 def _f3_realization_curve(store: Path, output: Path) -> None:
     """Realization ratio (realized / analytical) vs N, one line per L."""
