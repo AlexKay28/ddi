@@ -104,8 +104,21 @@ def _run(config: dict[str, Any], config_hash: str, seed: int) -> None:
         dataset_revision=dataset,
     )
     variant_tag = mask_variant if bridge_k is None else f"{mask_variant}_k{bridge_k}"
+
+    # ddi_stress: the task family (fact_chain / fact_aggregation / contradiction /
+    # coreference / needle) is selected via the DDI_STRESS_TASK env var inside the
+    # loader — that means every family lands under the same dataset name in the
+    # store, which flattens per-family slicing in the report layer. Read the env
+    # var here and append it to the dataset segment of the run_id so families
+    # remain distinguishable downstream. Unblocks EXP-02.4 / #62.
+    dataset_tag = dataset
+    if dataset == "ddi_stress":
+        import os as _os
+        family = _os.environ.get("DDI_STRESS_TASK") or "fact_chain"  # loader's default
+        dataset_tag = f"{dataset}__{family}"
+
     run_id_prefix = (
-        f"phase2_train_free:{model_name}:{dataset}:{variant_tag}:seed={seed}:{prov.git_sha[:8]}"
+        f"phase2_train_free:{model_name}:{dataset_tag}:{variant_tag}:seed={seed}:{prov.git_sha[:8]}"
     )
 
     coerced_full = 0
