@@ -15,6 +15,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from ddi.report import filter_rows, iter_rows, register
+from ddi.reports._provenance import render_provenance_footer
 
 _PHASE2_TF_PREFIX = "phase2_train_free:"
 
@@ -42,6 +43,9 @@ def _t4_base_vs_instruct(store: Path) -> str:
 
     # (model, dataset, variant, seed) -> [per-record values]
     per_cell: dict[tuple[str, str, str, int], list[float]] = defaultdict(list)
+    # Only rows that survived the (phase2_train_free, full|ddi_qf) filter feed the
+    # gap calculation — those are what the footer should stamp.
+    backing_rows: list[dict] = []
     for row in em_rows:
         parsed = _parse(row.get("run_id", ""))
         if parsed is None:
@@ -51,6 +55,7 @@ def _t4_base_vs_instruct(store: Path) -> str:
             continue
         seed = int(row.get("provenance", {}).get("seed", -1))
         per_cell[(model, dataset, variant, seed)].append(float(row["value"]))
+        backing_rows.append(row)
 
     # per-seed means, then per-(model, dataset, variant) mean and stdev across seeds
     per_seed_mean: dict[tuple[str, str, str], list[float]] = defaultdict(list)
@@ -90,7 +95,7 @@ def _t4_base_vs_instruct(store: Path) -> str:
             f"| {_fmt(gap_instr, cell.get('instruct', {}).get('full_std'))} "
             f"| {_fmt(effect, None)} |"
         )
-    return "\n".join(lines) + "\n"
+    return "\n".join(lines) + "\n" + render_provenance_footer(store, backing_rows)
 
 
 def _gap(kind_row: dict[str, float]) -> float:

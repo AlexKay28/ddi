@@ -20,6 +20,7 @@ from typing import Literal
 from ddi.data import load
 from ddi.hop_labels import hop_type as _hop_type_of
 from ddi.report import filter_rows, iter_rows, median_with_iqr, register
+from ddi.reports._provenance import render_provenance_footer
 
 _PHASE2_TF_PREFIX = "phase2_train_free:"
 _SPLIT: Literal["train", "val", "test"] = "val"
@@ -199,7 +200,15 @@ def _t5_hop_split(store: Path) -> str:
             f"<!-- {hop_counts[_HOP_UNKNOWN]} EM row(s) dropped to hop_type=unknown "
             "(record id missing from loader or label was 'unknown') -->\n"
         )
-    return out
+    # Backing set = every phase2_train_free EM row `_collect` inspected. We
+    # re-iterate rather than plumb the list back through `_collect` because F4
+    # shares the collector and does not want the footer payload.
+    backing_rows = [
+        row
+        for row in filter_rows(iter_rows(store), metric="em")
+        if _parse(row.get("run_id", "")) is not None
+    ]
+    return out + render_provenance_footer(store, backing_rows)
 
 
 @register("F4")

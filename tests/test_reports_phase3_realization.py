@@ -107,6 +107,7 @@ def test_t3_renders_markdown_with_expected_columns(tmp_path: Path):
     assert "| 1 | 1.00x | 1.00x | 1.000 | 0.000 |" in out
     # N=13 row: analytical=10.59x, realized=720/600=1.20x, ratio=1.20/10.59=0.113
     assert "| 13 | 10.59x | 1.20x | 0.113 | 0.906 |" in out
+    assert "<!-- provenance -->" in out
 
 
 def test_t3_renders_na_for_missing_arm(tmp_path: Path):

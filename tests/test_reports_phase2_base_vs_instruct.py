@@ -74,3 +74,4 @@ def test_t4_renders_with_paired_data(tmp_path: Path):
     assert "nq" in out
     # effect = 0.05 - 0.01 = 0.04
     assert "+0.0400" in out
+    assert "<!-- provenance -->" in out

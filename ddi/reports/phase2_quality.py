@@ -13,6 +13,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from ddi.report import filter_rows, iter_rows, register
+from ddi.reports._provenance import render_provenance_footer
 
 _PREFIX = "phase2_train_free:"
 _METRICS = ("em", "f1", "presence", "loss")
@@ -47,6 +48,10 @@ def _t2_quality_summary(store: Path) -> str:
 
     # (model, dataset, variant, metric, seed) -> [per-record values]
     per_cell: dict[tuple[str, str, str, str, int], list[float]] = defaultdict(list)
+    # Track the exact rows the table drew from so the provenance footer stamps only
+    # what actually shaped a cell — off-metric / off-prefix rows in the store are
+    # ignored on read and should not be counted in the footer.
+    backing_rows: list[dict] = []
     for metric in _METRICS:
         for row in filter_rows(rows, metric=metric):
             parsed = _parse(row.get("run_id", ""))
@@ -54,6 +59,7 @@ def _t2_quality_summary(store: Path) -> str:
                 continue
             model, dataset, variant, seed, _ = parsed
             per_cell[(model, dataset, variant, metric, seed)].append(float(row["value"]))
+            backing_rows.append(row)
 
     # (model, dataset, variant, metric) -> median across seeds of the per-seed mean
     summary: dict[tuple[str, str, str, str], float] = {}
@@ -93,7 +99,7 @@ def _t2_quality_summary(store: Path) -> str:
             f"| {model} | {dataset} | {variant} | "
             f"{cells[0]} | {cells[1]} | {cells[2]} | {cells[3]} | {max_seeds} |"
         )
-    return "\n".join(lines) + "\n"
+    return "\n".join(lines) + "\n" + render_provenance_footer(store, backing_rows)
 
 
 # ---- Per-metric renderers (T2_em / T2_f1 / T2_presence / T2_loss) --------------------------
@@ -174,6 +180,9 @@ def _render_metric_table(store: Path, metric: str) -> str:
 
     # (model, mask, column) -> list of per-record values (across seeds)
     per_cell: dict[tuple[str, str, str], list[float]] = defaultdict(list)
+    # Track rows that actually contributed a numeric cell (post-filter, post-parse) so
+    # the footer counts match what the reader sees on the page.
+    backing_rows: list[dict] = []
     for row in filter_rows(rows, metric=metric):
         parsed = _parse(row.get("run_id", ""))
         if parsed is None:
@@ -186,6 +195,7 @@ def _render_metric_table(store: Path, metric: str) -> str:
             per_cell[(model, variant, col)].append(float(row["value"]))
         except (TypeError, ValueError):
             continue
+        backing_rows.append(row)
 
     if not per_cell:
         raise ValueError(
@@ -229,7 +239,9 @@ def _render_metric_table(store: Path, metric: str) -> str:
             lines.append(f"| {mask} | " + " | ".join(cells) + " |")
         blocks.append("\n".join(lines))
 
-    return "\n\n".join(blocks) + "\n"
+    # One footer covers the union of sub-tables (one `###` block per model). The store
+    # + row-set are identical across blocks, so per-block stamping would only add noise.
+    return "\n\n".join(blocks) + "\n" + render_provenance_footer(store, backing_rows)
 
 
 @register("T2_em")

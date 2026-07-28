@@ -97,6 +97,7 @@ def test_t5_uses_synthetic_qa_hop_types(tmp_path: Path) -> None:
     assert isinstance(out, str)
     assert "synthetic_qa" in out
     assert "ddi_qf" in out and "full" in out
+    assert "<!-- provenance -->" in out
     # synthetic_qa is all single-hop → multi column must be n/a.
     # Find the ddi_qf row and inspect its columns.
     ddi_line = [ln for ln in out.splitlines() if "ddi_qf" in ln][0]

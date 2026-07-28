@@ -49,6 +49,7 @@ def test_t2_renders_rows_for_each_variant(tmp_path: Path):
     assert "ddi_qf" in out
     # seeds column should show 3
     assert "| 3 |" in out
+    assert "<!-- provenance -->" in out
 
 
 def test_t2_shows_na_when_metric_missing(tmp_path: Path):
