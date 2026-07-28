@@ -1,0 +1,17 @@
+{
+  "dataset": "hotpot_qa__seed1",
+  "splits": {
+    "test": {
+      "n": 3703,
+      "sha256": "82b1b52bde3dda79"
+    },
+    "train": {
+      "n": 90447,
+      "sha256": "4b80a2d3a2fc6501"
+    },
+    "val": {
+      "n": 3702,
+      "sha256": "3d024bbaea3da718"
+    }
+  }
+}

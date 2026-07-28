@@ -1,0 +1,17 @@
+{
+  "dataset": "composition__seed2",
+  "splits": {
+    "test": {
+      "n": 20,
+      "sha256": "4dc2a4dcb6d73efa"
+    },
+    "train": {
+      "n": 60,
+      "sha256": "2e4cfb5a82ccfec4"
+    },
+    "val": {
+      "n": 20,
+      "sha256": "5e26976339b27e82"
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "dataset": "kilt_nq__seed1",
+  "splits": {
+    "test": {
+      "n": 1419,
+      "sha256": "65b265cf3a9fe5f6"
+    },
+    "train": {
+      "n": 87372,
+      "sha256": "bbd232156fb958c1"
+    },
+    "val": {
+      "n": 1418,
+      "sha256": "aded5a60985da2c4"
+    }
+  }
+}

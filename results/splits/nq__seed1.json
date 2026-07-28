@@ -1,0 +1,17 @@
+{
+  "dataset": "nq__seed1",
+  "splits": {
+    "test": {
+      "n": 1805,
+      "sha256": "c4fe36d6ea107576"
+    },
+    "train": {
+      "n": 87925,
+      "sha256": "41b9d729e511f90a"
+    },
+    "val": {
+      "n": 1805,
+      "sha256": "6f1cbb0ad1d4775a"
+    }
+  }
+}

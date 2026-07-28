@@ -1,0 +1,17 @@
+{
+  "dataset": "musique__seed0",
+  "splits": {
+    "test": {
+      "n": 1209,
+      "sha256": "4dc359fdbb3e19c8"
+    },
+    "train": {
+      "n": 19938,
+      "sha256": "229af7d356e13e4a"
+    },
+    "val": {
+      "n": 1208,
+      "sha256": "5acfd783602c8446"
+    }
+  }
+}
