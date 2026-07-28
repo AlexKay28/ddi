@@ -1,0 +1,17 @@
+{
+  "dataset": "ddi_stress__needle__seed0",
+  "splits": {
+    "test": {
+      "n": 200,
+      "sha256": "e4b388cc86ce7de7"
+    },
+    "train": {
+      "n": 600,
+      "sha256": "5bd514f584c6129d"
+    },
+    "val": {
+      "n": 200,
+      "sha256": "2a173925d5db6628"
+    }
+  }
+}

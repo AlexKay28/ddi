@@ -1,0 +1,17 @@
+{
+  "dataset": "ddi_stress__contradiction__seed0",
+  "splits": {
+    "test": {
+      "n": 200,
+      "sha256": "6b1816bea8ab8b47"
+    },
+    "train": {
+      "n": 600,
+      "sha256": "82e649af788d4c2e"
+    },
+    "val": {
+      "n": 200,
+      "sha256": "c1d2fe0a2a3cb151"
+    }
+  }
+}

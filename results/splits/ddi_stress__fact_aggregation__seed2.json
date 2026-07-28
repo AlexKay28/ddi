@@ -1,0 +1,17 @@
+{
+  "dataset": "ddi_stress__fact_aggregation__seed2",
+  "splits": {
+    "test": {
+      "n": 200,
+      "sha256": "9f516af378cbc2e1"
+    },
+    "train": {
+      "n": 600,
+      "sha256": "b56ef6849261ddc4"
+    },
+    "val": {
+      "n": 200,
+      "sha256": "c1a63bd0f7f42774"
+    }
+  }
+}
