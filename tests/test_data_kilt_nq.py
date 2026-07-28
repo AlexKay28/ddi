@@ -99,7 +99,7 @@ def test_normalize_shape_matches_spec() -> None:
     ]
     assert rec["possible_answers"] == ["the answer", "the answer variant"]
     assert rec["hop_type"] == "single"
-    assert rec["gold_position"] == 0
+    assert rec["gold_position"] is None  # KILT lacks a stable gold flag; #55
     assert rec["meta"] == {
         "retriever": "kilt_provenance",
         "n_passages": 5,
@@ -118,15 +118,16 @@ def test_normalize_shrinks_when_provenance_thin() -> None:
     assert rec["meta"]["n_passages"] == 2
 
 
-def test_normalize_gold_position_none_when_gold_outside_top_n() -> None:
+def test_normalize_gold_position_always_none() -> None:
+    # KILT has no rotation-stable gold identity, so gold_position is None regardless of
+    # provenance order or truncation. See #55 and _normalize's inline comment for context.
     row = _fake_kilt_row(n_prov=5)
-    # Rotate provenance so the gold title (index 0 originally) drops out at n=2.
     row["output"][0]["provenance"] = row["output"][0]["provenance"][2:] + row["output"][0][
         "provenance"
     ][:2]
     rec = kilt_nq._normalize(row, n_passages=2)
     assert rec["gold_position"] is None
-    assert rec["meta"]["gold_title"] == "Title 2"
+    assert rec["meta"]["gold_title"] == "Title 2"  # advisory only — first-listed passage
 
 
 def test_normalize_dedups_provenance_by_title() -> None:

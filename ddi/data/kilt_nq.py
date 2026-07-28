@@ -161,14 +161,14 @@ def _normalize(row: dict, n_passages: int) -> dict:
     passages = [_passage_text(p) for p in top]
 
     gold_title = _gold_title(row)
-    gold_position: int | None = None
-    if gold_title:
-        gold_lower = gold_title.lower()
-        for idx, prov in enumerate(top):
-            if _provenance_title(prov).lower() == gold_lower:
-                gold_position = idx
-                break
 
+    # gold_position is intentionally None for kilt_nq: KILT does not carry a stable
+    # gold-vs-distractor annotation. `_gold_title` returns whichever passage happens
+    # to be listed first, which is not a rotation-stable identity — it moves when the
+    # provenance list is permuted. Downstream analysis that needs a real gold pointer
+    # should use ddi_stress (which has controlled gold placement via `gold_positions`)
+    # or a dataset that ships explicit gold flags (hotpot_qa's supporting_facts).
+    # Closes #55.
     return {
         "id": record_id,
         "info_contexts": passages,
@@ -178,7 +178,7 @@ def _normalize(row: dict, n_passages: int) -> dict:
         ],
         "possible_answers": answers,
         "hop_type": "single",
-        "gold_position": gold_position,
+        "gold_position": None,
         "meta": {
             "retriever": "kilt_provenance",
             "n_passages": len(passages),
