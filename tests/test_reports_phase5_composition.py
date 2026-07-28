@@ -76,6 +76,7 @@ def test_t6_groups_by_distance(tmp_path: Path) -> None:
 
     table = render("T6", store=store)
     assert isinstance(table, str)
+    assert "<!-- provenance -->" in table
     # Header + separator + one row per distance = 3 data rows.
     data_lines = [
         ln for ln in table.strip().splitlines()

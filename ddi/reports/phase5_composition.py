@@ -21,6 +21,7 @@ from pathlib import Path
 from statistics import mean, median
 
 from ddi.report import filter_rows, iter_rows, median_with_iqr, register
+from ddi.reports._provenance import render_provenance_footer
 
 _PHASE5_PREFIX = "phase5_composition:"
 _METRICS = ("em", "f1", "presence")
@@ -122,7 +123,15 @@ def _t6_composition_table(store: Path) -> str:
                 cells += ["n/a", "n/a", "n/a", "n/a"]
         cells.append(str(n_records))
         lines.append("| " + " | ".join(cells) + " |")
-    return "\n".join(lines) + "\n"
+    # Backing rows: every phase5_composition EM/F1/presence row visible to _collect_metric_rows.
+    # We re-walk the store rather than change the collector's return shape (F7 shares it).
+    backing_rows = [
+        row
+        for row in iter_rows(store)
+        if row.get("metric") in _METRICS
+        and _parse_run_id(row.get("run_id", "")) is not None
+    ]
+    return "\n".join(lines) + "\n" + render_provenance_footer(store, backing_rows)
 
 
 @register("F7")

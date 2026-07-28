@@ -13,6 +13,7 @@ from pathlib import Path
 from statistics import median
 
 from ddi.report import filter_rows, iter_rows, register
+from ddi.reports._provenance import render_provenance_footer
 
 _PHASE3_PREFIX = "phase3_timing:"
 _TARGET_VARIANT = "ddi_qf"
@@ -115,6 +116,21 @@ def _any_phase3_rows(store: Path) -> bool:
     return False
 
 
+def _phase3_backing_rows(store: Path) -> list[dict]:
+    """Materialize every phase3_timing row in the store for the provenance footer.
+
+    We stamp on the phase3_timing prefix rather than the specific metric per renderer
+    because a T_perf_* table's realized/realization cells are derived from *pairs*
+    (variant vs full arm) — the "backing evidence" is the whole phase3 slice at render
+    time, not just the metric column that named this renderer.
+    """
+    return [
+        row
+        for row in iter_rows(store)
+        if str(row.get("run_id", "")).startswith(_PHASE3_PREFIX)
+    ]
+
+
 @register("T3")
 def _t3_realization_table(store: Path) -> str:
     """Markdown table: per N, analytical vs realized (median) vs realization ratio vs sparsity."""
@@ -169,7 +185,9 @@ def _t3_realization_table(store: Path) -> str:
         lines.append(
             f"| {n} | {analytical_str} | {realized_str} | {ratio_str} | {sparsity_str} |"
         )
-    return "\n".join(lines) + "\n"
+    return "\n".join(lines) + "\n" + render_provenance_footer(
+        store, _phase3_backing_rows(store)
+    )
 
 
 def _maybe_median(values: list[float] | None) -> float | None:
@@ -366,7 +384,11 @@ def _render_perf_metric(store: Path, metric_short: str) -> str:
             lines.append(f"| {mask} | " + " | ".join(cells) + " |")
         blocks.append("\n".join(lines))
 
-    return "\n\n".join(blocks) + "\n"
+    # Single footer at the bottom — the (model, L, backend) sub-blocks all draw from the
+    # same phase3_timing slice, so per-block stamping would duplicate identical metadata.
+    return "\n\n".join(blocks) + "\n" + render_provenance_footer(
+        store, _phase3_backing_rows(store)
+    )
 
 
 @register("T_perf_ttft")
