@@ -5,10 +5,10 @@ subsequent loads validate against it. A mismatch is a bug (ground rule 1: `datas
 every metric row would otherwise be a lie), so we raise loudly.
 
 `dataset` is an opaque manifest key, not necessarily the bare loader name. Loaders whose split
-partition is itself a function of `seed` (nq, composition, synthetic_qa — ground rule 5 requires
-≥3 seeds, and their train/val/test membership legitimately differs per seed) key their manifest
-as `f"{name}__seed{seed}"` so each seed freezes its own split instead of colliding with seed 0's
-(issue #40).
+partition is itself a function of `seed` (nq, composition, synthetic_qa, hotpot_qa, musique,
+kilt_nq, ddi_stress — ground rule 5 requires ≥3 seeds, and their train/val/test membership
+legitimately differs per seed) key their manifest as `f"{name}__seed{seed}"` so each seed freezes
+its own split instead of colliding with seed 0's (issue #40).
 """
 
 from __future__ import annotations

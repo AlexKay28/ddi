@@ -109,7 +109,7 @@ def load_musique(split: Split, seed: int) -> Iterator[dict]:
         name: (len(recs), hash_split([r["id"] for r in recs]))
         for name, recs in by_split.items()
     }
-    validate_or_write("musique", hashes)
+    validate_or_write(f"musique__seed{seed}", hashes)
 
     for rec in sorted(by_split[split], key=lambda r: r["id"]):
         yield rec

@@ -223,7 +223,7 @@ def load_kilt_nq(split: Split, seed: int) -> Iterator[dict]:
         name: (len(recs), hash_split([r["id"] for r in recs]))
         for name, recs in by_split.items()
     }
-    validate_or_write("kilt_nq", hashes)
+    validate_or_write(f"kilt_nq__seed{seed}", hashes)
 
     for rec in sorted(by_split[split], key=lambda r: r["id"]):
         yield rec

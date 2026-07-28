@@ -147,7 +147,7 @@ def test_manifest_stable(manifest_root: Path) -> None:
     """Two loads with the same seed produce the same manifest hash."""
     ddi_stress.set_task_family("fact_chain")
     list(load("ddi_stress", "train", 0))
-    manifest_path = manifest_root / "ddi_stress__fact_chain.json"
+    manifest_path = manifest_root / "ddi_stress__fact_chain__seed0.json"
     assert manifest_path.exists()
     first = manifest_path.read_text()
     # Second load validates against the manifest — if hashes differed it'd raise.

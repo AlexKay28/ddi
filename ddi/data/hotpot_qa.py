@@ -93,7 +93,7 @@ def load_hotpot_qa(split: Split, seed: int) -> Iterator[dict]:
         name: (len(recs), hash_split([r["id"] for r in recs]))
         for name, recs in by_split.items()
     }
-    validate_or_write("hotpot_qa", hashes)
+    validate_or_write(f"hotpot_qa__seed{seed}", hashes)
 
     for rec in sorted(by_split[split], key=lambda r: r["id"]):
         yield rec

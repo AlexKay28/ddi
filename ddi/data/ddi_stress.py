@@ -771,8 +771,8 @@ def _load_ddi_stress(split: Split, seed: int) -> Iterator[dict]:
     """Yields records for the family named by `DDI_STRESS_TASK` (default `fact_chain`).
 
     Split sizes: train=600 / val=200 / test=200. Partition deterministic in seed. The manifest
-    is written per (dataset, task_family) so switching families keeps its own hash and can
-    coexist with other families' committed splits.
+    is written per (dataset, task_family, seed) so switching families or seeds keeps its own
+    hash and can coexist with other families'/seeds' committed splits.
     """
     task_family = _current_task_family()
     records = _all_records(seed, task_family)
@@ -780,7 +780,7 @@ def _load_ddi_stress(split: Split, seed: int) -> Iterator[dict]:
     by_split = split_ids(all_ids, val_frac=_VAL_FRAC, test_frac=_TEST_FRAC, seed=seed)
 
     hashes = {name: (len(ids), hash_split(ids)) for name, ids in by_split.items()}
-    validate_or_write(f"ddi_stress__{task_family}", hashes)
+    validate_or_write(f"ddi_stress__{task_family}__seed{seed}", hashes)
 
     wanted = set(by_split[split])
     by_id = {r["id"]: r for r in records}
