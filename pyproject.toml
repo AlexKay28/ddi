@@ -15,7 +15,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-fa2 = ["flash-attn>=2.6"]
+# triton is a hard runtime dep of fa2, not just the (deferred) triton backend: transformers'
+# flash_attention integration unconditionally imports flash_attn.ops.triton.rotary, so
+# `import transformers` itself breaks without it once flash-attn is installed.
+fa2 = ["flash-attn>=2.6", "triton>=3.0"]
 triton = ["triton>=3.0"]
 report = ["pandas", "matplotlib"]
 dev = ["pytest", "pytest-cov", "ruff"]

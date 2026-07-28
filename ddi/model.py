@@ -19,14 +19,20 @@ from transformers import (
 
 _ORIGINAL_ATTR = "__ddi_original_update_causal_mask__"
 
+# DDI's own backend names (see ddi.attention.Backend) vs. HF's `attn_implementation` strings.
+_HF_ATTN_IMPLEMENTATION = {"fa2": "flash_attention_2"}
+
 
 def load_model(
     name: str,
     dtype: torch.dtype = torch.bfloat16,
     attn_implementation: str = "sdpa",
 ) -> tuple[PreTrainedModel, PreTrainedTokenizerBase]:
+    hf_attn_implementation = _HF_ATTN_IMPLEMENTATION.get(
+        attn_implementation, attn_implementation
+    )
     model = AutoModelForCausalLM.from_pretrained(
-        name, torch_dtype=dtype, attn_implementation=attn_implementation
+        name, torch_dtype=dtype, attn_implementation=hf_attn_implementation
     )
     tokenizer = AutoTokenizer.from_pretrained(name)
     patch_model(model)

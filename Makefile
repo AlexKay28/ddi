@@ -39,7 +39,13 @@ setup:  ## Install CPU dev environment (uv pip install -e ".[dev]").
 
 .PHONY: setup-gpu
 setup-gpu:  ## setup + FlashAttention-2 + report extras (for GPU boxes; expects CUDA torch pre-installed on the image).
-	$(UV) pip install --system -e ".[dev,fa2,report]"
+	# flash-attn's setup.py imports torch at build time to detect CUDA arch; uv's default
+	# build isolation hides the already-installed torch from that build env, so it must be
+	# built against the target env's torch instead (--no-build-isolation-package). No --system:
+	# this must install into the project's own .venv (pinned to cu121 per issue #31), not the
+	# ambient system Python — `uv pip install --system` re-resolves torch unpinned there and can
+	# pull in a CUDA build (e.g. cu130) that mismatches nvcc and breaks the flash-attn build.
+	$(UV) pip install --no-build-isolation-package flash-attn -e ".[dev,fa2,report]"
 	@$(MAKE) --no-print-directory gpu-check
 
 # ===================================================================

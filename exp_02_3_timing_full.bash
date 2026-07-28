@@ -8,11 +8,26 @@
 # 2. (N=25, L=2048) is skipped outright: T = 25*2048+64 = 51264 tokens, which
 #    OOMs on <40GB VRAM. All other cells (up to N=13/L=2048 = 26688 tokens) fit
 #    comfortably on 40GB and are safe on 24GB.
+#
+# fa2 dropped (#70): phase3_timing's fa2 path was never wired to ddi.attention's varlen FA2 impl,
+# so it routes DDI's dense block-diagonal mask through HF's built-in FA2 integration instead —
+# which crashes with a CUDA device-side assert on every cell. sdpa-only until #70 lands; C3's
+# "kernel-fixable" question stays open for this pass (deferred — see #70 and the #61 closing
+# comment: not worth the engineering cost unless the rest of EXP-02 justifies it).
+#
+# 1 seed, not 3 (final decision, not a shortcut): unlike EXP-02's quality-metric fragments, this
+# is a pure timing sweep. Each cell already reports median + IQR over 5 repeats (ddi/timing.py) —
+# that's the variance control here, not the seed. The seed-0 result is unambiguous (realization
+# ratio falls monotonically from 0.98 at N=1 to 0.06 at N=25, replicating EXP-01's N=13 number
+# exactly) and 2 more seeds of the same random-token-content shape wouldn't change that story.
 set -euo pipefail
 
-SEEDS=(0 1 2)
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
+
+SEEDS=(0)
 MODEL="Qwen/Qwen2.5-7B-Instruct"
-BACKENDS=(sdpa fa2)
+BACKENDS=(sdpa)
 MASKS=(full ddi_qf)
 NS=(1 3 5 9 13 25)
 LS=(128 512 2048)
@@ -38,7 +53,7 @@ run_cell() {
 
 log "== preflight ==" && make gates >>"$LOG_DIR/gates.log" 2>&1 && make gpu-check >>"$LOG_DIR/gpu.log" 2>&1
 
-log "== timing sweep (204 cells; 12 skipped: N=25,L=2048 OOM) =="
+log "== timing sweep, sdpa only, seed 0 (34 cells; 2 skipped: N=25,L=2048 OOM) =="
 for backend in "${BACKENDS[@]}"; do
   for mask in "${MASKS[@]}"; do
     for N in "${NS[@]}"; do
