@@ -29,6 +29,23 @@ Table~\ref{tab:t2} pairs train-free and (where run) fine-tuned quality on
 the same cells. Any cell whose train-free row is inside the $\Delta$ band
 carries the parity claim without needing the fine-tuned row.
 
+The parity picture that emerges is \emph{conditional}, not blanket. On
+single-document retrieval (KILT-NQ, \texttt{synthetic\_qa}), the median
+train-free gap between \texttt{ddi\_qf} and \texttt{full} sits within the
+$\Delta$ band on the primary instruct model at three seeds. On multi-hop
+benchmarks (HotpotQA, MuSiQue, and the \texttt{ddi\_stress/fact\_chain}
+family) the same setting misses $\Delta$ by a wide margin: only
+$\sim 18$--$28\%$ of the \texttt{full}$\leftrightarrow$\texttt{blind} F1
+gap is recovered by \texttt{ddi\_qf}. The \texttt{ddi\_strict} arm
+collapses to \texttt{blind}-level quality on the primary instruct model
+on the composition probe, confirming that a single SEP-row bridge is not
+enough to carry cross-document information at train-free evaluation.
+Consequently, the fine-tuned sweep (Phase 2.2 in the plan) is
+load-bearing rather than confirmatory for the multi-hop parity claim.
+\todo{The fine-tuned rows of T2 are the escape hatch triggered by this
+train-free miss; the fine-tuning cycle has not yet been run, and the
+fine-tuned columns of T2 are expected to be empty in the current build.}
+
 \begin{table}[t]
 \centering
 \caption{T2 --- mask $\times$ model quality, train-free and (conditional)
@@ -80,11 +97,21 @@ threshold, but ``highest speedup inside the $\Delta$ parity band'' is.
 \label{sec:results-quality-instruct}
 
 Instruction tuning trains the model to route context through the query
-region --- exactly the region \texttt{ddi\_qf} keeps intact. The
-mechanistic prediction is that \texttt{ddi\_qf} costs instruction-tuned
-models less than it costs their base counterparts. Table~\ref{tab:t4}
-tests this prediction with matched base/instruct pairs and reports the
-effect size with variance so a null result is legible.
+region, so the ex ante mechanistic prediction was that \texttt{ddi\_qf}
+would cost instruction-tuned models \emph{less} than it costs their base
+counterparts. The measured direction is the opposite: on Qwen2.5-7B, the
+base model retains substantially more of \texttt{full}'s F1 under
+\texttt{ddi\_qf} and \texttt{ddi\_strict} than the instruct variant does
+(the effect is largest on MuSiQue, where \texttt{ddi\_strict} retains
+$\sim 65\%$ of base-\texttt{full} F1 versus $\sim 27\%$ of
+instruct-\texttt{full} F1; direction replicates on HotpotQA and on the
+composition probe). Instruct tuning appears to route information
+\emph{through} cross-document attention paths that DDI's mask blocks,
+rather than into the query region as originally hypothesised.
+Table~\ref{tab:t4} reports the effect size with variance so the sign of
+the effect is directly readable. \todo{The probe rows on Llama-3.1-8B
+were scoped but not run; the model-family-generality of the
+base/instruct sign is unresolved without them.}
 
 \begin{table}[t]
 \centering

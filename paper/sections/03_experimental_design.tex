@@ -18,9 +18,9 @@ single-lab artifact; and public reproducibility for every primary claim.
 \centering
 \caption{Models. Both base and instruct variants of each primary model are
     evaluated; the base/instruct pairing supports the mechanism probe in
-    Section~\ref{sec:results-quality}. The third family
-    (YandexGPT-5-Lite-8B) is not externally reproducible and appears only
-    in the appendix as a supplementary confirmation.}
+    Section~\ref{sec:results-quality}. Ablation and scale-trend rows are
+    listed here for reference but are not populated in the current
+    results (see the note below the table).}
 \label{tab:models}
 \begin{tabular}{@{}llll@{}}
 \toprule
@@ -34,6 +34,12 @@ YandexGPT-5-Lite-8B             & Appendix  & no  & Third-family confirmation \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\todo{The primary-model quality results reported in
+Section~\ref{sec:results-quality} land only on Qwen2.5-7B (base and
+instruct); the Llama-3.1-8B rows and the 1.5B/14B ablation-and-scale
+sweep were scoped but not run. Any claim about Llama, sub-7B, or
+$>$7B behaviour is deferred to a future evaluation cycle.}
 
 All runs use bf16 precision, greedy decoding for quality metrics, and
 seed control committed to provenance. Batch size is 1 for the current
@@ -50,21 +56,30 @@ must not be mixed.
 \begin{table}[t]
 \centering
 \caption{Datasets. Every parity-detection dataset has its seed variance
-    measured under \texttt{full} in Phase 1 and is admitted only if the
-    variance is smaller than $\Delta$.}
+    measured under \texttt{full} and is admitted only if the variance is
+    smaller than $\Delta$. Datasets marked ``no-doc'' in the notes column
+    carry no retrieved passages and therefore collapse every mask variant
+    to plain causal attention; they are retained only as harness
+    smoke-tests.}
 \label{tab:datasets}
-\begin{tabular}{@{}p{0.32\linewidth}p{0.36\linewidth}p{0.24\linewidth}@{}}
+\begin{tabular}{@{}p{0.28\linewidth}p{0.36\linewidth}p{0.28\linewidth}@{}}
 \toprule
 Function & Dataset & Notes \\
 \midrule
-Parity detection & NQ, TriviaQA, HotpotQA & Low seed variance, well-known headroom \\
-Controllable $N$ + gold position & LitM-style multi-doc QA~\citep{liu2023lostmiddle} & Synthesized locally \\
-Cross-document stress            & MoNaCo; optionally 2WikiMultiHop, MuSiQue & For the failure envelope \\
+Parity detection (single-hop)    & KILT-NQ, \texttt{synthetic\_qa} & With retrieved passages \\
+Parity detection (no-doc)        & NQ-Open                         & No passages; smoke-test only \\
+Multi-hop (natural)              & HotpotQA, MuSiQue               & Failure-envelope side \\
+Cross-document stress (synthetic)& \texttt{composition}, \texttt{ddi\_stress} (fact\_chain, fact\_aggregation, contradiction, coreference, needle) & Family-controlled multi-hop probe \\
 Comparability with prior work    & $\geq 1$ dataset PCW / FiD report on & Overlap with parity row \\
-General RAG-native               & Open RAG Bench                       & End-to-end sanity \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\todo{TriviaQA, MoNaCo, Open RAG Bench, and the LitM-style multi-doc QA
+protocol were listed as target loaders in the plan but not implemented in
+time for the results reported here; when they land they extend
+Section~\ref{sec:results-quality} and Section~\ref{sec:failure-envelope}
+without changing this section's function-split framing.}
 
 \subsection{Design axes}
 \label{sec:design-axes}
@@ -102,7 +117,7 @@ enumerate their cross product.
 \subsection{Ground rules}
 \label{sec:design-ground-rules}
 
-Four discipline rules apply to every experiment
+Five discipline rules apply to every experiment
 (issue~\href{https://github.com/AlexKay28/ddi/issues/1}{\#1}):
 (1)~every result row is written to the append-only store with full
 provenance (git SHA, config, seed, dataset hash, model revision);
@@ -110,8 +125,10 @@ provenance (git SHA, config, seed, dataset hash, model revision);
 table and figure in Sections~\ref{sec:results-quality}--\ref{sec:failure-envelope}
 is rendered from \texttt{results/runs.jsonl} by \texttt{ddi.report};
 (3)~one mask definition, one implementation, no re-implementations across
-files; (4)~$\Delta$ is fixed from the full baseline before any DDI number
-is interpreted (Section~\ref{sec:method-delta}). Ground rule~(2) is the
-mechanism by which this preprint's numbers are not hand-typed: an empty
-store surfaces as an explicit TODO stub in the compiled PDF, and no other
-path exists to place a numerical claim in the document.
+files; (4)~a quality claim requires $\geq 3$ seeds, so per-cell variance
+is measurable; (5)~$\Delta$ is fixed from the full baseline before any DDI
+number is interpreted (Section~\ref{sec:method-delta}).
+Ground rule~(2) is the mechanism by which this preprint's numbers are not
+hand-typed: an empty store surfaces as an explicit TODO stub in the
+compiled PDF, and no other path exists to place a numerical claim in the
+document.

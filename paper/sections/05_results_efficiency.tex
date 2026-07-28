@@ -65,6 +65,25 @@ analytical speedup is itself modest in that regime. And end-to-end,
 prefill may simply not be the bottleneck at the shapes measured, so a
 prefill-only win dilutes to near-nothing in real serving.
 
+\paragraph{Measurement to date: structural on \texttt{sdpa}.}
+The realization ratio measured on the primary instruct model at
+$Q = 64$, $L = 512$ under the \texttt{sdpa} backend collapses from
+$\approx 0.98$ at $N = 1$ to $\approx 0.06$ at $N = 25$, while
+analytical speedup grows monotonically from $1.0\times$ to
+$\approx 16.6\times$ and mask sparsity climbs to $\approx 94\%$.
+Realized wall-clock speedup remains pinned near $1.0\times$ throughout.
+The picture that emerges is that the analytical/realized \emph{gap
+itself grows} with $N$ under this kernel: DDI's block-diagonal sparsity
+does not convert to wall-clock speedup at any tested shape with
+\texttt{sdpa}. The FlashAttention-2 varlen path was scoped as the
+kernel-fixable alternative but is not wired through DDI's mask family
+in the current runner; the FA2 half of the question is deferred.
+\todo{FA2 realization is the load-bearing open question for compute-side
+speedup and is tracked as a future-work item; if it too is near-unity
+across $N$, the prefill-only compute claim is null on the tested
+backends and the caching path
+(Section~\ref{sec:results-caching}) is the sole efficiency win.}
+
 We report prefill-only \emph{and} end-to-end numbers for every cell in
 Table~\ref{tab:t3}; the pair is the honest way to read the efficiency
 axis of the paper.
