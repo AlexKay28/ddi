@@ -81,7 +81,14 @@ tokens:
 \end{itemize}
 The restart layout is what turns DDI's structural sparsity into a caching
 mechanism. It is untested in the prior work and is the axis that unlocks
-the co-headline result of Section~\ref{sec:results-caching}.
+the load-bearing efficiency result of Section~\ref{sec:results-caching}.
+When paired with \texttt{ddi\_qf}, the restart layout is quality-free at
+$\Delta$ (Section~\ref{sec:results-caching-prereq}) and order-invariant to
+floating-point precision. Restart is not free under \texttt{full}: because
+full attention lets each document attend into every earlier document,
+restarting positions places RoPE relative-distance values outside the
+distribution the model was trained on, and quality collapses. This
+asymmetry is exactly what the pairing was designed to exploit.
 
 \subsection{Non-inferiority margin \texorpdfstring{$\Delta$}{Delta}}
 \label{sec:method-delta}

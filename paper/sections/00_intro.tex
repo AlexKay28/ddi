@@ -52,18 +52,31 @@ we instead measure the full family and locate the knee. Concretely:
           bridge width, on parity-detection benchmarks
           (Section~\ref{sec:results-quality}), and pair every quality point
           with a realized prefill speedup on the same
-          axes (Section~\ref{sec:results-efficiency}).
+          axes (Section~\ref{sec:results-efficiency}). Parity is
+          \emph{conditional}: \texttt{ddi\_qf} matches the full-causal
+          baseline within $\Delta$ on single-document retrieval, but degrades
+          on cross-document composition and aggregation
+          (Section~\ref{sec:failure-envelope}).
     \item We measure per-document KV-cache reuse under a position-restart
-          layout (Section~\ref{sec:results-caching}). This is co-headline: a
-          cache hit skips prefill entirely, which no kernel improvement under
-          full causal attention can match.
+          layout (Section~\ref{sec:results-caching}). This is the
+          load-bearing efficiency result: a cache hit skips prefill entirely,
+          which no kernel improvement under full causal attention can match,
+          and is the only wall-clock speedup path this paper measures as
+          working end-to-end (the prefill-only speedup of
+          Section~\ref{sec:results-efficiency} does not translate to
+          realized time under an \texttt{sdpa} backend at the shapes
+          tested).
     \item We report the failure envelope
           (Section~\ref{sec:failure-envelope}): degradation on questions that
-          require composing evidence across documents, versus questions that
-          do not. This bounds the operating regime and is the honest
-          counterweight to the parity claim.
+          require composing or aggregating evidence across documents, versus
+          questions that do not. Within multi-hop, the degradation is itself
+          strongly task-family-dependent --- \texttt{ddi\_qf}'s F1 recovery
+          spans roughly $12\%$ (aggregation) to $78\%$ (needle-in-haystack)
+          across the \texttt{ddi\_stress} families. This bounds the
+          operating regime and is the honest counterweight to the parity
+          claim.
 \end{itemize}
 The framing throughout is a characterization study rather than a benchmark
-win. If one variant --- \texttt{ddi\_strict} --- turns out to be non-viable,
-the negative result is a contribution: it is the ablation that makes the
-positive result meaningful.
+win. \texttt{ddi\_strict} does turn out to be non-viable at the parity
+margin $\Delta$; the negative result is a contribution: it is the ablation
+that makes the \texttt{ddi\_qf} and bridge-$k$ results meaningful.

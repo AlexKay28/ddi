@@ -19,9 +19,23 @@ Every parity dataset admits a split into single-document-answerable
 questions and questions that require cross-document composition. We
 label each evaluation instance accordingly and report every mask cell
 separately on the two splits. The single-hop split is where the parity
-claim of Section~\ref{sec:results-quality} is expected to hold; the
-multi-hop split is where DDI is expected to degrade, and the size of the
-degradation is the width of the operating envelope.
+claim of Section~\ref{sec:results-quality} holds within $\Delta$ on
+the primary instruct model. The multi-hop split is where DDI degrades,
+and --- critically --- the degradation is not uniform across multi-hop
+task classes. On the \texttt{ddi\_stress} families, \texttt{ddi\_qf}'s
+F1 recovery (as a fraction of \texttt{full}'s F1) spans
+$\approx 78\%$ on \texttt{needle} (single gold fact in a haystack of
+distractors), $\approx 58\%$ on \texttt{contradiction},
+$\approx 50\%$ on \texttt{coreference}, $\approx 28\%$ on
+\texttt{fact\_chain}, and $\approx 12\%$ on \texttt{fact\_aggregation}
+(combine facts spread across $N$ gold documents). Cross-document
+aggregation is where DDI's mask most sharply blocks the required
+mechanism; single-doc retrieval is where the mask barely registers.
+The width of the operating envelope is therefore a task-family property,
+not a single number. \todo{Family-level recovery is reported here at
+one seed on the primary instruct model; a multi-seed re-run per family
+would sharpen the numeric bounds, and a base-model rerun would test
+whether the family ordering is instruct-specific.}
 
 \begin{table}[t]
 \centering
@@ -47,13 +61,18 @@ degradation is the width of the operating envelope.
 
 Parallel Context Windows~\citep{ratner2023pcw} is the closest prior work
 in the independent-context-window family and is the correct external
-baseline for the parity claim. We evaluate PCW on at least one shared
-dataset with matched retrieval, so the DDI number and the PCW number can
-be read against a common yardstick. The two methods disagree on the
-detail --- PCW uses positional partitioning without an explicit mask
-family, while DDI parameterizes the query--document bridge --- so a
-direct comparison at matched shapes clarifies which effect is doing the
-work.
+baseline for the parity claim. In DDI's mask family, PCW is exactly
+\texttt{ddi\_qf} paired with the \texttt{restart} position layout; the
+\texttt{phase5\_pcw} runner in the harness hard-codes that combination
+so the PCW column of downstream tables is a first-class citizen rather
+than a re-derivation of other rows. The two methods disagree on framing
+--- PCW uses positional partitioning without an explicit mask family,
+while DDI parameterizes the query--document bridge --- so a direct
+comparison at matched shapes clarifies which effect is doing the work.
+\todo{The PCW comparison rows have not yet been populated with
+multi-seed measurements against DDI's \texttt{ddi\_qf} at matched
+shapes on a shared parity dataset; the runner is in place but the
+paired sweep has not been run.}
 
 \subsection{Cross-document composition probe}
 \label{sec:failure-envelope-composition}

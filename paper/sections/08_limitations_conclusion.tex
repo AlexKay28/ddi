@@ -16,21 +16,40 @@ of the quality and efficiency sweeps. As stated, however, the reported
 efficiency numbers are for the single-request setting; server-side
 throughput at higher batch sizes is out of scope.
 
-\paragraph{Model scale.}
-Primary claims rest on 7--8B parameter models
-(Section~\ref{sec:design-models}). The ablation model at 1.5B and the
-scale model at 14B (or 32B) give one dimension of scale evidence, but
-the study does not claim scaling laws. A trend across the three sizes
-is a data point, not an extrapolation.
+\paragraph{Model scale and family coverage.}
+Primary quality claims land on Qwen2.5-7B (base and instruct); the
+Llama-3.1-8B rows and the 1.5B/14B ablation-and-scale sweep were scoped
+but not run (Section~\ref{sec:design-models}). Any claim about
+model-family independence, sub-7B, or $>$7B behaviour is not supported
+by the reported evidence. The base-versus-instruct sign flip
+(Section~\ref{sec:results-quality-instruct}) --- instruct being
+\emph{more} sensitive to DDI's mask than base, on Qwen --- adds a
+concrete reason to be careful here: any generalization of the
+multi-hop parity miss across model families is unsupported until
+Llama-3.1-8B and Llama-instruct are measured.
 
-\paragraph{Realization gap.}
-If the analytical/realized gap of Section~\ref{sec:results-efficiency-gap}
-does not close under the Phase~3 diagnostics --- if it is a structural
-property of small-block varlen kernels on current hardware --- the
-compute headline of DDI is smaller than the arithmetic suggests, and
-the co-headline caching result of Section~\ref{sec:results-caching}
-carries proportionally more of the paper. We flag this in the results
-sections rather than only here, so a reader cannot miss the constraint.
+\paragraph{Task-family coverage of the parity claim.}
+The train-free \texttt{ddi\_qf} parity claim holds within $\Delta$ on
+single-document retrieval and misses $\Delta$ by a wide margin on
+cross-document composition and aggregation
+(Section~\ref{sec:failure-envelope-hop}). The fine-tuned sweep
+(Phase 2.2) is the load-bearing escape hatch for the multi-hop case
+and has not yet been run, so ``DDI matches full-causal on multi-hop''
+is currently unsupported at any training setting; the paper's parity
+claim should be read as scoped to the single-hop task class on the
+primary instruct model.
+
+\paragraph{Realization gap on \texttt{sdpa}.}
+The analytical/realized gap of Section~\ref{sec:results-efficiency-gap}
+is measured as structural on the \texttt{sdpa} backend at every tested
+$(N, L, Q)$ shape: realized speedup stays near $1.0\times$ while
+analytical speedup grows to $\approx 16\times$. FlashAttention-2 varlen
+was scoped as the kernel-fixable alternative but is not wired through
+DDI's mask family in the current runner. The prefill-only compute
+headline of DDI is therefore not realized end-to-end at the tested
+shapes on \texttt{sdpa}; the caching path of
+Section~\ref{sec:results-caching} carries the reported wall-clock
+efficiency win in full.
 
 \section{Conclusion}
 \label{sec:conclusion}
@@ -42,18 +61,23 @@ and pair every quality point with its realized speedup, so the paper's
 central artifact is the quality/speed frontier (Figure~\ref{fig:f6})
 rather than a single ``ours-wins'' number. We also measure the failure
 envelope explicitly: what DDI cannot answer, on questions that require
-cross-document composition (Section~\ref{sec:failure-envelope}). The
-caching co-headline (Section~\ref{sec:results-caching}) turns the
-structural sparsity of the mask into a reusability property of KV
-blocks, which no kernel improvement under full-causal attention can
-match.
+cross-document composition or aggregation
+(Section~\ref{sec:failure-envelope}). The caching result
+(Section~\ref{sec:results-caching}) turns the structural sparsity of
+the mask into a reusability property of KV blocks and is the sole
+end-to-end wall-clock speedup reported: no kernel improvement under
+full-causal attention can match ``skip prefill,'' and on the tested
+\texttt{sdpa} backend no prefill-side kernel improvement to DDI
+matches it either.
 
-Within this framing, the negative results are contributions. If
+Within this framing, the negative results are contributions.
 \texttt{ddi\_strict} --- documents isolated, query isolated, single
-SEP-row bridge --- turns out to be non-viable relative to the parity
-margin $\Delta$, that is the ablation that makes the \texttt{ddi\_qf}
-and bridge-$k$ results meaningful: it demonstrates that document
-isolation is affordable while query isolation is not, and it locates
-the boundary between the two. The value of the paper does not depend
-on any variant beating a baseline; it depends on the frontier being
-mapped honestly.
+SEP-row bridge --- is non-viable at the parity margin $\Delta$ on the
+primary instruct model; the ablation demonstrates that document
+isolation is affordable while query isolation is not, and locates the
+boundary between the two. Multi-hop parity misses $\Delta$ at
+train-free evaluation, and the miss is task-family-dependent within
+multi-hop (Section~\ref{sec:failure-envelope-hop}); the honest reading
+is a split verdict, not a blanket parity claim. The value of the paper
+does not depend on any variant beating a baseline; it depends on the
+frontier being mapped honestly.

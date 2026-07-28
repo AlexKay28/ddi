@@ -52,6 +52,15 @@
     \end{center}%
 }
 
+% \todo{text} — inline prose stub used by the section audit
+% (paper/AUDIT_NOTES.md) to flag claims that need evidence from a future
+% experimental pass. Renders as a highlighted bracketed note so a reader
+% cannot miss it. Distinct from \todoreport, which stands in for a
+% missing table or figure.
+\newcommand{\todo}[1]{%
+    \textbf{\color{red}[TODO: #1]}%
+}
+
 % \figureifexists{path}{caption}{label} — include a generated figure if
 % build.sh actually produced it; otherwise fall back to a \todoreport
 % stub. Keeps the paper compilable in a container with an empty store.
