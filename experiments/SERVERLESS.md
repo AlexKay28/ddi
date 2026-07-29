@@ -51,12 +51,12 @@ already be mirrored to YT (currently: `Qwen2.5-7B-Instruct`, `Qwen2.5-7B`,
 `Llama-3.1-8B-Instruct`) — if it isn't, someone with HF access needs to `hf-fetch` it
 once and re-upload before `yt-fetch` will find it.
 
-Do this for every model an experiment references. The four C1/C3 YAMLs together
-reference two models, one each:
-`qwen_instruct_c1.yaml` / `qwen_instruct_c3.yaml` → `Qwen/Qwen2.5-7B-Instruct`;
-`llama_instruct_c1.yaml` / `llama_instruct_c3.yaml` → `meta-llama/Llama-3.1-8B-Instruct`.
-The three C4 YAMLs (`cache_correctness_c4`, `cache_throughput_c4`,
-`restart_quality_c4`) all use `Qwen/Qwen2.5-7B-Instruct`.
+No YAML names a model — it's chosen at invocation time via `MODEL=` (see step 4).
+Do this fetch for every model you plan to pass. On `main`, `c1.yaml` / `c3.yaml`
+are each run twice — once with `Qwen/Qwen2.5-7B-Instruct`, once with
+`meta-llama/Llama-3.1-8B-Instruct` — and the three C4 YAMLs
+(`cache_correctness_c4`, `cache_throughput_c4`, `restart_quality_c4`) are run with
+`Qwen/Qwen2.5-7B-Instruct`.
 
 **If `HF_HOME` is not a persistent volume,** the fetch is thrown away when the
 container exits and every run re-downloads ~15 GB. Mount the volume.
@@ -65,7 +65,7 @@ container exits and every run re-downloads ~15 GB. Mount the volume.
 
 ```bash
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_HOME=/mnt/models \
-  make exp-qwen_instruct_c1
+  make exp-c1 MODEL=Qwen/Qwen2.5-7B-Instruct
 ```
 
 The two `*_OFFLINE=1` flags force `transformers` and `huggingface_hub` to fail loudly
@@ -74,16 +74,21 @@ every run" bugs. They are set by the **operator**, not by the Makefile, so a
 misconfigured cache surfaces immediately rather than being papered over.
 
 The runner writes rows to `results/runs.jsonl` and emits
-`logs/qwen_instruct_c1_summary.md` from the YAML's `report:` block. Substitute any
-of the seven YAML names — same command shape works for `exp-cache_correctness_c4`,
-`exp-cache_throughput_c4`, `exp-restart_quality_c4`, and the C1/C3 variants.
+`logs/c1_summary.md` from the YAML's `report:` block. Substitute any of the five
+YAML names and the matching `MODEL=` — same command shape works for
+`exp-cache_correctness_c4`, `exp-cache_throughput_c4`, `exp-restart_quality_c4`
+(all `MODEL=Qwen/Qwen2.5-7B-Instruct`), and `exp-c1` / `exp-c3` with either model.
+The store (`results/runs.jsonl`) is append-only and the aggregator scans it in
+full each time, so running `exp-c1` once per model and letting the second run's
+`make` invocation redo the aggregate step is enough — the resulting summary ends
+up with one section per model that has rows in the store.
 
 ### 5. Verify before publishing
 
 Before pasting the summary into a GitHub issue, sanity-check the run:
 
 ```bash
-grep -E "FAIL|Traceback|OOM" logs/qwen_instruct_c1_summary.md logs/*.log 2>/dev/null | head
+grep -E "FAIL|Traceback|OOM" logs/c1_summary.md logs/*.log 2>/dev/null | head
 ```
 
 Zero hits = clean run. Otherwise, inspect the offending cell in
@@ -93,7 +98,7 @@ without flash-attn per #70; OOM per the one-per-GPU rule above) or real.
 ### 6. Publish the summary to the tracking issue
 
 ```bash
-make publish-summary SUMMARY=logs/qwen_instruct_c1_summary.md ISSUE=74
+make publish-summary SUMMARY=logs/c1_summary.md ISSUE=74
 ```
 
 This posts the rendered Markdown (tables + provenance footer per

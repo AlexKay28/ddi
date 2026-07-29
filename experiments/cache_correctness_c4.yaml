@@ -13,7 +13,6 @@
 # Schema:   experiments/README.md + issue #81 YAML format section.
 
 kind: cache
-model: Qwen/Qwen2.5-7B-Instruct
 seed: 0
 task: correctness
 modes: [ddi_cache, ddi_recompute, full_causal]

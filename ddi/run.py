@@ -1296,7 +1296,11 @@ _DISPATCH = {
 }
 
 
-def run(yaml_path: Path, seed_override: int | None = None) -> None:
+def run(
+    yaml_path: Path,
+    seed_override: int | None = None,
+    model_override: str | None = None,
+) -> None:
     """Load a YAML file and dispatch on `kind:`."""
     cfg, cfg_hash = load_yaml(yaml_path)
     kind = cfg.get("kind")
@@ -1305,6 +1309,13 @@ def run(yaml_path: Path, seed_override: int | None = None) -> None:
     if kind not in _DISPATCH:
         raise ValueError(
             f"YAML at {yaml_path}: unknown kind {kind!r}; expected one of {sorted(_DISPATCH)}"
+        )
+
+    if model_override is not None:
+        cfg["model"] = model_override
+    elif "model" not in cfg:
+        raise ValueError(
+            f"YAML at {yaml_path}: 'model' must be set in the YAML or overridden with --model"
         )
 
     if seed_override is not None:
@@ -1330,8 +1341,14 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="override seed from YAML (falls back to YAML `seed:` if unset)",
     )
+    parser.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        help="model to run (required unless the YAML sets `model:`)",
+    )
     args = parser.parse_args(argv)
-    run(args.yaml_path, seed_override=args.seed)
+    run(args.yaml_path, seed_override=args.seed, model_override=args.model)
     return 0
 
 

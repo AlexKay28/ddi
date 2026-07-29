@@ -31,28 +31,16 @@ are out of scope for the preprint and their experiments are not indexed here.
 
 ## Index
 
+None of these YAMLs name a model — `make exp-<name> MODEL=<hf-id>` supplies it at
+invocation time, so the same file drives every model in the sweep.
+
 | YAML | claim | one-line purpose | tracking issue |
 |---|---|---|---|
-| [`qwen_instruct_c1.yaml`](qwen_instruct_c1.yaml) | C1 | Qwen2.5-7B-Instruct quality parity across the five direct QA datasets (NQ, HotpotQA, MuSiQue, KILT-NQ, synthetic) under `full` / `ddi_qf` / `blind`. | [#74](https://github.com/AlexKay28/ddi/issues/74) |
-| [`llama_instruct_c1.yaml`](llama_instruct_c1.yaml) | C1 | Llama-3.1-8B-Instruct quality parity across the same five datasets and mask set. | [#75](https://github.com/AlexKay28/ddi/issues/75) |
-| [`qwen_instruct_c3.yaml`](qwen_instruct_c3.yaml) | C3 | Qwen timing grid over `(N, L, backend, mask)` — TTFT / TPOT / analytical / realized / realization ratio. | [#74](https://github.com/AlexKay28/ddi/issues/74) |
-| [`llama_instruct_c3.yaml`](llama_instruct_c3.yaml) | C3 | Llama timing grid, same axes. | [#75](https://github.com/AlexKay28/ddi/issues/75) |
+| [`c1.yaml`](c1.yaml) | C1 | Quality parity across the five direct QA datasets (NQ, HotpotQA, MuSiQue, KILT-NQ, synthetic) under `full` / `ddi_qf` / `blind`. Run with `MODEL=Qwen/Qwen2.5-7B-Instruct` → [#74](https://github.com/AlexKay28/ddi/issues/74), `MODEL=meta-llama/Llama-3.1-8B-Instruct` → [#75](https://github.com/AlexKay28/ddi/issues/75). | #74 / #75 |
+| [`c3.yaml`](c3.yaml) | C3 | Timing grid over `(N, L, backend, mask)` — TTFT / TPOT / analytical / realized / realization ratio. Same model→issue mapping as `c1.yaml`. | #74 / #75 |
 | [`cache_correctness_c4.yaml`](cache_correctness_c4.yaml) | C4 | Correctness gate for per-document KV cache reuse — cached logits match recomputed logits within tolerance. | *(pending — filed under C4 rollup)* |
 | [`cache_throughput_c4.yaml`](cache_throughput_c4.yaml) | C4 | Cached vs. recomputed throughput on repeated documents; replaces the legacy F5 figure. | *(pending — filed under C4 rollup)* |
 | [`restart_quality_c4.yaml`](restart_quality_c4.yaml) | C4 | Restart-position layout produces the same answers as sequential layout — parity precondition for cross-request cache reuse. | *(pending — filed under C4 rollup)* |
-
----
-
-## Legacy bash drivers
-
-The `exp_01_*.bash` and `exp_02_*.bash` scripts in this directory are historical —
-they were the Phase 1 / Phase 2 driver shape from before the YAML refactor and were
-moved here from the repo root by [#87](https://github.com/AlexKay28/ddi/issues/87)
-to preserve `git log --follow` history. They are not part of the current flow and
-are not indexed above. The one exception is `exp_3_grid.bash`, which was rewritten
-in [#87](https://github.com/AlexKay28/ddi/issues/87) as a thin wrapper that shells
-out to `python -m ddi.run` over the four C1/C3 YAMLs — kept as a "run both models"
-convenience.
 
 ---
 
@@ -61,14 +49,18 @@ convenience.
 Two steps, no Python:
 
 1. **Write the YAML** in this directory. Copy the closest existing file, pick a
-   `kind:` (`quality` / `timing` / `cache`), name it `<model>_<claim>.yaml` or
-   `<task>_c<n>.yaml` to match the index scheme.
-2. **Run it** with `make exp-<name>` (drop the `.yaml`). The `Makefile` has a
-   pattern rule — no new `Makefile` line is needed.
+   `kind:` (`quality` / `timing` / `cache`), name it `<claim>.yaml` or
+   `<task>_c<n>.yaml` to match the index scheme. Do **not** hardcode a `model:`
+   key — the model is supplied at invocation time (see below) so one YAML serves
+   every model in the sweep.
+2. **Run it** with `make exp-<name> MODEL=<hf-id>` (drop the `.yaml`). The
+   `Makefile` has a pattern rule — no new `Makefile` line is needed.
 
-The runner (`python -m ddi.run experiments/<name>.yaml`) writes rows to
-`results/runs.jsonl` and emits `logs/<name>_summary.md` from the YAML's `report:`
-block. Publish it to the tracking issue with:
+The runner (`python -m ddi.run experiments/<name>.yaml --model <hf-id>`) writes
+rows to `results/runs.jsonl` and emits `logs/<name>_summary.md` from the YAML's
+`report:` block. `ddi.aggregate` groups by model automatically, so running the
+same YAML with two different `MODEL=` values against the same store produces one
+summary with a section per model. Publish it to the tracking issue with:
 
 ```
 make publish-summary SUMMARY=logs/<name>_summary.md ISSUE=<n>

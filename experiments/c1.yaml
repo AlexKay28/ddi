@@ -1,16 +1,15 @@
-# C1 — quality parity for Qwen2.5-7B-Instruct across the four direct QA datasets.
+# C1 — quality parity across the four direct QA datasets.
 #
-# One row per (mask, dataset) cell for each of the four quality metrics. Non-inferiority
-# vs. `full` is judged against the C1 margin Δ in paper/RESEARCH_PLAN.md.
+# Model-agnostic: run once per model with `make exp-c1 MODEL=<hf-id>`. On `main` this
+# is exercised against Qwen2.5-7B-Instruct (tracking: #74) and Llama-3.1-8B-Instruct
+# (tracking: #75) — same axes, same margin `Δ`, different model each invocation.
 #
 # ``nq`` was dropped in #105: it is degenerate (no docs), the aggregator silently drops
 # every row, and the runner wastes ~300 record-passes on it per sweep.
 #
-# Tracking: https://github.com/AlexKay28/ddi/issues/74
-# Schema:   experiments/README.md + issue #81 YAML format section.
+# Schema: experiments/README.md + issue #81 YAML format section.
 
 kind: quality
-model: Qwen/Qwen2.5-7B-Instruct
 seed: 0
 datasets: [hotpot_qa, musique, kilt_nq, synthetic_qa]
 masks: [full, ddi_qf, blind]

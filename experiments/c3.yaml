@@ -1,12 +1,18 @@
-# C3 — timing grid for Llama-3.1-8B-Instruct.
+# C3 — timing grid.
 #
-# Mirror of qwen_instruct_c3.yaml, different model. Same 108-cell shape.
+# Model-agnostic: run once per model with `make exp-c3 MODEL=<hf-id>`. On `main` this
+# is exercised against Qwen2.5-7B-Instruct (tracking: #74) and Llama-3.1-8B-Instruct
+# (tracking: #75) — same 108-cell shape either way.
 #
-# Tracking: https://github.com/AlexKay28/ddi/issues/75
-# Schema:   experiments/README.md + issue #81 YAML format section.
+# 3 masks x 6 Ns x 3 Ls x 2 backends = 108 cells. One table per timing metric,
+# split into blocks by (L, backend) so each block is a clean rows=mask, cols=N grid.
+#
+# fa2 cells may fail on machines without flash-attn (blocked by #70); the runner
+# annotates rather than aborting.
+#
+# Schema: experiments/README.md + issue #81 YAML format section.
 
 kind: timing
-model: meta-llama/Llama-3.1-8B-Instruct
 seed: 0
 Ns: [1, 3, 5, 9, 13, 25]
 Ls: [128, 512, 2048]

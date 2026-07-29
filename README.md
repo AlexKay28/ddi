@@ -128,12 +128,12 @@ uv sync
 HF_HOME=/mnt/models make hf-fetch MODEL=Qwen/Qwen2.5-7B-Instruct
 
 # 3. Run an experiment offline; the runner writes a Markdown summary
-#    with a provenance footer.
+#    with a provenance footer. No YAML names a model — pass it via MODEL=.
 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_HOME=/mnt/models \
-  make exp-qwen_instruct_c1
+  make exp-c1 MODEL=Qwen/Qwen2.5-7B-Instruct
 
 # 4. Publish the summary as a comment on its tracking issue.
-make publish-summary SUMMARY=logs/qwen_instruct_c1_summary.md ISSUE=74
+make publish-summary SUMMARY=logs/c1_summary.md ISSUE=74
 ```
 
 New experiment = new YAML in `experiments/`. `make exp-<name>` picks it up via a

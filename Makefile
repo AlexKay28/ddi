@@ -7,7 +7,7 @@ YT_MODELS_ROOT ?= //home/gena/alexkay28/tickets/ALIGNMENT-2445/models
 
 help:
 	@echo "usage:"
-	@echo "  make exp-<name>                    # run experiments/<name>.yaml end-to-end"
+	@echo "  make exp-<name> MODEL=<hf-id>       # run experiments/<name>.yaml end-to-end"
 	@echo "  make hf-fetch MODEL=<hf-id>        # cache a HF model into HF_HOME (from HF Hub)"
 	@echo "  make yt-fetch MODEL=<hf-id>        # cache a HF model into HF_HOME (from YT, no HF access needed)"
 	@echo "  make publish-summary SUMMARY=... ISSUE=<n>"
@@ -15,9 +15,11 @@ help:
 	@echo "  make list-experiments              # list all available exp-* targets"
 	@echo "  make gpu-check                     # confirm CUDA is visible"
 
-# One-shot experiment: matches any experiments/<name>.yaml
+# One-shot experiment: matches any experiments/<name>.yaml. MODEL is optional at
+# the make layer — ddi.run itself raises loudly if the YAML has no `model:` and
+# no --model was passed.
 exp-%:
-	uv run python -m ddi.run experiments/$*.yaml
+	uv run python -m ddi.run experiments/$*.yaml $(if $(MODEL),--model $(MODEL))
 	uv run python -m ddi.aggregate experiments/$*.yaml --out logs/$*_summary.md
 
 # Fetch a HF model once from the HF Hub (respects HF_HOME).
