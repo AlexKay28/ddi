@@ -24,20 +24,16 @@ report = ["pandas", "matplotlib"]
 dev = ["pytest", "pytest-cov", "ruff"]
 
 [project.scripts]
-ddi-run = "ddi.cli:main"
-ddi-audit = "ddi.audit_cli:main"
+ddi-run = "ddi.run:main"
+ddi-aggregate = "ddi.aggregate:main"
 ddi-delta = "ddi.delta_cli:main"
-ddi-report = "ddi.report_cli:main"
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["ddi", "ddi.configs", "ddi.data", "ddi.runners"]
-
-[tool.setuptools.package-data]
-"ddi.configs" = ["*.yaml"]
+packages = ["ddi", "ddi.data"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

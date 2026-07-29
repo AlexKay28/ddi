@@ -55,16 +55,57 @@ The YAML block shape (excerpt from #81):
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections import defaultdict
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from ddi.report import filter_rows, iter_rows
 from ddi.reports._provenance import render_provenance_footer
+
+
+# ---- Store readers (inlined from the deleted ddi.report in #89) ----------------------------
+#
+# The append-only JSONL store has one row per (run_id, metric) — see ddi.store.append. These
+# iterators used to live in ddi/report.py; they were moved here in #89 when that module was
+# deleted because ddi.aggregate is now the only in-tree consumer.
+
+
+def iter_rows(store: Path) -> Iterator[dict]:
+    """Yield rows from the JSONL store in file order.
+
+    The store is append-only so file order is deterministic; every downstream
+    aggregation that needs a stable tie-break relies on this ordering.
+    """
+    with open(store, encoding="utf-8") as f:
+        for raw in f:
+            line = raw.strip()
+            if not line:
+                continue
+            yield json.loads(line)
+
+
+def filter_rows(
+    rows: Iterable[dict],
+    *,
+    metric: str | None = None,
+    run_id: str | None = None,
+    provenance: dict | None = None,
+) -> Iterator[dict]:
+    """Filter rows by metric, run_id, and/or a subset match on nested provenance."""
+    for row in rows:
+        if metric is not None and row.get("metric") != metric:
+            continue
+        if run_id is not None and row.get("run_id") != run_id:
+            continue
+        if provenance is not None:
+            prov = row.get("provenance") or {}
+            if not all(prov.get(k) == v for k, v in provenance.items()):
+                continue
+        yield row
 
 # ---- Colorization contract (from color_tables.py, #72 Qwen comment) ------------------------
 #

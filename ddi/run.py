@@ -46,9 +46,26 @@ from ddi.metrics import (
     token_f1,
 )
 from ddi.provenance import capture
-from ddi.runners._shared import shifted_cross_entropy
 from ddi.store import DEFAULT_STORE, append
 from ddi.timing import append_timing, measure_decode, measure_prefill
+
+
+def shifted_cross_entropy(logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+    """Standard next-token-shifted cross-entropy with `-100` ignored.
+
+    Predicts position `t` from logits at position `t-1`. `labels` is expected to
+    be a `[batch, seq]` tensor with `-100` outside the answer span (see
+    ``ddi.metrics.make_answer_labels``) so cross-entropy is restricted to answer
+    tokens. Inlined from the deleted ``ddi.runners._shared`` in #89 so the
+    formula stays bit-identical to the pre-#89 baseline / train-free rows.
+    """
+    shift_logits = logits[..., :-1, :].contiguous()
+    shift_labels = labels[..., 1:].contiguous()
+    return torch.nn.functional.cross_entropy(
+        shift_logits.view(-1, shift_logits.size(-1)),
+        shift_labels.view(-1),
+        ignore_index=-100,
+    )
 
 # ---------------------------------------------------------------------------
 # YAML loading + seed helper.
@@ -568,6 +585,217 @@ def _cache_correctness(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path
                 _log_cell_failure(cell_desc, exc)
 
 
+# ---------------------------------------------------------------------------
+# Throughput inner loop — inlined from ddi/runners/phase4_throughput.py in #89.
+#
+# The helpers below (`_sample_doc_indices`, `_time_doc_prefill`,
+# `_time_query_prefill`, `_time_full_causal`, `_one_request`) were previously
+# imported lazily from `ddi.runners.phase4_throughput`. That module is deleted
+# by #89, so the helpers move here verbatim to keep the ddi_cache /
+# ddi_recompute / full_causal timing shape bit-identical to the pre-#89 runner.
+# ---------------------------------------------------------------------------
+
+
+def _sample_doc_indices(
+    rng: np.random.Generator,
+    n_requests: int,
+    docs_per_request: int,
+    top_docs: int,
+    distribution: str,
+    zipf_a: float,
+) -> list[list[int]]:
+    """Return one list of `docs_per_request` distinct doc indices per request."""
+    if distribution not in ("zipf", "uniform", "fixed"):
+        raise ValueError(
+            f"unknown reuse_distribution {distribution!r}; expected zipf | uniform | fixed"
+        )
+    if docs_per_request > top_docs:
+        raise ValueError(
+            f"docs_per_request={docs_per_request} must be <= top_docs={top_docs}"
+        )
+
+    if distribution == "fixed":
+        base = list(range(docs_per_request))
+        return [list(base) for _ in range(n_requests)]
+
+    requests: list[list[int]] = []
+    if distribution == "uniform":
+        for _ in range(n_requests):
+            requests.append(
+                rng.choice(top_docs, size=docs_per_request, replace=False).tolist()
+            )
+        return requests
+
+    ranks = np.arange(1, top_docs + 1, dtype=np.float64)
+    weights = ranks ** (-zipf_a)
+    weights /= weights.sum()
+    for _ in range(n_requests):
+        picked: list[int] = []
+        seen: set[int] = set()
+        for _ in range(docs_per_request * 20):
+            idx = int(rng.choice(top_docs, p=weights))
+            if idx in seen:
+                continue
+            seen.add(idx)
+            picked.append(idx)
+            if len(picked) == docs_per_request:
+                break
+        for tail in range(top_docs - 1, -1, -1):
+            if len(picked) == docs_per_request:
+                break
+            if tail not in seen:
+                seen.add(tail)
+                picked.append(tail)
+        requests.append(picked)
+    return requests
+
+
+def _time_doc_prefill(model, tokenizer, doc_text: str, layout: str) -> float:
+    """Time one `compute_doc_kv`-shaped forward and return elapsed ms."""
+    from ddi.positions import build_positions
+
+    doc_ids = tokenizer(doc_text, return_tensors="pt", add_special_tokens=False).input_ids
+    doc_len = int(doc_ids.shape[-1])
+    input_ids = doc_ids.to(model.device)
+    positions = build_positions([doc_len], 0, 0, layout).unsqueeze(0).to(model.device)  # type: ignore[arg-type]
+    allow = build_mask([doc_len], query_len=0, answer_len=0, variant="full")
+    additive = to_additive(allow, dtype=model.dtype).to(model.device).unsqueeze(0).unsqueeze(0)
+
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    t0 = time.perf_counter()
+    with torch.no_grad():
+        model(
+            input_ids=input_ids,
+            attention_mask=additive,
+            position_ids=positions,
+            use_cache=True,
+        )
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    return (time.perf_counter() - t0) * 1000.0
+
+
+def _time_query_prefill(
+    model,
+    tokenizer,
+    query_text: str,
+    n_new_tokens: int,
+) -> float:
+    """Time a query-only masked prefill + greedy decode; returns elapsed ms."""
+    ids = tokenizer(query_text, return_tensors="pt", add_special_tokens=False).input_ids.to(
+        model.device
+    )
+    q_len = ids.shape[-1]
+    allow = build_mask([q_len], query_len=0, answer_len=0, variant="full")
+    additive = to_additive(allow, dtype=model.dtype).to(model.device).unsqueeze(0).unsqueeze(0)
+
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    t0 = time.perf_counter()
+    with torch.no_grad():
+        out = model(input_ids=ids, attention_mask=additive, use_cache=True)
+        past = out.past_key_values
+        next_token = out.logits[0, -1].argmax(dim=-1, keepdim=True).unsqueeze(0)
+        for _ in range(n_new_tokens):
+            step = model(
+                input_ids=next_token,
+                past_key_values=past,
+                use_cache=True,
+            )
+            past = step.past_key_values
+            next_token = step.logits[0, -1].argmax(dim=-1, keepdim=True).unsqueeze(0)
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    return (time.perf_counter() - t0) * 1000.0
+
+
+def _time_full_causal(
+    model,
+    tokenizer,
+    doc_texts: list[str],
+    query_text: str,
+    n_new_tokens: int,
+) -> float:
+    """Time one full-causal prefill on `docs + query` + greedy decode; returns elapsed ms."""
+    doc_ids_list = [
+        tokenizer(doc, return_tensors="pt", add_special_tokens=False).input_ids
+        for doc in doc_texts
+    ]
+    query_ids = tokenizer(
+        query_text, return_tensors="pt", add_special_tokens=False
+    ).input_ids
+    full_ids = torch.cat(doc_ids_list + [query_ids], dim=-1).to(model.device)
+    T = full_ids.shape[-1]
+
+    allow = build_mask([T], query_len=0, answer_len=0, variant="full")
+    additive = to_additive(allow, dtype=model.dtype).to(model.device).unsqueeze(0).unsqueeze(0)
+
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    t0 = time.perf_counter()
+    with torch.no_grad():
+        out = model(input_ids=full_ids, attention_mask=additive, use_cache=True)
+        past = out.past_key_values
+        next_token = out.logits[0, -1].argmax(dim=-1, keepdim=True).unsqueeze(0)
+        for _ in range(n_new_tokens):
+            step = model(
+                input_ids=next_token,
+                past_key_values=past,
+                use_cache=True,
+            )
+            past = step.past_key_values
+            next_token = step.logits[0, -1].argmax(dim=-1, keepdim=True).unsqueeze(0)
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    return (time.perf_counter() - t0) * 1000.0
+
+
+def _one_request(
+    mode: str,
+    model,
+    tokenizer,
+    doc_indices: list[int],
+    docs: list[str],
+    doc_keys: list[str],
+    cache: Any,
+    query_text: str,
+    n_new_tokens: int,
+    layout: str,
+) -> tuple[int, int]:
+    """Execute one request under `mode`; return (hits, lookups) for cache accounting.
+
+    Non-cache modes always return (0, 0).
+    """
+    if mode == "full_causal":
+        _time_full_causal(
+            model, tokenizer, [docs[i] for i in doc_indices], query_text, n_new_tokens
+        )
+        return 0, 0
+
+    hits = 0
+    lookups = len(doc_indices)
+    for doc_idx in doc_indices:
+        if mode == "ddi_cache" and cache is not None and cache.has(doc_keys[doc_idx]):
+            hits += 1
+            continue
+        _time_doc_prefill(model, tokenizer, docs[doc_idx], layout)
+        if mode == "ddi_cache" and cache is not None:
+            from ddi.cache import CacheEntry
+
+            cache.put(
+                CacheEntry(
+                    key=doc_keys[doc_idx],
+                    k_per_layer=[],
+                    v_per_layer=[],
+                    doc_len=0,
+                    layout=layout,  # type: ignore[arg-type]
+                )
+            )
+    _time_query_prefill(model, tokenizer, query_text, n_new_tokens)
+    return hits, lookups
+
+
 def _cache_throughput(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path: Path) -> None:
     """One row-block per `mode` in `modes:`; row shape matches phase4_throughput exactly.
 
@@ -578,7 +806,6 @@ def _cache_throughput(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path:
     from pathlib import Path as _Path
 
     from ddi.cache import DocCache, compute_key
-    from ddi.runners.phase4_throughput import _one_request  # reuse until #89
 
     model_name = _require(cfg, "model", "cache/throughput")
     modes = _require(cfg, "modes", "cache/throughput")
@@ -639,8 +866,6 @@ def _cache_throughput(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path:
             # are directly comparable between modes even if the RNG has advanced.
             mode_rng = np.random.default_rng(seed)
             index_stream: list[list[int]] = []
-            from ddi.runners.phase4_throughput import _sample_doc_indices
-
             index_stream = _sample_doc_indices(
                 mode_rng,
                 n_requests + warmup_requests,
