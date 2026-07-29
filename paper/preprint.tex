@@ -103,13 +103,12 @@ mask with a block-diagonal one: each document is causal within itself and blind
 to every other document, while the query and answer regions bridge the blocks.
 We frame the study as a characterization rather than a method-wins result:
 we ask how much cross-document attention can be removed before answer quality
-degrades on parity benchmarks, and what removing it actually buys in terms of
-prefill cost and per-document key/value cache reuse. The mask family is
-parameterized by a bridge width $k$ that continuously interpolates between full
-query--document attention and a single SEP-row bridge, letting us locate the
-knee of the quality/speed frontier rather than test a single design point.
-All tables and figures in this preprint are regenerated from the results store
-by \texttt{paper/build.sh}; empty cells are surfaced as explicit TODOs.
+degrades on single-hop parity benchmarks, and what removing it actually buys
+in terms of prefill cost and per-document key/value cache reuse. Multi-hop
+failure characterization, PCW comparison, and fine-tuning are out of scope
+for this preprint. All tables and figures in this preprint are regenerated
+from the results store by \texttt{paper/build.sh}; empty cells are surfaced
+as explicit TODOs.
 \end{abstract}
 
 % ---------------------------------------------------------------------
@@ -124,7 +123,6 @@ by \texttt{paper/build.sh}; empty cells are surfaced as explicit TODOs.
 \input{sections/04_results_quality.tex}
 \input{sections/05_results_efficiency.tex}
 \input{sections/06_results_caching.tex}
-\input{sections/07_failure_envelope.tex}
 \input{sections/08_limitations_conclusion.tex}
 
 % ---------------------------------------------------------------------

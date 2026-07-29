@@ -17,12 +17,10 @@ Inference restricts this pattern to a block-diagonal structure over the
 document region, parameterized by which query rows are allowed to bridge
 the blocks.
 
-Table~\ref{tab:mask-taxonomy} enumerates the mask variants: \texttt{full}
-(baseline), \texttt{ddi\_qf} (documents isolated, whole query bridges),
-\texttt{ddi\_strict} (documents isolated, only the last query row bridges),
-\texttt{ddi\_bridge\_k} (a continuous family with the last $k$ query rows
-bridging, so $k=1$ recovers \texttt{ddi\_strict} and $k=Q$ recovers
-\texttt{ddi\_qf}), and \texttt{blind} (all-zero mask over documents,
+Table~\ref{tab:mask-taxonomy} enumerates the mask variants in scope:
+\texttt{full} (baseline), \texttt{ddi\_qf} (documents isolated, whole
+query bridges), \texttt{ddi\_strict} (documents isolated, only the last
+query row bridges), and \texttt{blind} (all-zero mask over documents,
 retained as a control that verifies each metric measures retrieval).
 
 \begin{table}[t]
@@ -36,10 +34,6 @@ retained as a control that verifies each metric measures retrieval).
     \todoreport{T1 mask taxonomy missing}{make paper}%
 }
 \end{table}
-
-The \texttt{ddi\_bridge\_k} family is the pivot of the study: sweeping $k$
-traces the quality/cost frontier as a curve rather than picking a single
-design point, and locates the operating knee (Section~\ref{sec:results-quality}).
 
 \subsection{Cost model}
 \label{sec:method-cost}
@@ -101,8 +95,7 @@ fix a non-inferiority margin $\Delta$ from the full baseline's own seed
 variance, on the same metric and the same evaluation set. A DDI candidate
 satisfies the parity claim iff its gap to full is smaller than $\Delta$ at
 the seed count used. Any benchmark whose noise floor exceeds $\Delta$
-cannot support the parity claim and moves to the failure-envelope side of
-the study (Section~\ref{sec:failure-envelope}).
+cannot support the parity claim and is excluded from the parity table.
 
 Concretely, $\Delta$ is computed as $k\cdot \sigma_{\text{full}}$ for a
 fixed $k$ committed alongside the baseline it was derived from, using the

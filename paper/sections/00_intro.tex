@@ -39,44 +39,24 @@ We characterize a mask family that isolates each retrieved document from
 every other. The two design points explored in the prior literature ---
 Fusion-in-Decoder~\citep{izacard2021fid} and Parallel Context
 Windows~\citep{ratner2023pcw} --- correspond to a single choice on this axis;
-we instead measure the full family and locate the knee. Concretely:
+this preprint measures three axes of that choice on single-hop
+retrieval. Concretely:
 \begin{itemize}
     \item We formalize the mask family (Section~\ref{sec:method}) and its
-          cost model, including a bridge-width parameter $k$ that
-          continuously interpolates between full query--document attention
-          and a single SEP-row bridge.
+          cost model.
     \item We fix a non-inferiority margin $\Delta$ from the seed variance of
           the full-causal baseline (Section~\ref{sec:method}) so parity
           claims are falsifiable rather than eyeballed.
-    \item We measure how much cross-document attention can be removed at each
-          bridge width, on parity-detection benchmarks
-          (Section~\ref{sec:results-quality}), and pair every quality point
-          with a realized prefill speedup on the same
-          axes (Section~\ref{sec:results-efficiency}). Parity is
-          \emph{conditional}: \texttt{ddi\_qf} matches the full-causal
-          baseline within $\Delta$ on single-document retrieval, but degrades
-          on cross-document composition and aggregation
-          (Section~\ref{sec:failure-envelope}).
+    \item We measure how much cross-document attention can be removed on
+          single-hop parity-detection benchmarks
+          (Section~\ref{sec:results-quality}) and report the realized
+          prefill speedup on the same axes
+          (Section~\ref{sec:results-efficiency}).
     \item We measure per-document KV-cache reuse under a position-restart
-          layout (Section~\ref{sec:results-caching}). This is the
-          load-bearing efficiency result: a cache hit skips prefill entirely,
-          which no kernel improvement under full causal attention can match,
-          and is the only wall-clock speedup path this paper measures as
-          working end-to-end (the prefill-only speedup of
-          Section~\ref{sec:results-efficiency} does not translate to
-          realized time under an \texttt{sdpa} backend at the shapes
-          tested).
-    \item We report the failure envelope
-          (Section~\ref{sec:failure-envelope}): degradation on questions that
-          require composing or aggregating evidence across documents, versus
-          questions that do not. Within multi-hop, the degradation is itself
-          strongly task-family-dependent --- \texttt{ddi\_qf}'s F1 recovery
-          spans roughly $12\%$ (aggregation) to $78\%$ (needle-in-haystack)
-          across the \texttt{ddi\_stress} families. This bounds the
-          operating regime and is the honest counterweight to the parity
-          claim.
+          layout (Section~\ref{sec:results-caching}). This is co-headline: a
+          cache hit skips prefill entirely, which no kernel improvement under
+          full causal attention can match.
 \end{itemize}
 The framing throughout is a characterization study rather than a benchmark
-win. \texttt{ddi\_strict} does turn out to be non-viable at the parity
-margin $\Delta$; the negative result is a contribution: it is the ablation
-that makes the \texttt{ddi\_qf} and bridge-$k$ results meaningful.
+win. Multi-hop failure characterization, PCW comparison, and fine-tuning
+are out of scope for this preprint (Section~\ref{sec:limitations}).
