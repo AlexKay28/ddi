@@ -5,6 +5,17 @@
 YT_PROXY ?= watt
 YT_MODELS_ROOT ?= //home/gena/alexkay28/tickets/ALIGNMENT-2445/models
 
+# Python interpreter used by every target below except `test`. Default is the
+# system `python3` — matches the offline serverless container's setup where
+# torch/transformers/numpy are pre-installed at the OS level. Override on a
+# dev machine to run inside the uv-managed venv:
+#
+#   PY="uv run --no-sync python" make exp-c1 MODEL=Qwen/Qwen2.5-7B-Instruct
+#
+# `test` intentionally does its own `uv sync --extra dev` + `uv run python -m
+# pytest` — that target is meant for a networked dev box, not the container.
+PY ?= python3
+
 help:
 	@echo "usage:"
 	@echo "  make exp-<name> MODEL=<hf-id>       # run experiments/<name>.yaml end-to-end"
@@ -18,19 +29,14 @@ help:
 # One-shot experiment: matches any experiments/<name>.yaml. MODEL is optional at
 # the make layer — ddi.run itself raises loudly if the YAML has no `model:` and
 # no --model was passed.
-#
-# `--no-sync`: don't re-check the lockfile at run time. Offline containers block
-# `download.pytorch.org` (pyproject.toml pins torch to the cu121 index), so any
-# `uv sync` triggered at run time would fail. The operator must have run
-# `uv sync` once on a networked node beforehand (SERVERLESS.md step 2).
 exp-%:
-	uv run --no-sync python -m ddi.run experiments/$*.yaml $(if $(MODEL),--model $(MODEL))
-	uv run --no-sync python -m ddi.aggregate experiments/$*.yaml --out logs/$*_summary.md
+	$(PY) -m ddi.run experiments/$*.yaml $(if $(MODEL),--model $(MODEL))
+	$(PY) -m ddi.aggregate experiments/$*.yaml --out logs/$*_summary.md
 
 # Fetch a HF model once from the HF Hub (respects HF_HOME).
 hf-fetch:
 	@test -n "$(MODEL)" || (echo "usage: make hf-fetch MODEL=<hf-id>" && exit 2)
-	uv run --no-sync python -c "from transformers import AutoModelForCausalLM, AutoTokenizer; \
+	$(PY) -c "from transformers import AutoModelForCausalLM, AutoTokenizer; \
 	           AutoTokenizer.from_pretrained('$(MODEL)'); \
 	           AutoModelForCausalLM.from_pretrained('$(MODEL)', torch_dtype='auto')"
 
@@ -75,4 +81,4 @@ list-experiments:
 	@ls experiments/*.yaml 2>/dev/null | xargs -n1 basename | sed 's/\.yaml//' | sed 's/^/  exp-/'
 
 gpu-check:
-	uv run --no-sync python -c "import torch; assert torch.cuda.is_available(); print('CUDA:', torch.cuda.get_device_name())"
+	$(PY) -c "import torch; assert torch.cuda.is_available(); print('CUDA:', torch.cuda.get_device_name())"
