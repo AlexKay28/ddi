@@ -3,9 +3,12 @@
 Research code for **DDI (Decoupled Document Inference)**: making RAG-style prefill cheaper by
 *not* letting retrieved documents attend to each other.
 
-> **Status: clean-room rebuild in progress.** A single clean implementation is being written
-> from zero. See [issue #1](https://github.com/AlexKay28/ddi/issues/1) for the roadmap and
-> [`paper/RESEARCH_PLAN.md`](paper/RESEARCH_PLAN.md) for the research design.
+> **Status: preprint in progress.** Core code + experiment pipeline in place after the
+> [#81 refactor](https://github.com/AlexKay28/ddi/issues/81). The preprint focuses on
+> three claims — **C1** (quality parity), **C3** (speed / realized-vs-analytical),
+> **C4** (KV-cache reuse under restart layout). See
+> [`paper/RESEARCH_PLAN.md`](paper/RESEARCH_PLAN.md) for the research design and
+> [`experiments/README.md`](experiments/README.md) for what runs.
 
 ---
 
@@ -57,51 +60,55 @@ Two properties make this attractive:
 | `ddi_bridge_k` | block-diagonal, mutually blind | last **k** query rows see all documents (interpolates strict ↔ qf) | sees all |
 | `blind` | all-zero mask over documents (control) | sees dialog only | sees dialog only |
 
-The clean rebuild ([issue #1](https://github.com/AlexKay28/ddi/issues/1) §0.2) treats these as
-one parameterised family with a single boolean allow-matrix builder. `ddi_bridge_k` sweeps the
-bridge width between the two endpoints; `blind` is the retrieval-measurement control (if a model
-scores well while seeing no documents, the metric is not measuring retrieval).
+All five variants share one parameterised boolean allow-matrix builder in `ddi/masks.py`.
+`ddi_bridge_k` sweeps the bridge width between the strict/qf endpoints (not exercised by the
+preprint's C1/C3/C4 experiments — see the scope note below). `blind` is the
+retrieval-measurement control: if a model scores well while seeing no documents, the metric is
+not measuring retrieval. In practice this check flagged `kilt_nq` on both instruct models
+(blind stays within ~10-25 % of `full` across F1/presence/loss) — parametric-memory answers
+dominate on NQ, so `kilt_nq` is treated as informational rather than evidential. See
+[#72's DDI conclusions](https://github.com/AlexKay28/ddi/issues/72#issuecomment-5115470772).
 
 ---
 
-## 2. Scope — models, benchmarks, roadmap
+## 2. Scope — models, datasets, paper claims
 
 ### Models
 
-Two primary models, base and instruct variants (per
-[issue #1](https://github.com/AlexKay28/ddi/issues/1) §2.1):
+Preprint measurements run on the instruct variants of two 7-8B models:
 
-- **Qwen2.5-7B** — `Qwen/Qwen2.5-7B` and `Qwen/Qwen2.5-7B-Instruct`
-- **Llama-3.1-8B** — `meta-llama/Llama-3.1-8B` and `meta-llama/Llama-3.1-8B-Instruct`
+- `Qwen/Qwen2.5-7B-Instruct` — see [#74](https://github.com/AlexKay28/ddi/issues/74)
+- `meta-llama/Llama-3.1-8B-Instruct` — see [#75](https://github.com/AlexKay28/ddi/issues/75)
 
-### Benchmarks
+Base variants (`Qwen/Qwen2.5-7B`, `meta-llama/Llama-3.1-8B`) are supported by the same
+inference / mask code but are not part of the preprint's measurement grid.
 
-Split by function rather than a single list — a parity-detection benchmark and a
-failure-envelope benchmark are different instruments
-([issue #1](https://github.com/AlexKay28/ddi/issues/1) §1.1):
+### Datasets
+
+The C1 quality grid runs on four productive datasets plus a null column:
 
 | purpose | dataset |
 |---|---|
-| Parity detection (headroom, low seed variance) | NQ, TriviaQA, HotpotQA |
-| Controllable `N` + gold-document position | Lost-in-the-Middle-style multi-doc QA (Liu et al. 2023) |
-| Cross-document stress | MoNaCo (`allenai/MoNaCo_Benchmark`); optionally 2WikiMultiHop, MuSiQue |
-| Comparability with prior work | ≥1 dataset that Parallel Context Windows (PCW) or Fusion-in-Decoder (FiD) reports on (likely NQ or TriviaQA) |
-| General RAG-native | Open RAG Bench (`vectara/open_ragbench`) |
+| Parity detection (single-hop retrieval Q&A) | `hotpot_qa`, `musique`, `kilt_nq` |
+| Synthetic single-hop signal (headroom, low variance) | `synthetic_qa` (in-house generator) |
+| Null column (no docs — all masks collapse to full) | `nq` |
 
-### Roadmap
+C3 (timing) and C4 (cache) grids use synthetic tokens — no dataset axis.
 
-Six phases in [issue #1](https://github.com/AlexKay28/ddi/issues/1); Phase 0 is blocking. Phases
-2, 3, 4 are independent once 0 and 1 land.
+Multi-hop failure-envelope datasets (MoNaCo / 2WikiMultiHop / `ddi_stress` families) and PCW
+baseline comparisons are **future work** — dropped from preprint scope in
+[#82](https://github.com/AlexKay28/ddi/issues/82).
 
-| phase | goal |
-|---|---|
-| 0 | Clean implementation + correctness gates (`N=1` equivalence, backend cross-check, doc-length regression) |
-| 1 | Datasets, metrics, `full` baseline, non-inferiority margin `Δ` fixed from seed variance |
-| 2 | Mask family quality — train-free primary, fine-tuned conditional, bridge-width sweep (paper centerpiece) |
-| 3 | Efficiency + realization-ratio analysis |
-| 4 | Per-document caching + retrieval-order invariance — **co-headline** with the prefill speedup |
-| 5 | Failure envelope: single-hop vs multi-hop, PCW baseline, cross-document composition probe |
-| 6 | Writeup |
+### Paper claims
+
+The preprint asserts three claims. C5 (failure envelope), C6 (distractor robustness), and
+the fine-tuning path are out of scope per [#82](https://github.com/AlexKay28/ddi/issues/82).
+
+| claim | what | evidence |
+|---|---|---|
+| **C1** | `ddi_qf` matches `full` within `Δ` on retrieval Q&A | measured on Qwen + Llama instruct grids ([#74](https://github.com/AlexKay28/ddi/issues/74), [#75](https://github.com/AlexKay28/ddi/issues/75)) |
+| **C3** | Speed: analytical ≠ realized — the gap is the story | measured on both instruct models; realization ratio 0.05–0.4 on `sdpa` |
+| **C4** | Per-document KV cache reuse under restart layout preserves quality and improves throughput | measured on Qwen; restart-vs-sequential parity within `Δ` |
 
 ---
 
@@ -136,11 +143,6 @@ pattern rule — no `Makefile` edit needed. See:
 - [`experiments/SERVERLESS.md`](experiments/SERVERLESS.md) — one-page operator
   recipe (container base, HF prefetch, offline mode, one-experiment-per-GPU rule).
 
-The refactor that produced this flow is tracked in
-[issue #81](https://github.com/AlexKay28/ddi/issues/81); the docs above describe
-the target state that lands after
-[#88](https://github.com/AlexKay28/ddi/issues/88).
-
 ---
 
 ## 4. Glossary
@@ -149,7 +151,7 @@ the target state that lands after
 |---|---|
 | **DDI** | Decoupled Document Inference — the block-diagonal document mask scheme |
 | **IC** | information context, i.e. one retrieved document |
-| **FTT** | first-token time; prefill latency |
+| **TTFT** | time to first token; prefill latency (also called `FTT` in some older code paths) |
 | **TPOT** | time per output token; decode latency |
 | **SEP trick** | forcing the last prefix row of an otherwise-isolated mask to attend to everything, so a single token bridges the blocks |
 | **`Δ`** | non-inferiority margin — the maximum quality loss vs `full` still called parity. Fixed from `full`'s seed-to-seed variance in Phase 1.4 before any DDI number is interpreted |
