@@ -64,6 +64,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
@@ -928,6 +929,11 @@ _RENDERERS: dict[str, Callable[[dict, Path], str]] = {
 }
 
 
+def _log(msg: str) -> None:
+    """Print a progress line to stderr with the [ddi.aggregate] prefix (flushed)."""
+    print(f"[ddi.aggregate] {msg}", file=sys.stderr, flush=True)
+
+
 def render_table(spec: dict, store: Path) -> str:
     """Render one ``report.tables[]`` entry to a Markdown string with provenance footer.
 
@@ -974,7 +980,20 @@ def aggregate(
     if not tables_spec:
         raise ValueError(f"{exp_yaml}: report.tables is empty — nothing to render.")
 
-    rendered: list[str] = [render_table(spec, store) for spec in tables_spec]
+    _log(f"loading YAML {exp_yaml}; {len(tables_spec)} table(s) to render from store {store}")
+    t0 = time.perf_counter()
+    rendered: list[str] = []
+    for i, spec in enumerate(tables_spec, 1):
+        kind = spec.get("kind", "?")
+        metric = spec.get("metric", "?")
+        t = time.perf_counter()
+        try:
+            block = render_table(spec, store)
+            rendered.append(block)
+            _log(f"  table {i}/{len(tables_spec)}: kind={kind} metric={metric} → OK ({time.perf_counter() - t:.2f}s)")
+        except Exception as exc:
+            _log(f"  table {i}/{len(tables_spec)}: kind={kind} metric={metric} → FAILED: {exc!r}")
+            raise
     body = "\n\n".join(rendered)
     if not body.endswith("\n"):
         body += "\n"
@@ -985,6 +1004,10 @@ def aggregate(
         if append and out.exists() and out.stat().st_size > 0:
             f.write("\n")
         f.write(body)
+    _log(
+        f"wrote {len(rendered)} table(s) to {out} "
+        f"({'append' if append else 'overwrite'}, {time.perf_counter() - t0:.2f}s total)"
+    )
 
 
 # ---- CLI -----------------------------------------------------------------------------------
