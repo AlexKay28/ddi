@@ -6,15 +6,22 @@ into a single ``summary.md``. Replaces every ``ddi/reports/*.py`` renderer.
 
 Dispatch on ``kind``:
 
-- ``quality``   → phase2_train_free rows, rows=mask × cols=dataset, cells with
-                  the #72 colorization contract (``value (Δ vs full)``, 🟢 when
-                  |Δ| < 5% of ``full`` and both values have signal).
-- ``timing``    → phase3_timing rows, rows=mask × cols=N. Optional
-                  ``split_by: [L, backend]`` emits one sub-table per group.
-                  ``realized`` and ``realization`` derived by pairing each
-                  variant row with the matching ``full`` row at the same
-                  ``(model, N, L, backend, seed)``.
-- ``throughput``→ phase4_throughput rows, rows=mode × cols=N.
+- ``quality``       → phase2_train_free rows, rows=mask × cols=dataset, cells with
+                      the #72 colorization contract (``value (Δ vs full)``, 🟢 when
+                      |Δ| < 5% of ``full`` and both values have signal).
+- ``timing``        → phase3_timing rows, rows=mask × cols=N. Optional
+                      ``split_by: [L, backend]`` emits one sub-table per group.
+                      ``realized`` and ``realization`` derived by pairing each
+                      variant row with the matching ``full`` row at the same
+                      ``(model, N, L, backend, seed)``.
+- ``throughput``    → phase4_throughput rows, rows=mode × cols=N.
+- ``restart_quality``→ phase4_restart rows, rows=layout × cols=dataset. Same
+                      colorization contract as ``quality``; ``sequential`` is
+                      the baseline layout.
+- ``correctness``   → phase4_cache rows, rows=mode × cols=N, one sub-block per
+                      (model, L). Cells render ``max_abs_logit_diff`` in
+                      scientific notation; ``full_causal`` is the baseline
+                      (always 0.00e+00 by definition).
 
 Design notes / why:
 
@@ -66,7 +73,6 @@ import yaml
 
 from ddi.reports._provenance import render_provenance_footer
 
-
 # ---- Store readers (inlined from the deleted ddi.report in #89) ----------------------------
 #
 # The append-only JSONL store has one row per (run_id, metric) — see ddi.store.append. These
@@ -111,8 +117,9 @@ def filter_rows(
 #
 # The rules that govern ``render_cell`` are load-bearing for how the paper reads: 🟢 only
 # means "quality parity" when the metric can actually discriminate. The floor / ceiling
-# suppression rules exist so a degenerate metric (F1 = 0.00 under blind AND under full on
-# ``ds/contra``) never reads as a "win" for a variant that simply happens to also be at floor.
+# suppression rules exist so a degenerate metric (F1 = 0.00 under blind AND under full on a
+# saturated dataset) never reads as a "win" for a variant that simply happens to also be at
+# floor. The historical failure case here was the ``ds/contra`` stress family (dropped in #89).
 
 _GREEN_THRESHOLD = 0.05  # |Δ| below 5% of |full| → 🟢
 _SMALL_BASELINE = 0.05  # |full| below this → show absolute Δ (percentage would explode)
@@ -170,28 +177,17 @@ def _fmt(v: float, *, is_loss: bool = False) -> str:
 _QUALITY_PREFIX = "phase2_train_free:"
 
 _QUALITY_DATASET_COLUMNS: tuple[str, ...] = (
-    "composition",
     "synthetic_qa",
     "hotpot_qa",
     "musique",
     "kilt_nq",
-    "ds/fact_chain",
-    "ds/fact_agg",
-    "ds/contra",
-    "ds/coref",
-    "ds/needle",
 )
 
-_QUALITY_STRESS_TO_COL: dict[str, str] = {
-    "fact_chain": "ds/fact_chain",
-    "fact_aggregation": "ds/fact_agg",
-    "contradiction": "ds/contra",
-    "coreference": "ds/coref",
-    "needle": "ds/needle",
-}
-
 # ``nq`` is degenerate (no docs); older EXP-01 rows still exist in the store — drop them
-# explicitly so the aggregator matches the #72 templates.
+# explicitly so the aggregator matches the #72 templates. ``composition`` /
+# ``ddi_stress__*`` also stay in the drop list: their loaders / runners were deleted in
+# #89, but historical rows may still live in results/runs.jsonl and must be silently
+# skipped rather than crashing the renderer.
 _QUALITY_DROPPED_DATASETS: frozenset[str] = frozenset({"nq"})
 
 _QUALITY_PREFERRED_MASKS: tuple[str, ...] = ("full", "ddi_qf", "blind")
@@ -230,14 +226,14 @@ def _quality_parse_run_id(run_id: str) -> tuple[str, str, str, int] | None:
 
 
 def _quality_dataset_to_column(dataset: str) -> str | None:
-    """Map a store dataset name to a column label, or None to drop the row."""
+    """Map a store dataset name to a column label, or None to drop the row.
+
+    The ``ddi_stress`` and ``composition`` datasets were dropped in #89; historical
+    rows are silently skipped (they no longer map to any live column).
+    """
     if dataset in _QUALITY_DROPPED_DATASETS:
         return None
-    if dataset.startswith("ddi_stress__"):
-        family = dataset[len("ddi_stress__"):]
-        return _QUALITY_STRESS_TO_COL.get(family)
-    if dataset == "ddi_stress":
-        # Bare `ddi_stress` (EXP-01 legacy) has no family suffix — ambiguous; drop.
+    if dataset == "ddi_stress" or dataset.startswith("ddi_stress__") or dataset == "composition":
         return None
     return dataset if dataset in _QUALITY_DATASET_COLUMNS else None
 
@@ -796,6 +792,131 @@ def _render_throughput(spec: dict, store: Path) -> str:
     return "\n".join(lines) + "\n" + render_provenance_footer(store, backing_rows)
 
 
+# ---- Correctness kind (parity with cache_correctness_c4 rows) ------------------------------
+#
+# Cell = ``max(max_abs_logit_diff)`` across the ``n_queries_per_doc`` queries at each
+# (model, mode, N, L). ``max`` (not mean) is the worst-case gate — a single bad query
+# would otherwise be washed out. ``full_causal`` row is the baseline (0.00e+00 by
+# definition). Rendered in scientific notation because bf16 diffs sit at O(1e-4).
+
+_CORRECTNESS_PREFIX = "phase4_cache:"
+_CORRECTNESS_BASELINE_MODE = "full_causal"
+
+
+def _correctness_parse_run_id(run_id: str) -> tuple[str, str, int, int, int] | None:
+    """Return ``(model, mode, N, L, query_i)`` from a phase4_cache correctness run_id.
+
+    Shape: ``phase4_cache:{model}:{mode}:N={N}:L={L}:seed={seed}:{sha}:q{query_i}``.
+    Returns None if the shape doesn't match — malformed rows are silently skipped.
+    """
+    if not run_id.startswith(_CORRECTNESS_PREFIX):
+        return None
+    parts = run_id.split(":")
+    # Minimum shape has 8 colon-separated segments (see docstring above).
+    if len(parts) < 8:
+        return None
+    model, mode = parts[1], parts[2]
+    n_seg, l_seg = parts[3], parts[4]
+    if not (n_seg.startswith("N=") and l_seg.startswith("L=")):
+        return None
+    try:
+        n = int(n_seg[2:])
+        l_ = int(l_seg[2:])
+    except ValueError:
+        return None
+    # Query index lives in the last segment as `q{i}`; be forgiving on trailing colons.
+    q_seg = parts[-1]
+    if not q_seg.startswith("q"):
+        return None
+    try:
+        query_i = int(q_seg[1:])
+    except ValueError:
+        return None
+    return model, mode, n, l_, query_i
+
+
+def _correctness_mode_order(modes: Iterable[str]) -> list[str]:
+    """Baseline (``full_causal``) first, then remaining modes alphabetically."""
+    uniq = sorted(set(modes))
+    ordered: list[str] = []
+    if _CORRECTNESS_BASELINE_MODE in uniq:
+        ordered.append(_CORRECTNESS_BASELINE_MODE)
+    for m in uniq:
+        if m != _CORRECTNESS_BASELINE_MODE:
+            ordered.append(m)
+    return ordered
+
+
+def _render_correctness(spec: dict, store: Path) -> str:
+    metric = spec.get("metric") or "max_abs_logit_diff"
+
+    all_rows = list(iter_rows(store))
+    if not any(str(r.get("run_id", "")).startswith(_CORRECTNESS_PREFIX) for r in all_rows):
+        raise ValueError(
+            f"correctness[{metric}]: no phase4_cache rows in store {store}. "
+            "Run the cache/correctness task first."
+        )
+
+    # (model, mode, L, N) -> [values across query_i]; aggregated via max below.
+    per_cell: dict[tuple[str, str, int, int], list[float]] = defaultdict(list)
+    all_ls_per_model: dict[str, set[int]] = defaultdict(set)
+    all_ns_per_ml: dict[tuple[str, int], set[int]] = defaultdict(set)
+    all_modes_per_ml: dict[tuple[str, int], set[str]] = defaultdict(set)
+    backing_rows: list[dict] = []
+    for row in filter_rows(all_rows, metric=metric):
+        parsed = _correctness_parse_run_id(str(row.get("run_id", "")))
+        if parsed is None:
+            continue
+        model, mode, n, l_, _q = parsed
+        try:
+            value = float(row["value"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        per_cell[(model, mode, l_, n)].append(value)
+        all_ls_per_model[model].add(l_)
+        all_ns_per_ml[(model, l_)].add(n)
+        all_modes_per_ml[(model, l_)].add(mode)
+        backing_rows.append(row)
+
+    if not per_cell:
+        raise ValueError(
+            f"correctness[{metric}]: no phase4_cache rows carried metric={metric!r}."
+        )
+
+    blocks: list[str] = [f"# correctness — {metric}"]
+    for model in sorted(all_ls_per_model):
+        for l_ in sorted(all_ls_per_model[model]):
+            ns = sorted(all_ns_per_ml[(model, l_)])
+            modes = _correctness_mode_order(all_modes_per_ml[(model, l_)])
+            header_cols = " | ".join(f"N={n}" for n in ns)
+            header_sep = "|".join(["---"] * (len(ns) + 1))
+            lines = [
+                f"## {model} — L={l_}",
+                "",
+                f"| mode | {header_cols} |",
+                f"|{header_sep}|",
+            ]
+            for mode in modes:
+                cells: list[str] = []
+                for n in ns:
+                    if mode == _CORRECTNESS_BASELINE_MODE:
+                        # Baseline is itself — render as explicit zero regardless of
+                        # whether the runner emitted the row (it always does, but this
+                        # keeps the table honest if a partial store sneaks in).
+                        cells.append(f"{0.0:.2e}")
+                        continue
+                    vals = per_cell.get((model, mode, l_, n))
+                    if not vals:
+                        cells.append(_EM_DASH)
+                    else:
+                        # Worst-case gate: max, not mean. See renderer docstring.
+                        cells.append(f"{max(vals):.2e}")
+                lines.append(f"| {mode} | " + " | ".join(cells) + " |")
+            blocks.append("\n".join(lines))
+
+    return "\n\n".join(blocks) + "\n" + render_provenance_footer(store, backing_rows)
+
+
 # ---- Dispatcher + public API ---------------------------------------------------------------
 
 _RENDERERS: dict[str, Callable[[dict, Path], str]] = {
@@ -803,6 +924,7 @@ _RENDERERS: dict[str, Callable[[dict, Path], str]] = {
     "timing": _render_timing,
     "throughput": _render_throughput,
     "restart_quality": _render_restart_quality,
+    "correctness": _render_correctness,
 }
 
 
@@ -810,7 +932,8 @@ def render_table(spec: dict, store: Path) -> str:
     """Render one ``report.tables[]`` entry to a Markdown string with provenance footer.
 
     ``spec`` keys:
-      - ``kind``: ``quality`` | ``timing`` | ``throughput`` | ``restart_quality``.
+      - ``kind``: ``quality`` | ``timing`` | ``throughput`` | ``restart_quality`` |
+        ``correctness``.
       - ``rows`` / ``cols``: axis names (informational; the emitted shape is fixed per kind).
       - ``metric``: which metric to render.
       - ``split_by`` (optional, timing only): list of axes to split sub-tables on.

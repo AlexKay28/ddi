@@ -43,8 +43,12 @@ Run this **once**, pointed at a persistent volume mounted at `/mnt/models`. The
 that also set `HF_HOME=/mnt/models` will read from the volume instead of hitting the
 HF hub.
 
-Do this for every model an experiment references (both C1 YAMLs share Qwen and Llama
-instruct; the C3 YAMLs use the same two).
+Do this for every model an experiment references. The four C1/C3 YAMLs together
+reference two models, one each:
+`qwen_instruct_c1.yaml` / `qwen_instruct_c3.yaml` → `Qwen/Qwen2.5-7B-Instruct`;
+`llama_instruct_c1.yaml` / `llama_instruct_c3.yaml` → `meta-llama/Llama-3.1-8B-Instruct`.
+The three C4 YAMLs (`cache_correctness_c4`, `cache_throughput_c4`,
+`restart_quality_c4`) all use `Qwen/Qwen2.5-7B-Instruct`.
 
 **If `HF_HOME` is not a persistent volume,** the prefetch is thrown away when the
 container exits and every run re-downloads ~15 GB. Mount the volume.
@@ -62,9 +66,23 @@ every run" bugs. They are set by the **operator**, not by the Makefile, so a
 misconfigured cache surfaces immediately rather than being papered over.
 
 The runner writes rows to `results/runs.jsonl` and emits
-`logs/qwen_instruct_c1_summary.md` from the YAML's `report:` block.
+`logs/qwen_instruct_c1_summary.md` from the YAML's `report:` block. Substitute any
+of the seven YAML names — same command shape works for `exp-cache_correctness_c4`,
+`exp-cache_throughput_c4`, `exp-restart_quality_c4`, and the C1/C3 variants.
 
-### 5. Publish the summary to the tracking issue
+### 5. Verify before publishing
+
+Before pasting the summary into a GitHub issue, sanity-check the run:
+
+```bash
+grep -E "FAIL|Traceback|OOM" logs/qwen_instruct_c1_summary.md logs/*.log 2>/dev/null | head
+```
+
+Zero hits = clean run. Otherwise, inspect the offending cell in
+`logs/<name>_cells/<cell>.log` and decide whether the failure is expected (FA2
+without flash-attn per #70; OOM per the one-per-GPU rule above) or real.
+
+### 6. Publish the summary to the tracking issue
 
 ```bash
 make publish-summary SUMMARY=logs/qwen_instruct_c1_summary.md ISSUE=74
