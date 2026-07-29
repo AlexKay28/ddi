@@ -1,0 +1,38 @@
+# C4 — restart-position layout parity.
+#
+# Documents laid out with restarted position IDs (each doc starts at position 0)
+# must produce the same answers as the sequential layout (positions concatenated
+# left-to-right across docs). This is the layout precondition that lets cached
+# KV blocks be reused regardless of retrieval order.
+#
+# Rows = layout (sequential vs restart); cols = dataset. Metric is em / f1 /
+# presence agreement between the two layouts on the same query set.
+#
+# Tracking: C4 rollup issue (pending — see experiments/README.md).
+# Schema:   experiments/README.md + issue #81 YAML format section.
+
+kind: cache
+model: Qwen/Qwen2.5-7B-Instruct
+seed: 0
+task: restart_quality
+layouts: [sequential, restart]
+datasets: [hotpot_qa, musique, kilt_nq, synthetic_qa, nq]
+masks: [ddi_qf]
+max_records: 100
+max_new_tokens: 64
+metrics: [em, f1, presence]
+
+report:
+  tables:
+    - kind: restart_quality
+      rows: layout
+      cols: dataset
+      metric: em
+    - kind: restart_quality
+      rows: layout
+      cols: dataset
+      metric: f1
+    - kind: restart_quality
+      rows: layout
+      cols: dataset
+      metric: presence

@@ -1,0 +1,29 @@
+# C4 — cache correctness gate.
+#
+# Per-document KV cache reuse must produce logits that match a fresh recompute
+# within tolerance. This is a precondition for the throughput and restart-layout
+# experiments; if this fails, the other C4 YAMLs are moot.
+#
+# Compares three modes on the same (N, L, query) shape:
+#   - ddi_cache      — reuse per-document KV blocks from the cache.
+#   - ddi_recompute  — same mask, no cache (recompute each request).
+#   - full_causal    — baseline full-causal attention, no cache.
+#
+# Tracking: C4 rollup issue (pending — see experiments/README.md).
+# Schema:   experiments/README.md + issue #81 YAML format section.
+
+kind: cache
+model: Qwen/Qwen2.5-7B-Instruct
+seed: 0
+task: correctness
+modes: [ddi_cache, ddi_recompute, full_causal]
+Ns: [3, 9, 25]
+Ls: [512]
+n_queries_per_doc: 5
+
+report:
+  tables:
+    - kind: correctness
+      rows: mode
+      cols: N
+      metric: max_abs_logit_diff
