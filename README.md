@@ -105,7 +105,45 @@ Six phases in [issue #1](https://github.com/AlexKay28/ddi/issues/1); Phase 0 is 
 
 ---
 
-## 3. Glossary
+## 3. Reproducing the numbers
+
+Every experiment on `main` is one YAML file in [`experiments/`](experiments/) plus one
+`Makefile` line. From a fresh clone:
+
+```bash
+# 1. Install (deterministic — resolved from uv.lock).
+git clone https://github.com/AlexKay28/ddi.git
+cd ddi
+uv sync
+
+# 2. Prefetch model weights once, cached to a persistent HF_HOME.
+HF_HOME=/mnt/models make prefetch MODEL=Qwen/Qwen2.5-7B-Instruct
+
+# 3. Run an experiment offline; the runner writes a Markdown summary
+#    with a provenance footer.
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_HOME=/mnt/models \
+  make exp-qwen_instruct_c1
+
+# 4. Publish the summary as a comment on its tracking issue.
+make publish-summary SUMMARY=logs/qwen_instruct_c1_summary.md ISSUE=74
+```
+
+New experiment = new YAML in `experiments/`. `make exp-<name>` picks it up via a
+pattern rule — no `Makefile` edit needed. See:
+
+- [`experiments/README.md`](experiments/README.md) — index of every YAML with a
+  one-line description and the GitHub issue tracking it.
+- [`experiments/SERVERLESS.md`](experiments/SERVERLESS.md) — one-page operator
+  recipe (container base, HF prefetch, offline mode, one-experiment-per-GPU rule).
+
+The refactor that produced this flow is tracked in
+[issue #81](https://github.com/AlexKay28/ddi/issues/81); the docs above describe
+the target state that lands after
+[#88](https://github.com/AlexKay28/ddi/issues/88).
+
+---
+
+## 4. Glossary
 
 | term | meaning |
 |---|---|
