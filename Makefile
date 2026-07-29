@@ -13,13 +13,13 @@ help:
 
 # One-shot experiment: matches any experiments/<name>.yaml
 exp-%:
-	python -m ddi.run experiments/$*.yaml
-	python -m ddi.aggregate experiments/$*.yaml --out logs/$*_summary.md
+	uv run python -m ddi.run experiments/$*.yaml
+	uv run python -m ddi.aggregate experiments/$*.yaml --out logs/$*_summary.md
 
 # Prefetch a HF model once (respects HF_HOME).
 prefetch:
 	@test -n "$(MODEL)" || (echo "usage: make prefetch MODEL=<hf-id>" && exit 2)
-	python -c "from transformers import AutoModelForCausalLM, AutoTokenizer; \
+	uv run python -c "from transformers import AutoModelForCausalLM, AutoTokenizer; \
 	           AutoTokenizer.from_pretrained('$(MODEL)'); \
 	           AutoModelForCausalLM.from_pretrained('$(MODEL)', torch_dtype='auto')"
 
@@ -41,4 +41,4 @@ list-experiments:
 	@ls experiments/*.yaml 2>/dev/null | xargs -n1 basename | sed 's/\.yaml//' | sed 's/^/  exp-/'
 
 gpu-check:
-	python -c "import torch; assert torch.cuda.is_available(); print('CUDA:', torch.cuda.get_device_name())"
+	uv run python -c "import torch; assert torch.cuda.is_available(); print('CUDA:', torch.cuda.get_device_name())"
