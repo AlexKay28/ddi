@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from statistics import median
 
@@ -18,8 +18,23 @@ import torch
 
 from ddi.model import forward_with_mask
 from ddi.provenance import Provenance
-from ddi.report import _quantile
 from ddi.store import DEFAULT_STORE, append
+
+
+def _quantile(sorted_xs: Sequence[float], q: float) -> float:
+    """Linear-interpolation quantile over a pre-sorted sequence.
+
+    Inlined from the deleted ``ddi.report._quantile`` in #89 so the IQR
+    computation in the Timing dataclass keeps its bit-identical semantics.
+    """
+    n = len(sorted_xs)
+    if n == 1:
+        return float(sorted_xs[0])
+    pos = q * (n - 1)
+    lo = int(pos)
+    hi = min(lo + 1, n - 1)
+    frac = pos - lo
+    return float(sorted_xs[lo] + (sorted_xs[hi] - sorted_xs[lo]) * frac)
 
 
 @dataclass(frozen=True)
