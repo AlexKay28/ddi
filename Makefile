@@ -1,11 +1,15 @@
 # DDI reproducibility Makefile — see experiments/SERVERLESS.md for the full flow.
 
-.PHONY: exp-% prefetch publish-summary test list-experiments gpu-check help
+.PHONY: exp-% hf-fetch yt-fetch publish-summary test list-experiments gpu-check help
+
+YT_PROXY ?= watt
+YT_MODELS_ROOT ?= //home/gena/alexkay28/tickets/ALIGNMENT-2445/models
 
 help:
 	@echo "usage:"
 	@echo "  make exp-<name>                    # run experiments/<name>.yaml end-to-end"
-	@echo "  make prefetch MODEL=<hf-id>        # cache a HF model into HF_HOME"
+	@echo "  make hf-fetch MODEL=<hf-id>        # cache a HF model into HF_HOME (from HF Hub)"
+	@echo "  make yt-fetch MODEL=<hf-id>        # cache a HF model into HF_HOME (from YT, no HF access needed)"
 	@echo "  make publish-summary SUMMARY=... ISSUE=<n>"
 	@echo "  make test                          # run pytest"
 	@echo "  make list-experiments              # list all available exp-* targets"
@@ -16,12 +20,35 @@ exp-%:
 	uv run python -m ddi.run experiments/$*.yaml
 	uv run python -m ddi.aggregate experiments/$*.yaml --out logs/$*_summary.md
 
-# Prefetch a HF model once (respects HF_HOME).
-prefetch:
-	@test -n "$(MODEL)" || (echo "usage: make prefetch MODEL=<hf-id>" && exit 2)
+# Fetch a HF model once from the HF Hub (respects HF_HOME).
+hf-fetch:
+	@test -n "$(MODEL)" || (echo "usage: make hf-fetch MODEL=<hf-id>" && exit 2)
 	uv run python -c "from transformers import AutoModelForCausalLM, AutoTokenizer; \
 	           AutoTokenizer.from_pretrained('$(MODEL)'); \
 	           AutoModelForCausalLM.from_pretrained('$(MODEL)', torch_dtype='auto')"
+
+# Fetch a HF model from our YT mirror instead of the HF Hub, for hosts with no
+# direct HF access. Rebuilds a local HF_HOME cache (refs/main + a synthetic
+# snapshot dir) so `from_pretrained(MODEL)` resolves offline afterwards — same
+# contract as `hf-fetch`, different source. Requires the model to have already
+# been mirrored to YT_MODELS_ROOT (see experiments/SERVERLESS.md).
+yt-fetch:
+	@test -n "$(MODEL)" || (echo "usage: make yt-fetch MODEL=<hf-id>" && exit 2)
+	@test -n "$(HF_HOME)" || (echo "usage: HF_HOME=<dir> make yt-fetch MODEL=<hf-id>" && exit 2)
+	@repo_name="$$(basename $(MODEL))"; \
+	cache_name="models--$$(echo '$(MODEL)' | sed 's#/#--#g')"; \
+	src="$(YT_MODELS_ROOT)/$$repo_name"; \
+	dest="$(HF_HOME)/hub/$$cache_name"; \
+	snap="$$dest/snapshots/yt-cache"; \
+	yt --proxy=$(YT_PROXY) exists "$$src" | grep -q true || \
+	    (echo "no such model on YT: $$src" && exit 1); \
+	mkdir -p "$$snap" "$$dest/refs"; \
+	printf yt-cache > "$$dest/refs/main"; \
+	for f in $$(yt --proxy=$(YT_PROXY) list "$$src"); do \
+	    echo "fetching $$f ..."; \
+	    yt --proxy=$(YT_PROXY) read-file "$$src/$$f" > "$$snap/$$f"; \
+	done; \
+	echo "cached $(MODEL) -> $$dest"
 
 # Publish a summary.md to a tracking GitHub issue.
 publish-summary:

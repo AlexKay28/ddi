@@ -32,16 +32,24 @@ uv sync
 is deterministic across runs. If the container image doesn't ship `uv`, install it
 first with `pip install uv` or the standalone installer.
 
-### 3. Prefetch the model weights (once per model)
+### 3. Fetch the model weights (once per model)
 
 ```bash
-HF_HOME=/mnt/models make prefetch MODEL=Qwen/Qwen2.5-7B-Instruct
+HF_HOME=/mnt/models make hf-fetch MODEL=Qwen/Qwen2.5-7B-Instruct
 ```
 
 Run this **once**, pointed at a persistent volume mounted at `/mnt/models`. The
-`prefetch` target downloads the tokenizer + weights into `$HF_HOME`. Subsequent runs
+`hf-fetch` target downloads the tokenizer + weights into `$HF_HOME`. Subsequent runs
 that also set `HF_HOME=/mnt/models` will read from the volume instead of hitting the
 HF hub.
+
+**No direct HF Hub access from this host?** Use `make yt-fetch MODEL=... HF_HOME=...`
+instead — same contract, but it pulls the model bytes from our YT mirror at
+`//home/gena/alexkay28/tickets/ALIGNMENT-2445/models/<repo-name>` and reconstructs the
+same `$HF_HOME` cache layout, so step 4 below is identical either way. The model must
+already be mirrored to YT (currently: `Qwen2.5-7B-Instruct`, `Qwen2.5-7B`,
+`Llama-3.1-8B-Instruct`) — if it isn't, someone with HF access needs to `hf-fetch` it
+once and re-upload before `yt-fetch` will find it.
 
 Do this for every model an experiment references. The four C1/C3 YAMLs together
 reference two models, one each:
@@ -50,7 +58,7 @@ reference two models, one each:
 The three C4 YAMLs (`cache_correctness_c4`, `cache_throughput_c4`,
 `restart_quality_c4`) all use `Qwen/Qwen2.5-7B-Instruct`.
 
-**If `HF_HOME` is not a persistent volume,** the prefetch is thrown away when the
+**If `HF_HOME` is not a persistent volume,** the fetch is thrown away when the
 container exits and every run re-downloads ~15 GB. Mount the volume.
 
 ### 4. Run the experiment (offline)
@@ -131,5 +139,6 @@ execution on one GPU is lower than the debugging cost of an OOM mid-grid.
   Makefile.** If the drivers set them for you, a cache miss becomes a silent
   re-download instead of an error.
 - **Gated model access.** `Llama-3.1-8B-Instruct` requires an HF token with access
-  granted on the model page. Set `HF_TOKEN=...` for the `prefetch` step only; runs
-  themselves are fully offline.
+  granted on the model page. Set `HF_TOKEN=...` for the `hf-fetch` step only; runs
+  themselves are fully offline. Not applicable to `yt-fetch` — it never talks to the
+  HF Hub.

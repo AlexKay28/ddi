@@ -123,8 +123,9 @@ git clone https://github.com/AlexKay28/ddi.git
 cd ddi
 uv sync
 
-# 2. Prefetch model weights once, cached to a persistent HF_HOME.
-HF_HOME=/mnt/models make prefetch MODEL=Qwen/Qwen2.5-7B-Instruct
+# 2. Fetch model weights once, cached to a persistent HF_HOME.
+#    No direct HF Hub access? Use `make yt-fetch` instead — same MODEL/HF_HOME contract.
+HF_HOME=/mnt/models make hf-fetch MODEL=Qwen/Qwen2.5-7B-Instruct
 
 # 3. Run an experiment offline; the runner writes a Markdown summary
 #    with a provenance footer.
