@@ -1,0 +1,35 @@
+# C1 — quality parity for Qwen2.5-7B-Instruct across the five direct QA datasets.
+#
+# One row per (mask, dataset) cell for each of the four quality metrics. Non-inferiority
+# vs. `full` is judged against the C1 margin Δ in paper/RESEARCH_PLAN.md.
+#
+# Tracking: https://github.com/AlexKay28/ddi/issues/74
+# Schema:   experiments/README.md + issue #81 YAML format section.
+
+kind: quality
+model: Qwen/Qwen2.5-7B-Instruct
+seed: 0
+datasets: [hotpot_qa, musique, kilt_nq, synthetic_qa, nq]
+masks: [full, ddi_qf, blind]
+max_records: 100
+max_new_tokens: 64
+metrics: [em, f1, presence, loss]
+
+report:
+  tables:
+    - kind: quality
+      rows: mask
+      cols: dataset
+      metric: em
+    - kind: quality
+      rows: mask
+      cols: dataset
+      metric: f1
+    - kind: quality
+      rows: mask
+      cols: dataset
+      metric: presence
+    - kind: quality
+      rows: mask
+      cols: dataset
+      metric: loss

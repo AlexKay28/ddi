@@ -1,0 +1,27 @@
+# C4 — cache throughput (replaces the legacy F5 figure).
+#
+# Measures QPS on repeated documents under three modes; ddi_cache is expected
+# to dominate ddi_recompute (which in turn dominates full_causal) as the per-doc
+# KV blocks amortize across queries.
+#
+# Shape mirrors cache_correctness_c4.yaml so the two experiments can share a
+# fixture generator downstream.
+#
+# Tracking: C4 rollup issue (pending — see experiments/README.md).
+# Schema:   experiments/README.md + issue #81 YAML format section.
+
+kind: cache
+model: Qwen/Qwen2.5-7B-Instruct
+seed: 0
+task: throughput
+modes: [ddi_cache, ddi_recompute, full_causal]
+Ns: [3, 9, 25]
+Ls: [512]
+n_queries_per_doc: 5
+
+report:
+  tables:
+    - kind: throughput
+      rows: mode
+      cols: N
+      metric: qps
