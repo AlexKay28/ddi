@@ -150,7 +150,7 @@ class _MockPrefillModel:
         # Satisfy _find_patch_target through model wrapping: not needed here because we bypass
         # patch_model and call forward_with_mask directly on this stand-in.
 
-    def __call__(self, input_ids, attention_mask, use_cache):  # noqa: ARG002
+    def __call__(self, input_ids, attention_mask, use_cache, position_ids=None):  # noqa: ARG002
         self.calls += 1
         from types import SimpleNamespace
 

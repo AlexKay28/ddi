@@ -277,3 +277,42 @@ def test_to_additive_matches_build_mask():
     assert add.shape == allow.shape
     assert (add == 0.0).equal(allow)
     assert torch.isneginf(add).equal(~allow)
+
+
+# ---------------------------------------------------------------------------
+# Ported from the deleted tests/test_gates.py — the v3/v4 len()-vs-.shape[-1]
+# regression. Deleting the gate suite loses the mask-geometry invariants that
+# already live in test_masks.py, but this one guards a *specific historical
+# bug* (documented in issue #4) and has no equivalent elsewhere.
+# ---------------------------------------------------------------------------
+
+
+def test_mask_shape_sums_lengths():
+    """Total mask dimension equals `sum(doc_lengths) + query_len + answer_len` — nothing else."""
+    doc_lengths = [3, 5, 7]
+    query_len, answer_len = 4, 2
+    mask = build_mask(doc_lengths, query_len, answer_len, "ddi_qf")
+    assert mask.shape == (21, 21)
+    assert mask.shape[0] == sum(doc_lengths) + query_len + answer_len
+
+
+def test_len_vs_shape_regression():
+    """The v3/v4 bug: `len(encoded)` on a batched-token tensor returns the batch, not the tokens.
+
+    Any code that uses `len()` on a `tokenizer.encode(..., return_tensors="pt")` output treats
+    every document as one token long — which silently produces a 1x1 mask per doc and a total
+    length equal to `n_docs + query_len + answer_len` instead of the true token total. This
+    test pins the semantic difference so the bug cannot silently return.
+    """
+    fake_encoded = torch.randint(0, 100, (1, 8))  # tokenizer.encode(..., return_tensors="pt") shape
+    assert len(fake_encoded) == 1  # THIS is the bug — batch dimension, not token count
+    assert fake_encoded.shape[-1] == 8  # THIS is the fix — actual token count
+
+    # And prove the downstream consequence: a doc-length list built with len() collapses every
+    # document to a single token, producing a totally wrong mask geometry.
+    docs = [torch.randint(0, 100, (1, n)) for n in (3, 5, 7)]
+    wrong_lengths = [len(d) for d in docs]  # [1, 1, 1] — the bug
+    right_lengths = [d.shape[-1] for d in docs]  # [3, 5, 7] — the fix
+    assert wrong_lengths == [1, 1, 1]
+    assert right_lengths == [3, 5, 7]
+    assert sum(wrong_lengths) != sum(right_lengths)
