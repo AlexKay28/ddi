@@ -7,9 +7,9 @@ resulting Markdown summary to a tracking GitHub issue is `make publish-summary`.
 Docs describing the operator-facing flow (container base, HF prefetch, offline mode,
 one-experiment-per-GPU rule) live in [`SERVERLESS.md`](SERVERLESS.md).
 
-The design that produced this layout is in the parent refactor plan
-([#81](https://github.com/AlexKay28/ddi/issues/81)); the research contract each YAML
-serves is in [`../paper/RESEARCH_PLAN.md`](../paper/RESEARCH_PLAN.md).
+This layout landed via the [#81 refactor](https://github.com/AlexKay28/ddi/issues/81);
+the research contract each YAML serves is in
+[`../paper/RESEARCH_PLAN.md`](../paper/RESEARCH_PLAN.md).
 
 ---
 
@@ -41,19 +41,18 @@ are out of scope for the preprint and their experiments are not indexed here.
 | [`cache_throughput_c4.yaml`](cache_throughput_c4.yaml) | C4 | Cached vs. recomputed throughput on repeated documents; replaces the legacy F5 figure. | *(pending — filed under C4 rollup)* |
 | [`restart_quality_c4.yaml`](restart_quality_c4.yaml) | C4 | Restart-position layout produces the same answers as sequential layout — parity precondition for cross-request cache reuse. | *(pending — filed under C4 rollup)* |
 
-The YAML files themselves land in [#86](https://github.com/AlexKay28/ddi/issues/86);
-this table is the source of truth for what will be there.
-
 ---
 
 ## Legacy bash drivers
 
-The `exp_01_*.bash` scripts at the repo root are historical — they were the
-Phase 1 / Phase 2 driver shape from before the YAML refactor. They stay in git for
-provenance of past runs but are not part of the current flow and are not indexed
-here. The one exception is `exp_3_grid.bash`, which is being ported to shell out to
-`python -m ddi.run` over the two C3 YAMLs and will remain as a "run both models"
-convenience wrapper.
+The `exp_01_*.bash` and `exp_02_*.bash` scripts in this directory are historical —
+they were the Phase 1 / Phase 2 driver shape from before the YAML refactor and were
+moved here from the repo root by [#87](https://github.com/AlexKay28/ddi/issues/87)
+to preserve `git log --follow` history. They are not part of the current flow and
+are not indexed above. The one exception is `exp_3_grid.bash`, which was rewritten
+in [#87](https://github.com/AlexKay28/ddi/issues/87) as a thin wrapper that shells
+out to `python -m ddi.run` over the four C1/C3 YAMLs — kept as a "run both models"
+convenience.
 
 ---
 
