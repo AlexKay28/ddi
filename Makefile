@@ -30,8 +30,12 @@ publish-summary:
 	gh issue comment $(ISSUE) --body-file $(SUMMARY)
 
 # Housekeeping.
+# Note: `uv run pytest` picks up a system-installed pytest without torch — use
+# `python -m pytest` via the venv interpreter instead. Also ensure the [dev]
+# extra (pytest) is installed before invoking.
 test:
-	uv run pytest tests/ -q
+	uv sync --extra dev
+	uv run python -m pytest tests/ -q
 
 list-experiments:
 	@ls experiments/*.yaml 2>/dev/null | xargs -n1 basename | sed 's/\.yaml//' | sed 's/^/  exp-/'
