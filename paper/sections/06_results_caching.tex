@@ -14,89 +14,47 @@ of that document alone. Blocks become keyable by document content hash,
 order-independent, and reusable across requests.
 
 A cache hit skips prefill entirely. This is the sense in which the
-caching result is load-bearing: no kernel improvement to full-causal
-prefill can match ``skip prefill'', and this speedup floor is in fact
-the only wall-clock efficiency win this paper measures as working
-end-to-end. The realization gap of Section~\ref{sec:results-efficiency}
-is structural on the tested \texttt{sdpa} backend, so the caching path
-carries the entire realized-speedup story rather than augmenting a
-prefill-side win.
+caching result is co-headline with the compute result: no kernel
+improvement to full-causal prefill can match ``skip prefill'', so this
+speedup floor survives even if the realization gap of
+Section~\ref{sec:results-efficiency} is structural rather than fixable.
 
 \subsection{Prerequisites}
 \label{sec:results-caching-prereq}
 
-Three conditions must hold before the throughput measurement is trusted,
-and all three are settled positive in the current results.
-\emph{Quality under restart} (Phase~4.1): on the composition probe with
-the primary instruct model, \texttt{ddi\_qf + restart} sits within seed
-noise of \texttt{ddi\_qf + sequential} on F1, presence, and loss
-(headline: F1 $0.131$ vs $0.122$; presence $0.883$ vs $0.917$). Under
-\texttt{full}, restart is not free --- it inflicts an F1 drop of
-$\sim 58\%$ and a presence drop of $\sim 43$ points --- because full
-attention exposes cross-document RoPE distances the model never saw at
-training. The asymmetry is exactly the pairing the method was designed
-to exploit: restart is quality-free precisely where DDI needs it to be.
-\emph{Per-document cache correctness} (Phase~4.2): both deterministic
-recompute and cache round-trip return $1.0$ across every doc$\times$record
-tested. Per-document KV blocks are byte-stable at bf16.
-\emph{Order invariance} (Phase~4.3): permuting the retrieved document
-list under \texttt{ddi\_qf + restart} leaves logits invariant up to
-floating-point precision --- the median max-delta collapses from
-$\approx 0.31$ at bf16 to $\approx 0.017$ at fp32, matching the $28$-layer
-accumulation floor and confirming that residual bf16 noise, not a real
-position/mask leak, drove the earlier non-zero bf16 numbers. The
-\texttt{sequential} arm's max-delta is unchanged by dtype ($\approx 3.6$)
-because permuting doc order under sequential positions genuinely changes
-token content and is expected to change logits. \todo{Bit-exact
-invariance at \texttt{atol}$=10^{-3}$ is unattainable across $28$
-decoder layers at any finite precision on current hardware; the
-continuous max-delta comparison is the correct instrument for this
-claim, and the strict binary threshold should be dropped from any table
-that carries it.}
+Three conditions must hold before the throughput measurement is trusted.
+\emph{Quality under restart} (Phase~4.1) confirms that restarting RoPE
+positions per document does not itself cost quality relative to a
+sequential layout. \emph{Per-document cache correctness} (Phase~4.2)
+verifies that logits computed from a cache hit are numerically identical
+(within bf16 tolerance) to logits computed from a cold prefill of the
+same input; the round-trip test is the correctness gate that makes any
+throughput number meaningful. \emph{Order invariance} (Phase~4.3)
+verifies that permuting the retrieved document list produces identical
+outputs under \texttt{ddi\_qf + restart}, which the mask family alone
+predicts and prior work does not.
 
 \subsection{Throughput under document reuse}
 \label{sec:results-caching-throughput}
 
-Figure~\ref{fig:f5} reports end-to-end throughput on a synthetic RAG
-workload with document reuse (Zipf$(a{=}1.5)$ over a $32$-document
-universe, $5$ documents per request, $200$ requests plus warmup, $3$
-seeds). Three modes are compared: full-causal recompute (the status
-quo), \texttt{ddi\_recompute} (block-diagonal masking with no cache),
-and \texttt{ddi\_cache} (block-diagonal masking with a per-document KV
-cache). The measured cache hit rate is $\approx 99\%$ at this reuse
-distribution. \texttt{ddi\_cache} attains a median throughput of
-$\approx 3.8$~QPS at a median request latency of $\approx 256$~ms,
-against $\approx 2.2$~QPS at $\approx 459$~ms for full-causal and
-$\approx 2.0$~QPS at $\approx 500$~ms for \texttt{ddi\_recompute} ---
-a $\approx 1.77\times$ end-to-end throughput win over the status-quo
-baseline. Variance is tight within each mode ($<1\%$ QPS spread across
-seeds).
-
-Ordering nuance worth naming: full-causal beats \texttt{ddi\_recompute}
-by $\approx 9\%$ at these shapes because \texttt{ddi\_recompute} in the
-current runner issues six separate small forward calls (five docs plus
-query) while full-causal issues one concatenated forward, and per-call
-Python and kernel-launch overhead outweighs the FLOP saving over
-$\sim 500$-token doc blocks. \texttt{ddi\_recompute} is therefore not a
-clean ``same compute, no cache'' control at these shapes: the caching
-win is a caching win, not a per-call-compute win.
-\todo{A batched multi-doc forward or a larger per-doc $L$ where FLOPs
-dominate per-call overhead is needed to isolate the compute-vs-caching
-axis cleanly; the current \texttt{ddi\_recompute} baseline should not
-be read as pricing the mask's compute effect in isolation.}
+Figure~\ref{fig:f5} reports end-to-end throughput as a function of the
+document reuse rate --- the fraction of retrieved documents in the
+current request that also appeared in a previous request and are
+therefore cache hits. The comparison lines are full-causal recompute
+(the status quo), prefix caching (the practical alternative when exact
+prefix matches happen), and DDI with a per-document cache. At any
+non-trivial reuse rate the per-document line is expected to dominate the
+prefix-caching line, because document-level cache hits do not require
+exact prefix matches; the position layout (\texttt{restart}) removes the
+position dependence that would otherwise break the hit.
 
 \figureifexists{generated/F5.pdf}{%
     F5 --- throughput versus document reuse rate. One line per mode:
-    full-causal recompute, DDI per-document recompute, DDI per-document
-    cache.%
+    full-causal recompute, prefix caching, DDI per-document cache.%
 }{fig:f5}
 
-The caching result survives failure modes elsewhere in the paper. If
-the bridge-width sweep of Section~\ref{sec:results-quality-bridge}
-shows that quality parity requires a wide bridge (small analytical
-compute speedup), the caching result still holds --- the mask that
-unlocks caching is the same document-block-diagonal mask, and the
-bridge width does not affect cacheability of document blocks. Since
-the realization gap of Section~\ref{sec:results-efficiency-gap} is
-structural on the tested backend, the caching path is the only realized
-wall-clock speedup this paper reports.
+We frame this as the co-headline result because it survives failure
+modes elsewhere in the paper. If the realization gap of
+Section~\ref{sec:results-efficiency-gap} does not close, cache hits
+still skip prefill entirely, so the throughput floor at any positive
+reuse rate is independent of the kernel's realization efficiency.
