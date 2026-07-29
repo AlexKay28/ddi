@@ -355,3 +355,41 @@ def test_cache_correctness_dispatch_writes_expected_rows(tmp_path: Path) -> None
     assert all(r["run_id"].startswith("phase4_cache:") for r in rows)
     metrics_seen = {r["metric"] for r in rows}
     assert {"kv_deterministic", "kv_cache_roundtrip"} <= metrics_seen
+
+
+@_INTEG
+def test_cache_restart_quality_dispatch_writes_expected_rows(tmp_path: Path) -> None:
+    """End-to-end: kind: cache task: restart_quality → phase4_restart rows for each dataset x layout."""
+    from ddi.data import register_loader
+
+    ds_name = "tiny_restart_run85"
+
+    def _loader(split, seed):
+        yield {
+            "id": "r1",
+            "info_contexts": ["alpha beta"],
+            "dialog": [{"role": "user", "content": "?"}, {"role": "assistant", "content": "beta"}],
+            "possible_answers": ["beta"],
+        }
+
+    try:
+        register_loader(ds_name)(_loader)
+    except ValueError:
+        pass
+
+    store = tmp_path / "runs.jsonl"
+    body = (
+        f"kind: cache\ntask: restart_quality\nseed: 0\nmodel: {_TINY}\n"
+        f"datasets: [{ds_name}]\nmasks: [full]\nlayouts: [sequential, restart]\n"
+        f"max_records: 1\nmax_new_tokens: 4\noutput_store: {store}\n"
+    )
+    p = _write_yaml(tmp_path, body)
+    ddi_run.run(p)
+
+    rows = _read_rows(store)
+    assert rows, "restart_quality dispatcher wrote no rows"
+    assert all(r["run_id"].startswith("phase4_restart:") for r in rows)
+    metrics_seen = {r["metric"] for r in rows}
+    assert {"loss", "em", "f1", "presence"} <= metrics_seen
+    layouts_seen = {r["run_id"].split(":")[4] for r in rows}
+    assert layouts_seen == {"sequential", "restart"}

@@ -339,6 +339,131 @@ def _render_quality(spec: dict, store: Path) -> str:
     return "\n\n".join(blocks) + "\n" + render_provenance_footer(store, backing_rows)
 
 
+# ---- Cache/restart_quality kind (C4 restart-position layout parity) ------------------------
+#
+# Layout must not change quality: `sequential` is the baseline (mirrors quality's `full`
+# baseline / Δ convention) and `restart` is compared against it. Columns reuse the same fixed
+# dataset roster as the quality kind.
+
+_RESTART_PREFIX = "phase4_restart:"
+_RESTART_METRIC_HEADERS: dict[str, str] = {
+    "em": "EM",
+    "f1": "F1",
+    "presence": "presence",
+    "loss": "loss",
+}
+_RESTART_BASELINE_LAYOUT = "sequential"
+_RESTART_PREFERRED_LAYOUTS: tuple[str, ...] = ("sequential", "restart")
+
+
+def _restart_parse_run_id(run_id: str) -> tuple[str, str, str, str, int] | None:
+    """Return ``(model, dataset, tag, layout, seed)`` from a phase4_restart run_id.
+
+    Shape: ``phase4_restart:{model}:{dataset}:{tag}:{layout}:seed={seed}:{sha}:{record_id}``.
+    Returns None if the shape does not match — a malformed row is silently skipped.
+    """
+    parts = run_id.split(":")
+    if len(parts) < 8 or (parts[0] + ":") != _RESTART_PREFIX:
+        return None
+    model, dataset, tag, layout, seed_field = parts[1], parts[2], parts[3], parts[4], parts[5]
+    if not seed_field.startswith("seed="):
+        return None
+    try:
+        seed = int(seed_field[len("seed="):])
+    except ValueError:
+        return None
+    return model, dataset, tag, layout, seed
+
+
+def _restart_layout_order(layouts: Iterable[str]) -> list[str]:
+    uniq = list(dict.fromkeys(layouts))
+    ordered = [lay for lay in _RESTART_PREFERRED_LAYOUTS if lay in uniq]
+    extras = sorted(lay for lay in uniq if lay not in _RESTART_PREFERRED_LAYOUTS)
+    return ordered + extras
+
+
+def _render_restart_quality(spec: dict, store: Path) -> str:
+    metric = spec.get("metric")
+    if metric not in _RESTART_METRIC_HEADERS:
+        raise ValueError(
+            f"restart_quality: unknown metric {metric!r}; expected one of "
+            f"{sorted(_RESTART_METRIC_HEADERS)}"
+        )
+    is_loss = metric == "loss"
+
+    all_rows = list(iter_rows(store))
+    if not any(str(r.get("run_id", "")).startswith(_RESTART_PREFIX) for r in all_rows):
+        raise ValueError(
+            f"restart_quality[{metric}]: no phase4_restart rows in store {store}. "
+            "Run the cache/restart_quality task first."
+        )
+
+    # (model, layout, column) -> [per-record values]
+    per_cell: dict[tuple[str, str, str], list[float]] = defaultdict(list)
+    backing_rows: list[dict] = []
+    for row in filter_rows(all_rows, metric=metric):
+        parsed = _restart_parse_run_id(str(row.get("run_id", "")))
+        if parsed is None:
+            continue
+        model, dataset, _tag, layout, _seed = parsed
+        col = _quality_dataset_to_column(dataset)
+        if col is None:
+            continue
+        try:
+            per_cell[(model, layout, col)].append(float(row["value"]))
+        except (TypeError, ValueError, KeyError):
+            continue
+        backing_rows.append(row)
+
+    if not per_cell:
+        raise ValueError(
+            f"restart_quality[{metric}]: no phase4_restart rows carried metric={metric!r}."
+        )
+
+    models = sorted({m for (m, _lay, _c) in per_cell})
+    layouts_seen: dict[str, list[str]] = defaultdict(list)
+    for (model, layout, _col) in per_cell:
+        layouts_seen[model].append(layout)
+
+    header_cols = " | ".join(_QUALITY_DATASET_COLUMNS)
+    header_sep = "|".join(["---"] * (len(_QUALITY_DATASET_COLUMNS) + 1))
+    metric_label = _RESTART_METRIC_HEADERS[metric]
+
+    blocks: list[str] = []
+    for model in models:
+        lines = [
+            f"### {model} — {metric_label} (restart-layout parity)",
+            "",
+            f"| layout | {header_cols} |",
+            f"|{header_sep}|",
+        ]
+        layouts = _restart_layout_order(layouts_seen[model])
+        baseline_vals: dict[str, float | None] = {}
+        for col in _QUALITY_DATASET_COLUMNS:
+            values = per_cell.get((model, _RESTART_BASELINE_LAYOUT, col))
+            baseline_vals[col] = (sum(values) / len(values)) if values else None
+        for layout in layouts:
+            cells: list[str] = []
+            for col in _QUALITY_DATASET_COLUMNS:
+                values = per_cell.get((model, layout, col))
+                if not values:
+                    cells.append(_EM_DASH)
+                    continue
+                val = sum(values) / len(values)
+                if layout == _RESTART_BASELINE_LAYOUT:
+                    cells.append(_fmt(val, is_loss=is_loss))
+                    continue
+                baseline = baseline_vals.get(col)
+                if baseline is None:
+                    cells.append(_fmt(val, is_loss=is_loss))
+                    continue
+                cells.append(_render_cell(val, baseline, is_loss=is_loss))
+            lines.append(f"| {layout} | " + " | ".join(cells) + " |")
+        blocks.append("\n".join(lines))
+
+    return "\n\n".join(blocks) + "\n" + render_provenance_footer(store, backing_rows)
+
+
 # ---- Timing kind (parity with T_perf_ttft / tpot / sparsity / analytical / realized / ratio)
 #
 # Shape mirrors ``ddi/reports/phase3_realization.py``: N columns fixed to
@@ -677,6 +802,7 @@ _RENDERERS: dict[str, Callable[[dict, Path], str]] = {
     "quality": _render_quality,
     "timing": _render_timing,
     "throughput": _render_throughput,
+    "restart_quality": _render_restart_quality,
 }
 
 
@@ -684,7 +810,7 @@ def render_table(spec: dict, store: Path) -> str:
     """Render one ``report.tables[]`` entry to a Markdown string with provenance footer.
 
     ``spec`` keys:
-      - ``kind``: ``quality`` | ``timing`` | ``throughput``.
+      - ``kind``: ``quality`` | ``timing`` | ``throughput`` | ``restart_quality``.
       - ``rows`` / ``cols``: axis names (informational; the emitted shape is fixed per kind).
       - ``metric``: which metric to render.
       - ``split_by`` (optional, timing only): list of axes to split sub-tables on.
