@@ -936,10 +936,12 @@ def _cache_restart_quality(
     from ddi.positions import build_positions
 
     model_name = _require(cfg, "model", "cache/restart_quality")
-    dataset = _require(cfg, "dataset", "cache/restart_quality")
+    datasets = _require(cfg, "datasets", "cache/restart_quality")
     masks = _require(cfg, "masks", "cache/restart_quality")
     layouts_cfg = cfg.get("layouts", ["sequential", "restart"])
 
+    if not isinstance(datasets, list) or not datasets:
+        raise ValueError("cache/restart_quality: 'datasets' must be a non-empty list")
     if not isinstance(masks, list) or not masks:
         raise ValueError("cache/restart_quality: 'masks' must be a non-empty list")
     if not isinstance(layouts_cfg, list) or not layouts_cfg:
@@ -956,126 +958,130 @@ def _cache_restart_quality(
     if torch.cuda.is_available():
         model = model.to("cuda")
 
-    prov = capture(
-        config_hash=cfg_hash,
-        seed=seed,
-        model_revision=model_name,
-        dataset_revision=dataset,
-    )
+    for dataset in datasets:
+        prov = capture(
+            config_hash=cfg_hash,
+            seed=seed,
+            model_revision=model_name,
+            dataset_revision=dataset,
+        )
 
-    for mask_spec in masks:
-        mask_variant, bridge_k = _parse_mask_spec(mask_spec)
-        tag = _variant_tag(mask_variant, bridge_k)
-        for layout in layouts_cfg:
-            cell_desc = f"cache/restart_quality(mask={mask_variant}, layout={layout})"
-            try:
-                coerced_full = 0
-                for i, record in enumerate(load_dataset(dataset, "val", seed)):
-                    if max_records is not None and i >= max_records:
-                        break
-                    if not record["possible_answers"]:
-                        continue
-                    doc_texts = list(record["info_contexts"])
+        for mask_spec in masks:
+            mask_variant, bridge_k = _parse_mask_spec(mask_spec)
+            tag = _variant_tag(mask_variant, bridge_k)
+            for layout in layouts_cfg:
+                cell_desc = (
+                    f"cache/restart_quality(dataset={dataset}, mask={mask_variant}, "
+                    f"layout={layout})"
+                )
+                try:
+                    coerced_full = 0
+                    for i, record in enumerate(load_dataset(dataset, "val", seed)):
+                        if max_records is not None and i >= max_records:
+                            break
+                        if not record["possible_answers"]:
+                            continue
+                        doc_texts = list(record["info_contexts"])
 
-                    variant_here = mask_variant
-                    bridge_k_here = bridge_k
-                    if not doc_texts and mask_variant != "full":
-                        variant_here = "full"
-                        bridge_k_here = None
-                        coerced_full += 1
+                        variant_here = mask_variant
+                        bridge_k_here = bridge_k
+                        if not doc_texts and mask_variant != "full":
+                            variant_here = "full"
+                            bridge_k_here = None
+                            coerced_full += 1
 
-                    user_dialog = record["dialog"][:-1]
-                    answer_text = record["dialog"][-1]["content"]
-                    query_text = tokenizer.apply_chat_template(
-                        user_dialog, tokenize=False, add_generation_prompt=True
-                    )
-
-                    doc_id_tensors = [
-                        tokenizer(d, return_tensors="pt", add_special_tokens=False).input_ids
-                        for d in doc_texts
-                    ]
-                    doc_lengths = [int(t.shape[-1]) for t in doc_id_tensors]
-                    query_ids = tokenizer(
-                        query_text, return_tensors="pt", add_special_tokens=False
-                    ).input_ids
-                    query_len = int(query_ids.shape[-1])
-                    answer_ids = tokenizer(
-                        answer_text, return_tensors="pt", add_special_tokens=False
-                    ).input_ids
-                    answer_len = int(answer_ids.shape[-1])
-
-                    full_ids = torch.cat(doc_id_tensors + [query_ids, answer_ids], dim=-1).to(
-                        model.device
-                    )
-                    labels = make_answer_labels(
-                        full_ids,
-                        full_ids.shape[-1] - answer_len,
-                        full_ids.shape[-1],
-                    ).to(model.device)
-
-                    allow = build_mask(
-                        doc_lengths or [full_ids.shape[-1]],
-                        query_len=query_len,
-                        answer_len=answer_len,
-                        variant=variant_here,  # type: ignore[arg-type]
-                        **_mask_kwargs(variant_here, bridge_k_here),
-                    )
-                    additive = (
-                        to_additive(allow, dtype=model.dtype)
-                        .to(model.device)
-                        .unsqueeze(0)
-                        .unsqueeze(0)
-                    )
-                    positions = (
-                        build_positions(doc_lengths, query_len, answer_len, layout)  # type: ignore[arg-type]
-                        .unsqueeze(0)
-                        .to(model.device)
-                    )
-                    with torch.no_grad():
-                        out = model(
-                            input_ids=full_ids,
-                            attention_mask=additive,
-                            position_ids=positions,
-                            use_cache=False,
+                        user_dialog = record["dialog"][:-1]
+                        answer_text = record["dialog"][-1]["content"]
+                        query_text = tokenizer.apply_chat_template(
+                            user_dialog, tokenize=False, add_generation_prompt=True
                         )
-                    loss_val = float(shifted_cross_entropy(out.logits, labels).item())
 
-                    # Generation reuses inference.encode + inference.generate with the
-                    # right layout so the KV-cached decode path sees the same positions.
-                    batch = inference.encode(
-                        tokenizer, docs=doc_texts, query=query_text, layout=layout
-                    )
-                    preds = inference.generate(
-                        model, tokenizer, batch,
-                        mask_variant=variant_here,
-                        max_new_tokens=max_new_tokens,
-                        mask_kwargs=_mask_kwargs(variant_here, bridge_k_here),
-                    )
-                    pred = preds[0]
+                        doc_id_tensors = [
+                            tokenizer(d, return_tensors="pt", add_special_tokens=False).input_ids
+                            for d in doc_texts
+                        ]
+                        doc_lengths = [int(t.shape[-1]) for t in doc_id_tensors]
+                        query_ids = tokenizer(
+                            query_text, return_tensors="pt", add_special_tokens=False
+                        ).input_ids
+                        query_len = int(query_ids.shape[-1])
+                        answer_ids = tokenizer(
+                            answer_text, return_tensors="pt", add_special_tokens=False
+                        ).input_ids
+                        answer_len = int(answer_ids.shape[-1])
 
-                    rid = (
-                        f"phase4_restart:{model_name}:{dataset}:{tag}:{layout}:"
-                        f"seed={seed}:{prov.git_sha[:8]}:{record['id']}"
-                    )
-                    answers = record["possible_answers"]
-                    append(rid, "loss", loss_val, prov, store=store_path)
-                    append(rid, "em", exact_match(pred, answers), prov, store=store_path)
-                    append(rid, "f1", token_f1(pred, answers), prov, store=store_path)
-                    append(
-                        rid,
-                        "presence",
-                        answer_presence(pred, answers),
-                        prov,
-                        store=store_path,
-                    )
-                if coerced_full > 0:
-                    print(
-                        f"[ddi.run:cache/restart_quality] coerced variant="
-                        f"{mask_variant!r} -> 'full' on {coerced_full} record(s)",
-                        file=sys.stderr,
-                    )
-            except Exception as exc:
-                _log_cell_failure(cell_desc, exc)
+                        full_ids = torch.cat(
+                            doc_id_tensors + [query_ids, answer_ids], dim=-1
+                        ).to(model.device)
+                        labels = make_answer_labels(
+                            full_ids,
+                            full_ids.shape[-1] - answer_len,
+                            full_ids.shape[-1],
+                        ).to(model.device)
+
+                        allow = build_mask(
+                            doc_lengths or [full_ids.shape[-1]],
+                            query_len=query_len,
+                            answer_len=answer_len,
+                            variant=variant_here,  # type: ignore[arg-type]
+                            **_mask_kwargs(variant_here, bridge_k_here),
+                        )
+                        additive = (
+                            to_additive(allow, dtype=model.dtype)
+                            .to(model.device)
+                            .unsqueeze(0)
+                            .unsqueeze(0)
+                        )
+                        positions = (
+                            build_positions(doc_lengths, query_len, answer_len, layout)  # type: ignore[arg-type]
+                            .unsqueeze(0)
+                            .to(model.device)
+                        )
+                        with torch.no_grad():
+                            out = model(
+                                input_ids=full_ids,
+                                attention_mask=additive,
+                                position_ids=positions,
+                                use_cache=False,
+                            )
+                        loss_val = float(shifted_cross_entropy(out.logits, labels).item())
+
+                        # Generation reuses inference.encode + inference.generate with the
+                        # right layout so the KV-cached decode path sees the same positions.
+                        batch = inference.encode(
+                            tokenizer, docs=doc_texts, query=query_text, layout=layout
+                        )
+                        preds = inference.generate(
+                            model, tokenizer, batch,
+                            mask_variant=variant_here,
+                            max_new_tokens=max_new_tokens,
+                            mask_kwargs=_mask_kwargs(variant_here, bridge_k_here),
+                        )
+                        pred = preds[0]
+
+                        rid = (
+                            f"phase4_restart:{model_name}:{dataset}:{tag}:{layout}:"
+                            f"seed={seed}:{prov.git_sha[:8]}:{record['id']}"
+                        )
+                        answers = record["possible_answers"]
+                        append(rid, "loss", loss_val, prov, store=store_path)
+                        append(rid, "em", exact_match(pred, answers), prov, store=store_path)
+                        append(rid, "f1", token_f1(pred, answers), prov, store=store_path)
+                        append(
+                            rid,
+                            "presence",
+                            answer_presence(pred, answers),
+                            prov,
+                            store=store_path,
+                        )
+                    if coerced_full > 0:
+                        print(
+                            f"[ddi.run:cache/restart_quality] coerced variant="
+                            f"{mask_variant!r} -> 'full' on {coerced_full} record(s)",
+                            file=sys.stderr,
+                        )
+                except Exception as exc:
+                    _log_cell_failure(cell_desc, exc)
 
 
 def run_cache(cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path) -> None:

@@ -41,7 +41,10 @@ def test_yaml_to_run_to_aggregate_e2e(tmp_path: Path) -> None:
     """Full round-trip: YAML -> ddi.run -> jsonl store -> ddi.aggregate -> summary.md."""
     from ddi.data import register_loader
 
-    ds_name = "tiny_qa_e2e_90"
+    # Must be one of the fixed dataset columns the aggregator's quality renderer
+    # recognizes (`ddi/aggregate.py::_QUALITY_DATASET_COLUMNS`) — anything else is
+    # silently dropped from the table and the render ends up with zero rows.
+    ds_name = "composition"
 
     def _loader(split, seed):
         yield {
