@@ -18,14 +18,19 @@ help:
 # One-shot experiment: matches any experiments/<name>.yaml. MODEL is optional at
 # the make layer — ddi.run itself raises loudly if the YAML has no `model:` and
 # no --model was passed.
+#
+# `--no-sync`: don't re-check the lockfile at run time. Offline containers block
+# `download.pytorch.org` (pyproject.toml pins torch to the cu121 index), so any
+# `uv sync` triggered at run time would fail. The operator must have run
+# `uv sync` once on a networked node beforehand (SERVERLESS.md step 2).
 exp-%:
-	uv run python -m ddi.run experiments/$*.yaml $(if $(MODEL),--model $(MODEL))
-	uv run python -m ddi.aggregate experiments/$*.yaml --out logs/$*_summary.md
+	uv run --no-sync python -m ddi.run experiments/$*.yaml $(if $(MODEL),--model $(MODEL))
+	uv run --no-sync python -m ddi.aggregate experiments/$*.yaml --out logs/$*_summary.md
 
 # Fetch a HF model once from the HF Hub (respects HF_HOME).
 hf-fetch:
 	@test -n "$(MODEL)" || (echo "usage: make hf-fetch MODEL=<hf-id>" && exit 2)
-	uv run python -c "from transformers import AutoModelForCausalLM, AutoTokenizer; \
+	uv run --no-sync python -c "from transformers import AutoModelForCausalLM, AutoTokenizer; \
 	           AutoTokenizer.from_pretrained('$(MODEL)'); \
 	           AutoModelForCausalLM.from_pretrained('$(MODEL)', torch_dtype='auto')"
 
@@ -70,4 +75,4 @@ list-experiments:
 	@ls experiments/*.yaml 2>/dev/null | xargs -n1 basename | sed 's/\.yaml//' | sed 's/^/  exp-/'
 
 gpu-check:
-	uv run python -c "import torch; assert torch.cuda.is_available(); print('CUDA:', torch.cuda.get_device_name())"
+	uv run --no-sync python -c "import torch; assert torch.cuda.is_available(); print('CUDA:', torch.cuda.get_device_name())"
