@@ -18,7 +18,7 @@ the research contract each YAML serves is in
 The preprint is scoped to three claims (per [#81](https://github.com/AlexKay28/ddi/issues/81)):
 
 - **C1 — quality parity.** DDI masks match `full` causal within the non-inferiority
-  margin `Δ` on the five direct QA datasets.
+  margin `Δ` on the four direct QA datasets.
 - **C3 — speed and realization ratio.** Wall-clock speedup vs. the analytical
   sparsity ceiling across `(N, L, backend)` grids.
 - **C4 — caching and restart layout.** Per-document KV blocks are reusable across
@@ -36,7 +36,7 @@ invocation time, so the same file drives every model in the sweep.
 
 | YAML | claim | one-line purpose | tracking issue |
 |---|---|---|---|
-| [`c1.yaml`](c1.yaml) | C1 | Quality parity across the five direct QA datasets (NQ, HotpotQA, MuSiQue, KILT-NQ, synthetic) under `full` / `ddi_qf` / `blind`. Run with `MODEL=Qwen/Qwen2.5-7B-Instruct` → [#74](https://github.com/AlexKay28/ddi/issues/74), `MODEL=meta-llama/Llama-3.1-8B-Instruct` → [#75](https://github.com/AlexKay28/ddi/issues/75). | #74 / #75 |
+| [`c1.yaml`](c1.yaml) | C1 | Quality parity across the four direct QA datasets (HotpotQA, MuSiQue, KILT-NQ, synthetic) under `full` / `ddi_qf` / `blind`. Run with `MODEL=Qwen/Qwen2.5-7B-Instruct` → [#74](https://github.com/AlexKay28/ddi/issues/74), `MODEL=meta-llama/Llama-3.1-8B-Instruct` → [#75](https://github.com/AlexKay28/ddi/issues/75). | #74 / #75 |
 | [`c3.yaml`](c3.yaml) | C3 | Timing grid over `(N, L, backend, mask)` — TTFT / TPOT / analytical / realized / realization ratio. Same model→issue mapping as `c1.yaml`. | #74 / #75 |
 | [`cache_correctness_c4.yaml`](cache_correctness_c4.yaml) | C4 | Correctness gate for per-document KV cache reuse — cached logits match recomputed logits within tolerance. | *(pending — filed under C4 rollup)* |
 | [`cache_throughput_c4.yaml`](cache_throughput_c4.yaml) | C4 | Cached vs. recomputed throughput on repeated documents; replaces the legacy F5 figure. | *(pending — filed under C4 rollup)* |
