@@ -39,28 +39,12 @@ _INTEG = pytest.mark.skipif(
 @_INTEG
 def test_yaml_to_run_to_aggregate_e2e(tmp_path: Path) -> None:
     """Full round-trip: YAML -> ddi.run -> jsonl store -> ddi.aggregate -> summary.md."""
-    from ddi.data import register_loader
-
     # Must be one of the fixed dataset columns the aggregator's quality renderer
     # recognizes (`ddi/aggregate.py::_QUALITY_DATASET_COLUMNS`) — anything else is
     # silently dropped from the table and the render ends up with zero rows.
-    ds_name = "composition"
-
-    def _loader(split, seed):
-        yield {
-            "id": "r1",
-            "info_contexts": ["alpha beta"],
-            "dialog": [
-                {"role": "user", "content": "What?"},
-                {"role": "assistant", "content": "beta"},
-            ],
-            "possible_answers": ["beta"],
-        }
-
-    try:
-        register_loader(ds_name)(_loader)
-    except ValueError:
-        pass  # already registered by a previous test invocation
+    # #105 pruned the column list to four live QA datasets; `synthetic_qa` is stable
+    # (hermetic — no network, deterministic per (split, seed)).
+    ds_name = "synthetic_qa"
 
     store = tmp_path / "runs.jsonl"
     yaml_path = tmp_path / "exp.yaml"
@@ -103,7 +87,7 @@ def test_yaml_to_run_to_aggregate_e2e(tmp_path: Path) -> None:
     header = next(line for line in text.splitlines() if line.startswith("| mask |"))
     cols = [c.strip() for c in header.strip().strip("|").split("|")]
     assert cols[0] == "mask"
-    assert "composition" in cols  # first fixed column in the dataset order
+    assert "synthetic_qa" in cols  # first fixed column in the pruned #105 dataset order
     # The `full` row must be present (it's the only mask we ran).
     assert any(line.startswith("| full |") for line in text.splitlines())
     # Provenance footer marker emitted exactly once for the single table.

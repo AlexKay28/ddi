@@ -41,16 +41,10 @@ def _write_row(
 def _seed_quality_store(store: Path) -> None:
     """One f1 row per (mask, dataset) so we hit every column."""
     for ds in (
-        "composition",
         "synthetic_qa",
         "hotpot_qa",
         "musique",
         "kilt_nq",
-        "ddi_stress__fact_chain",
-        "ddi_stress__fact_aggregation",
-        "ddi_stress__contradiction",
-        "ddi_stress__coreference",
-        "ddi_stress__needle",
     ):
         _write_row(store, f"phase2_train_free:Qwen:{ds}:full:seed=0:sha:r0", "f1", 0.8)
         _write_row(
@@ -65,21 +59,16 @@ def test_render_quality_kind_shape(tmp_path: Path) -> None:
     spec = {"kind": "quality", "rows": "mask", "cols": "dataset", "metric": "f1"}
     out = render_table(spec, store)
 
-    # Header carries the fixed dataset column order from #72.
+    # Header carries the fixed dataset column order from #72 (pruned in #105 to the
+    # four live QA datasets — composition / ddi_stress__* are gone).
     header = next(line for line in out.splitlines() if line.startswith("| mask |"))
     cols = [c.strip() for c in header.strip().strip("|").split("|")]
     assert cols == [
         "mask",
-        "composition",
         "synthetic_qa",
         "hotpot_qa",
         "musique",
         "kilt_nq",
-        "ds/fact_chain",
-        "ds/fact_agg",
-        "ds/contra",
-        "ds/coref",
-        "ds/needle",
     ]
     # `full` row is the baseline (no Δ annotation).
     full_row = next(line for line in out.splitlines() if line.startswith("| full |"))
@@ -96,30 +85,37 @@ def test_render_quality_kind_shape(tmp_path: Path) -> None:
 def test_quality_excludes_nq_column(tmp_path: Path) -> None:
     store = tmp_path / "runs.jsonl"
     _write_row(store, "phase2_train_free:Qwen:nq:full:seed=0:sha:r0", "f1", 0.9)
-    _write_row(store, "phase2_train_free:Qwen:composition:full:seed=0:sha:r0", "f1", 0.3)
+    _write_row(store, "phase2_train_free:Qwen:synthetic_qa:full:seed=0:sha:r0", "f1", 0.3)
     out = render_table(
         {"kind": "quality", "rows": "mask", "cols": "dataset", "metric": "f1"}, store
     )
     header = next(line for line in out.splitlines() if line.startswith("| mask |"))
     assert " nq " not in header
-    assert "composition" in header
+    assert "synthetic_qa" in header
 
 
-def test_quality_ddi_stress_family_maps_to_ds_column(tmp_path: Path) -> None:
+def test_quality_drops_stale_stress_and_composition_rows(tmp_path: Path) -> None:
+    """Post-#89 the composition / ddi_stress loaders are gone; historical rows must be
+    silently dropped rather than blowing up the renderer or leaking into a column."""
     store = tmp_path / "runs.jsonl"
+    # Stale rows that used to feed removed columns.
+    _write_row(store, "phase2_train_free:Qwen:composition:full:seed=0:sha:r0", "f1", 0.5)
     _write_row(
         store,
         "phase2_train_free:Qwen:ddi_stress__fact_chain:full:seed=0:sha:r0",
         "f1",
         0.55,
     )
+    # A live row so the renderer has something to emit (else it raises).
+    _write_row(store, "phase2_train_free:Qwen:hotpot_qa:full:seed=0:sha:r0", "f1", 0.7)
+
     out = render_table(
         {"kind": "quality", "rows": "mask", "cols": "dataset", "metric": "f1"}, store
     )
-    full_row = next(line for line in out.splitlines() if line.startswith("| full |"))
-    cells = [c.strip() for c in full_row.strip().strip("|").split("|")]
-    # cells[0] == "full"; column order fixed → ds/fact_chain is index 6.
-    assert cells[6] == "0.5500"
+    header = next(line for line in out.splitlines() if line.startswith("| mask |"))
+    assert "composition" not in header
+    assert "ds/fact_chain" not in header
+    assert "hotpot_qa" in header
 
 
 # ---- kind: timing ---------------------------------------------------------------------------
@@ -251,6 +247,146 @@ def test_render_throughput_kind_shape(tmp_path: Path) -> None:
     # Skip the header row label ("mode") — keep only data rows.
     data_labels = [lbl for lbl in row_labels if lbl != "mode"]
     assert data_labels == ["ddi_cache", "ddi_recompute", "full_causal"]
+
+
+# ---- kind: correctness ----------------------------------------------------------------------
+
+
+def _seed_correctness_store(store: Path) -> None:
+    """Seed one (model, L=512) sub-block with full_causal / ddi_recompute / ddi_cache
+    across N in {3, 9, 25}, with two queries per doc so max/mean differ.
+    """
+    for n in (3, 9, 25):
+        for q in (0, 1):
+            # `full_causal` is the baseline — always 0.0 per the runner contract.
+            _write_row(
+                store,
+                f"phase4_cache:Qwen:full_causal:N={n}:L=512:seed=0:sha:q{q}",
+                "max_abs_logit_diff",
+                0.0,
+            )
+            # `ddi_recompute` — small non-zero diff; second query is worse so max() must win.
+            _write_row(
+                store,
+                f"phase4_cache:Qwen:ddi_recompute:N={n}:L=512:seed=0:sha:q{q}",
+                "max_abs_logit_diff",
+                1e-5 if q == 0 else 5e-5,
+            )
+            # `ddi_cache` — a hair larger than recompute (cache round-trip noise).
+            _write_row(
+                store,
+                f"phase4_cache:Qwen:ddi_cache:N={n}:L=512:seed=0:sha:q{q}",
+                "max_abs_logit_diff",
+                2e-5 if q == 0 else 8e-5,
+            )
+
+
+def test_render_correctness_kind_shape(tmp_path: Path) -> None:
+    """kind: correctness renders one sub-table per (model, L) with mode × N cells."""
+    store = tmp_path / "runs.jsonl"
+    _seed_correctness_store(store)
+    spec = {
+        "kind": "correctness",
+        "rows": "mode",
+        "cols": "N",
+        "metric": "max_abs_logit_diff",
+    }
+    out = render_table(spec, store)
+
+    assert "correctness — max_abs_logit_diff" in out
+    assert "Qwen — L=512" in out
+    header = next(line for line in out.splitlines() if line.startswith("| mode |"))
+    cols = [c.strip() for c in header.strip().strip("|").split("|")]
+    assert cols == ["mode", "N=3", "N=9", "N=25"]
+
+
+def test_render_correctness_full_causal_is_baseline_zero(tmp_path: Path) -> None:
+    """`full_causal` row always renders 0.00e+00 (baseline by definition)."""
+    store = tmp_path / "runs.jsonl"
+    _seed_correctness_store(store)
+    out = render_table({"kind": "correctness", "metric": "max_abs_logit_diff"}, store)
+    full_row = next(line for line in out.splitlines() if line.startswith("| full_causal |"))
+    cells = [c.strip() for c in full_row.strip().strip("|").split("|")]
+    # cells[0] == "full_causal"; every value cell must be exact zero in scientific form.
+    for cell in cells[1:]:
+        assert cell == "0.00e+00", f"baseline cell not zero: {cell!r}"
+
+
+def test_render_correctness_cell_uses_max_across_queries(tmp_path: Path) -> None:
+    """The cell aggregator must take max across queries (worst-case gate, not mean)."""
+    store = tmp_path / "runs.jsonl"
+    _seed_correctness_store(store)
+    out = render_table({"kind": "correctness", "metric": "max_abs_logit_diff"}, store)
+    recompute_row = next(
+        line for line in out.splitlines() if line.startswith("| ddi_recompute |")
+    )
+    # Q0=1e-5, Q1=5e-5 → max = 5e-5 → formatted "5.00e-05".
+    assert "5.00e-05" in recompute_row
+    # If the renderer took the mean, the value would be 3.00e-05 — must NOT appear.
+    assert "3.00e-05" not in recompute_row
+
+
+def test_render_correctness_row_order_full_causal_first(tmp_path: Path) -> None:
+    """Row order: full_causal first (baseline), then remaining modes alphabetically."""
+    store = tmp_path / "runs.jsonl"
+    _seed_correctness_store(store)
+    out = render_table({"kind": "correctness", "metric": "max_abs_logit_diff"}, store)
+    mode_labels = [
+        line.split("|")[1].strip()
+        for line in out.splitlines()
+        if line.startswith("|") and "N=" not in line and "---" not in line
+    ]
+    data_labels = [lbl for lbl in mode_labels if lbl != "mode"]
+    # `ddi_cache` < `ddi_recompute` alphabetically → cache comes before recompute.
+    assert data_labels == ["full_causal", "ddi_cache", "ddi_recompute"]
+
+
+def test_render_correctness_scientific_notation(tmp_path: Path) -> None:
+    """Cells render as scientific notation (`{value:.2e}`) — bf16 diffs are O(1e-4)."""
+    store = tmp_path / "runs.jsonl"
+    _seed_correctness_store(store)
+    out = render_table({"kind": "correctness", "metric": "max_abs_logit_diff"}, store)
+    # Some cell in the body has scientific-notation form with lowercase `e`.
+    body_rows = [
+        line for line in out.splitlines() if line.startswith("| ") and "e-" in line
+    ]
+    assert body_rows, "no scientific-notation cell found in correctness table"
+
+
+def test_render_correctness_appends_provenance_footer(tmp_path: Path) -> None:
+    store = tmp_path / "runs.jsonl"
+    _seed_correctness_store(store)
+    out = render_table({"kind": "correctness", "metric": "max_abs_logit_diff"}, store)
+    assert FOOTER_MARKER in out
+    assert out.count(FOOTER_MARKER) == 1
+
+
+def test_render_correctness_multiple_ls_emits_sub_blocks(tmp_path: Path) -> None:
+    """One sub-table per (model, L) — different L values must each get their own block."""
+    store = tmp_path / "runs.jsonl"
+    _write_row(
+        store,
+        "phase4_cache:Qwen:full_causal:N=3:L=256:seed=0:sha:q0",
+        "max_abs_logit_diff",
+        0.0,
+    )
+    _write_row(
+        store,
+        "phase4_cache:Qwen:full_causal:N=3:L=512:seed=0:sha:q0",
+        "max_abs_logit_diff",
+        0.0,
+    )
+    out = render_table({"kind": "correctness", "metric": "max_abs_logit_diff"}, store)
+    assert "Qwen — L=256" in out
+    assert "Qwen — L=512" in out
+
+
+def test_render_correctness_empty_store_raises(tmp_path: Path) -> None:
+    """No phase4_cache rows in the store → loud error, not empty output."""
+    store = tmp_path / "runs.jsonl"
+    store.touch()
+    with pytest.raises(ValueError, match="no phase4_cache rows"):
+        render_table({"kind": "correctness", "metric": "max_abs_logit_diff"}, store)
 
 
 # ---- Colorization contract ------------------------------------------------------------------

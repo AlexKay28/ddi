@@ -190,6 +190,58 @@ def test_cache_unknown_task_raises(tmp_path: Path) -> None:
         ddi_run.run(p)
 
 
+def test_cache_correctness_requires_modes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """cache/correctness must reject configs missing the `modes` key (post-#105 schema)."""
+    monkeypatch.setattr(
+        ddi_run.inference, "load", lambda *a, **k: (_FakeModel(), object())
+    )
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    body = (
+        "kind: cache\ntask: correctness\nseed: 0\nmodel: irrelevant\n"
+        "Ns: [1]\nLs: [8]\n"
+    )
+    p = _write_yaml(tmp_path, body)
+    with pytest.raises(ValueError, match="missing required key: 'modes'"):
+        ddi_run.run(p)
+
+
+def test_cache_correctness_unknown_mode_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """cache/correctness must reject an unknown mode (typo guard on the YAML)."""
+    monkeypatch.setattr(
+        ddi_run.inference, "load", lambda *a, **k: (_FakeModel(), object())
+    )
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    body = (
+        "kind: cache\ntask: correctness\nseed: 0\nmodel: irrelevant\n"
+        "modes: [ddi_cache, ddi_recompute, full_causal, garbage]\n"
+        "Ns: [1]\nLs: [8]\n"
+    )
+    p = _write_yaml(tmp_path, body)
+    with pytest.raises(ValueError, match="unknown mode"):
+        ddi_run.run(p)
+
+
+def test_cache_correctness_missing_full_causal_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """cache/correctness requires `full_causal` in `modes` (it is the baseline reference)."""
+    monkeypatch.setattr(
+        ddi_run.inference, "load", lambda *a, **k: (_FakeModel(), object())
+    )
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    body = (
+        "kind: cache\ntask: correctness\nseed: 0\nmodel: irrelevant\n"
+        "modes: [ddi_cache, ddi_recompute]\nNs: [1]\nLs: [8]\n"
+    )
+    p = _write_yaml(tmp_path, body)
+    with pytest.raises(ValueError, match="'full_causal' must be in modes"):
+        ddi_run.run(p)
+
+
 # ---------------------------------------------------------------------------
 # Pure-unit: per-cell isolation.  We monkeypatch a dispatcher's inner loop
 # so the outer wrapper's try/except is what we're exercising.
@@ -322,39 +374,54 @@ def test_timing_dispatch_writes_expected_rows(tmp_path: Path) -> None:
 
 @_INTEG
 def test_cache_correctness_dispatch_writes_expected_rows(tmp_path: Path) -> None:
-    """End-to-end: kind: cache task: correctness → store has phase4_cache prefix + kv rows."""
-    from ddi.data import register_loader
+    """End-to-end: kind: cache task: correctness → phase4_cache rows with the new
+    (mode × N × L × query_i) shape from #105.
 
-    ds_name = "tiny_docs_run85"
-
-    def _loader(split, seed):
-        yield {
-            "id": "r1",
-            "info_contexts": ["alpha beta"],
-            "dialog": [{"role": "user", "content": "?"}, {"role": "assistant", "content": "beta"}],
-            "possible_answers": ["beta"],
-        }
-
-    try:
-        register_loader(ds_name)(_loader)
-    except ValueError:
-        pass
-
+    Asserts:
+      - Every run_id carries the `phase4_cache:` prefix and the mode/N=/L=/q fragments.
+      - Every emitted metric is `max_abs_logit_diff`.
+      - `full_causal` rows report exactly 0.0 (baseline is itself).
+      - Row count matches `len(modes) × len(Ns) × len(Ls) × n_queries_per_doc`.
+    """
     store = tmp_path / "runs.jsonl"
     cache_dir = tmp_path / "cache"
+    modes = ["ddi_cache", "ddi_recompute", "full_causal"]
+    Ns = [1, 2]
+    Ls = [8]
+    n_queries_per_doc = 2
     body = (
         f"kind: cache\ntask: correctness\nseed: 0\nmodel: {_TINY}\n"
-        f"dataset: {ds_name}\nmax_records: 1\nlayout: restart\n"
+        f"modes: {modes}\nNs: {Ns}\nLs: {Ls}\n"
+        f"n_queries_per_doc: {n_queries_per_doc}\n"
+        f"Q: 4\nanswer_len: 2\n"
         f"cache_dir: {cache_dir}\noutput_store: {store}\n"
     )
     p = _write_yaml(tmp_path, body)
     ddi_run.run(p)
 
     rows = _read_rows(store)
-    assert rows
-    assert all(r["run_id"].startswith("phase4_cache:") for r in rows)
+    assert rows, "cache/correctness dispatcher wrote no rows"
+    # Every row carries the phase4_cache prefix + N=/L=/q fragments.
+    for r in rows:
+        rid = r["run_id"]
+        assert rid.startswith("phase4_cache:")
+        assert ":N=" in rid and ":L=" in rid and ":q" in rid
+        # Mode segment must be one of the requested modes.
+        mode_seg = rid.split(":")[2]
+        assert mode_seg in modes, f"unexpected mode segment {mode_seg!r} in {rid!r}"
+
+    # Every row is `max_abs_logit_diff` — no other metric name is emitted.
     metrics_seen = {r["metric"] for r in rows}
-    assert {"kv_deterministic", "kv_cache_roundtrip"} <= metrics_seen
+    assert metrics_seen == {"max_abs_logit_diff"}
+
+    # full_causal rows are exactly 0.0 (baseline is itself by construction).
+    full_rows = [r for r in rows if ":full_causal:" in r["run_id"]]
+    assert full_rows, "no full_causal rows emitted"
+    assert all(r["value"] == 0.0 for r in full_rows)
+
+    # Total row count = |modes| × |Ns| × |Ls| × n_queries_per_doc.
+    expected = len(modes) * len(Ns) * len(Ls) * n_queries_per_doc
+    assert len(rows) == expected, f"expected {expected} rows, got {len(rows)}"
 
 
 @_INTEG

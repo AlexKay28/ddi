@@ -1,8 +1,11 @@
-# C1 — quality parity for Llama-3.1-8B-Instruct across the five direct QA datasets.
+# C1 — quality parity for Llama-3.1-8B-Instruct across the four direct QA datasets.
 #
 # Mirror of qwen_instruct_c1.yaml — identical axes, different model. Kept as a
 # separate YAML (rather than a matrix) so per-model summaries can be pasted into
 # their own tracking issues without a splitter step in the aggregator.
+#
+# ``nq`` was dropped in #105: it is degenerate (no docs), the aggregator silently drops
+# every row, and the runner wastes ~300 record-passes on it per sweep.
 #
 # Tracking: https://github.com/AlexKay28/ddi/issues/75
 # Schema:   experiments/README.md + issue #81 YAML format section.
@@ -10,7 +13,7 @@
 kind: quality
 model: meta-llama/Llama-3.1-8B-Instruct
 seed: 0
-datasets: [hotpot_qa, musique, kilt_nq, synthetic_qa, nq]
+datasets: [hotpot_qa, musique, kilt_nq, synthetic_qa]
 masks: [full, ddi_qf, blind]
 max_records: 100
 max_new_tokens: 64
