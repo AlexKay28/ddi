@@ -109,10 +109,53 @@ def _store_path_for(cfg: dict[str, Any]) -> Path:
     return Path(raw) if raw else DEFAULT_STORE
 
 
+def _log(msg: str) -> None:
+    """Print a progress line to stderr with the [ddi.run] prefix (flushed)."""
+    print(f"[ddi.run] {msg}", file=sys.stderr, flush=True)
+
+
 def _log_cell_failure(cell_desc: str, exc: BaseException) -> None:
     """Log a per-cell failure to stderr without aborting the outer sweep loop."""
-    print(f"[ddi.run] cell FAILED: {cell_desc}: {exc!r}", file=sys.stderr)
+    print(f"[ddi.run] cell FAILED: {cell_desc}: {exc!r}", file=sys.stderr, flush=True)
     traceback.print_exc(file=sys.stderr)
+
+
+class _CellTracker:
+    """Bookkeeping for per-cell tick/timing + end-of-run summary.
+
+    Prints:
+      - `cell i/N: <desc>` when a cell starts.
+      - `  → OK (T.Ts)` or `  → FAILED` when it ends.
+      - `done — P passed, F failed in T.Ts total` on `.summary(kind)`.
+    """
+
+    def __init__(self, kind: str, total: int) -> None:
+        self.kind = kind
+        self.total = total
+        self.i = 0
+        self.passed = 0
+        self.failed = 0
+        self.t0 = time.perf_counter()
+        _log(f"{kind}: starting {total} cells")
+
+    def start(self, desc: str) -> float:
+        self.i += 1
+        _log(f"  cell {self.i}/{self.total}: {desc}")
+        return time.perf_counter()
+
+    def ok(self, t: float) -> None:
+        self.passed += 1
+        _log(f"    → OK ({time.perf_counter() - t:.1f}s)")
+
+    def fail(self, t: float) -> None:
+        self.failed += 1
+        _log(f"    → FAILED ({time.perf_counter() - t:.1f}s)")
+
+    def summary(self) -> None:
+        _log(
+            f"{self.kind}: done — {self.passed} passed, {self.failed} failed "
+            f"in {time.perf_counter() - self.t0:.1f}s"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -324,15 +367,18 @@ def run_quality(cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path) 
     if not isinstance(metrics, list) or not metrics:
         raise ValueError("quality: 'metrics' must be a non-empty list")
 
+    _log(f"quality: loading model {model_name!r}")
     model, tokenizer = inference.load(model_name)
     model.eval()
     if torch.cuda.is_available():
         model = model.to("cuda")
 
+    tracker = _CellTracker("quality", len(datasets) * len(masks))
     for dataset in datasets:
         for mask_spec in masks:
             mask_variant, bridge_k = _parse_mask_spec(mask_spec)
-            cell_desc = f"quality({dataset=}, mask={mask_variant}, bridge_k={bridge_k})"
+            cell_desc = f"dataset={dataset} mask={mask_variant} bridge_k={bridge_k}"
+            t = tracker.start(cell_desc)
             try:
                 _quality_cell(
                     model=model,
@@ -349,8 +395,11 @@ def run_quality(cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path) 
                     cfg_hash=cfg_hash,
                     store_path=store_path,
                 )
+                tracker.ok(t)
             except Exception as exc:  # per-cell isolation
-                _log_cell_failure(cell_desc, exc)
+                _log_cell_failure(f"quality({cell_desc})", exc)
+                tracker.fail(t)
+    tracker.summary()
 
 
 # ---------------------------------------------------------------------------
@@ -485,14 +534,14 @@ def run_timing(cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path) -
         if not isinstance(lst, list) or not lst:
             raise ValueError(f"timing: {lst_name!r} must be a non-empty list")
 
+    tracker = _CellTracker("timing", len(masks) * len(Ns) * len(Ls) * len(backends))
     for mask_spec in masks:
         mask_variant, bridge_k = _parse_mask_spec(mask_spec)
         for N in Ns:
             for L in Ls:
                 for backend in backends:
-                    cell_desc = (
-                        f"timing(mask={mask_variant}, N={N}, L={L}, backend={backend})"
-                    )
+                    cell_desc = f"mask={mask_variant} N={N} L={L} backend={backend}"
+                    t = tracker.start(cell_desc)
                     try:
                         _timing_cell(
                             model_name=model_name,
@@ -509,8 +558,11 @@ def run_timing(cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path) -
                             cfg_hash=cfg_hash,
                             store_path=store_path,
                         )
+                        tracker.ok(t)
                     except Exception as exc:
-                        _log_cell_failure(cell_desc, exc)
+                        _log_cell_failure(f"timing({cell_desc})", exc)
+                        tracker.fail(t)
+    tracker.summary()
 
 
 # ---------------------------------------------------------------------------
@@ -1217,6 +1269,8 @@ def run_cache(cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path) ->
     task = _require(cfg, "task", "cache")
     store_path = _store_path_for(cfg)
 
+    t0 = time.perf_counter()
+    _log(f"cache/{task}: starting")
     if task == "correctness":
         _cache_correctness(cfg, cfg_hash, seed, store_path)
     elif task == "throughput":
@@ -1227,6 +1281,7 @@ def run_cache(cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path) ->
         raise ValueError(
             f"cache: unknown task {task!r}; expected correctness | throughput | restart_quality"
         )
+    _log(f"cache/{task}: done in {time.perf_counter() - t0:.1f}s")
 
 
 # ---------------------------------------------------------------------------
@@ -1262,6 +1317,7 @@ def run(yaml_path: Path, seed_override: int | None = None) -> None:
         )
 
     _seed_all(seed)
+    _log(f"loading YAML {yaml_path} (kind={kind}, seed={seed}, cfg_hash={cfg_hash[:8]})")
     _DISPATCH[kind](cfg, cfg_hash, seed, yaml_path)
 
 
