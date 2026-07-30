@@ -2,7 +2,7 @@
 
 Every experiment on `main` is one YAML file in this directory plus one line in the
 top-level `Makefile`. Running an experiment is `make exp-<name>`; publishing the
-resulting Markdown summary to a tracking GitHub issue is `make publish-summary`.
+resulting JSON summary to a tracking GitHub issue is `make publish-summary`.
 
 Docs describing the operator-facing flow (container base, HF prefetch, offline mode,
 one-experiment-per-GPU rule) live in [`SERVERLESS.md`](SERVERLESS.md).
@@ -57,13 +57,13 @@ Two steps, no Python:
    `Makefile` has a pattern rule — no new `Makefile` line is needed.
 
 The runner (`python -m ddi.run experiments/<name>.yaml --model <hf-id>`) writes
-rows to `results/runs.jsonl` and emits `logs/<name>_summary.md` from the YAML's
+rows to `results/runs.jsonl` and emits `logs/<name>_summary.json` from the YAML's
 `report:` block. `ddi.aggregate` groups by model automatically, so running the
 same YAML with two different `MODEL=` values against the same store produces one
 summary with a section per model. Publish it to the tracking issue with:
 
 ```
-make publish-summary SUMMARY=logs/<name>_summary.md ISSUE=<n>
+make publish-summary SUMMARY=logs/<name>_summary.json ISSUE=<n>
 ```
 
 For the container / prefetch / offline recipe, see [`SERVERLESS.md`](SERVERLESS.md).

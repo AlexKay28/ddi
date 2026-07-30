@@ -35,7 +35,7 @@ help:
 #             `make exp-c3 MODEL=... BACKENDS=sdpa`.
 exp-%:
 	$(PY) -m ddi.run experiments/$*.yaml $(if $(MODEL),--model $(MODEL)) $(if $(BACKENDS),--backends $(BACKENDS))
-	$(PY) -m ddi.aggregate experiments/$*.yaml --out logs/$*_summary.md $(if $(MODEL),--model $(MODEL))
+	$(PY) -m ddi.aggregate experiments/$*.yaml --out logs/$*_summary.json $(if $(MODEL),--model $(MODEL))
 
 # Fetch a HF model once from the HF Hub (respects HF_HOME).
 hf-fetch:
