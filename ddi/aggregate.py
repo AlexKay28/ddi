@@ -114,6 +114,35 @@ def filter_rows(
                 continue
         yield row
 
+
+def _row_model(row: dict) -> str | None:
+    """Extract the model from a row's run_id.
+
+    Every producer in `ddi/run.py` writes run_ids of shape ``<prefix>:<model>:...``
+    (phase2_train_free, phase3_timing, phase4_cache, phase4_throughput, phase4_restart).
+    Returns ``None`` for rows whose shape doesn't match — those rows can't be filtered by
+    model and will be dropped by any model-filtered load.
+    """
+    run_id = str(row.get("run_id", ""))
+    parts = run_id.split(":", 2)  # only need up to the model field
+    if len(parts) < 2 or not parts[0] or not parts[1]:
+        return None
+    return parts[1]
+
+
+def load_rows(store: Path, model_filter: str | None = None) -> list[dict]:
+    """Read the JSONL store into a list, optionally filtered to one model.
+
+    Every renderer calls this at the top instead of ``iter_rows(store)`` so that a
+    ``--model`` CLI override applied to ``aggregate`` propagates uniformly. The store
+    itself is append-only and shared across every run — the filter lets a caller who
+    only cares about one model get a clean summary from a store that has many.
+    """
+    rows = list(iter_rows(store))
+    if model_filter is None:
+        return rows
+    return [r for r in rows if _row_model(r) == model_filter]
+
 # ---- Colorization contract (from color_tables.py, #72 Qwen comment) ------------------------
 #
 # The rules that govern ``render_cell`` are load-bearing for how the paper reads: 🟢 only
@@ -246,7 +275,7 @@ def _quality_mask_order(masks: Iterable[str]) -> list[str]:
     return ordered + extras
 
 
-def _render_quality(spec: dict, store: Path) -> str:
+def _render_quality(spec: dict, store: Path, model_filter: str | None = None) -> str:
     metric = spec.get("metric")
     if metric not in _QUALITY_METRIC_HEADERS:
         raise ValueError(
@@ -255,7 +284,7 @@ def _render_quality(spec: dict, store: Path) -> str:
         )
     is_loss = metric == "loss"
 
-    all_rows = list(iter_rows(store))
+    all_rows = load_rows(store, model_filter)
     if not any(str(r.get("run_id", "")).startswith(_QUALITY_PREFIX) for r in all_rows):
         raise ValueError(
             f"quality[{metric}]: no phase2_train_free rows in store {store}. "
@@ -379,7 +408,7 @@ def _restart_layout_order(layouts: Iterable[str]) -> list[str]:
     return ordered + extras
 
 
-def _render_restart_quality(spec: dict, store: Path) -> str:
+def _render_restart_quality(spec: dict, store: Path, model_filter: str | None = None) -> str:
     metric = spec.get("metric")
     if metric not in _RESTART_METRIC_HEADERS:
         raise ValueError(
@@ -388,7 +417,7 @@ def _render_restart_quality(spec: dict, store: Path) -> str:
         )
     is_loss = metric == "loss"
 
-    all_rows = list(iter_rows(store))
+    all_rows = load_rows(store, model_filter)
     if not any(str(r.get("run_id", "")).startswith(_RESTART_PREFIX) for r in all_rows):
         raise ValueError(
             f"restart_quality[{metric}]: no phase4_restart rows in store {store}. "
@@ -532,6 +561,7 @@ def _timing_mask_order(masks: Iterable[str]) -> list[str]:
 
 def _timing_collect(
     store: Path,
+    model_filter: str | None = None,
 ) -> tuple[
     dict[tuple[str, str, int, int, str, int], dict[str, float]],
     list[dict],
@@ -543,7 +573,7 @@ def _timing_collect(
     """
     per_cell: dict[tuple[str, str, int, int, str, int], dict[str, float]] = {}
     backing_rows: list[dict] = []
-    for row in iter_rows(store):
+    for row in load_rows(store, model_filter):
         parsed = _timing_parse_run_id(str(row.get("run_id", "")))
         if parsed is None:
             continue
@@ -620,7 +650,7 @@ def _timing_fmt_cell(metric: str, value: float | None) -> str:
     return f"{value:.4f}"
 
 
-def _render_timing(spec: dict, store: Path) -> str:
+def _render_timing(spec: dict, store: Path, model_filter: str | None = None) -> str:
     metric = spec.get("metric")
     if metric not in _TIMING_METRIC_HEADERS:
         raise ValueError(
@@ -636,13 +666,13 @@ def _render_timing(spec: dict, store: Path) -> str:
             f"timing: split_by keys must be a subset of ['L', 'backend'], got extras {unknown}"
         )
 
-    if not any(str(r.get("run_id", "")).startswith(_TIMING_PREFIX) for r in iter_rows(store)):
+    if not any(str(r.get("run_id", "")).startswith(_TIMING_PREFIX) for r in load_rows(store, model_filter)):
         raise ValueError(
             f"timing[{metric}]: no phase3_timing rows in store {store}. "
             "Run the phase3 sweep first."
         )
 
-    per_cell, backing_rows = _timing_collect(store)
+    per_cell, backing_rows = _timing_collect(store, model_filter)
     _timing_apply_derived(per_cell)
 
     # Aggregate values per (model, L, backend, mask, N) by mean across seeds. Track masks
@@ -732,10 +762,10 @@ def _throughput_mode_order(modes: Iterable[str]) -> list[str]:
     return ordered + extras
 
 
-def _render_throughput(spec: dict, store: Path) -> str:
+def _render_throughput(spec: dict, store: Path, model_filter: str | None = None) -> str:
     metric = spec.get("metric") or "qps"
 
-    all_rows = list(iter_rows(store))
+    all_rows = load_rows(store, model_filter)
     if not any(str(r.get("run_id", "")).startswith(_THROUGHPUT_PREFIX) for r in all_rows):
         raise ValueError(
             f"throughput[{metric}]: no phase4_throughput rows in store {store}. "
@@ -848,10 +878,10 @@ def _correctness_mode_order(modes: Iterable[str]) -> list[str]:
     return ordered
 
 
-def _render_correctness(spec: dict, store: Path) -> str:
+def _render_correctness(spec: dict, store: Path, model_filter: str | None = None) -> str:
     metric = spec.get("metric") or "max_abs_logit_diff"
 
-    all_rows = list(iter_rows(store))
+    all_rows = load_rows(store, model_filter)
     if not any(str(r.get("run_id", "")).startswith(_CORRECTNESS_PREFIX) for r in all_rows):
         raise ValueError(
             f"correctness[{metric}]: no phase4_cache rows in store {store}. "
@@ -934,7 +964,7 @@ def _log(msg: str) -> None:
     print(f"[ddi.aggregate] {msg}", file=sys.stderr, flush=True)
 
 
-def render_table(spec: dict, store: Path) -> str:
+def render_table(spec: dict, store: Path, model_filter: str | None = None) -> str:
     """Render one ``report.tables[]`` entry to a Markdown string with provenance footer.
 
     ``spec`` keys:
@@ -943,13 +973,17 @@ def render_table(spec: dict, store: Path) -> str:
       - ``rows`` / ``cols``: axis names (informational; the emitted shape is fixed per kind).
       - ``metric``: which metric to render.
       - ``split_by`` (optional, timing only): list of axes to split sub-tables on.
+
+    ``model_filter`` scopes every renderer to a single model — the store is shared and
+    append-only, so a caller that just ran one model wants to see only that model in the
+    summary.
     """
     kind = spec.get("kind")
     if kind not in _RENDERERS:
         raise ValueError(
             f"unknown table kind {kind!r}; expected one of {sorted(_RENDERERS)}"
         )
-    return _RENDERERS[kind](spec, store)
+    return _RENDERERS[kind](spec, store, model_filter)
 
 
 def aggregate(
@@ -957,12 +991,16 @@ def aggregate(
     out: Path,
     store: Path = Path("results/runs.jsonl"),
     append: bool = False,
+    model_filter: str | None = None,
 ) -> None:
     """Read ``report.tables:`` from ``exp_yaml``, emit each table into ``out``.
 
     Each ``report.tables[]`` entry becomes one Markdown block ending with a provenance
     footer, separated by blank lines. If ``append`` is True, blocks are appended to an
     existing ``out``; otherwise ``out`` is overwritten.
+
+    ``model_filter`` scopes the rendered tables to rows whose ``run_id`` names that model.
+    The store itself is left untouched.
     """
     exp_yaml = Path(exp_yaml)
     out = Path(out)
@@ -980,7 +1018,8 @@ def aggregate(
     if not tables_spec:
         raise ValueError(f"{exp_yaml}: report.tables is empty — nothing to render.")
 
-    _log(f"loading YAML {exp_yaml}; {len(tables_spec)} table(s) to render from store {store}")
+    scope = f" (model={model_filter})" if model_filter else ""
+    _log(f"loading YAML {exp_yaml}; {len(tables_spec)} table(s) to render from store {store}{scope}")
     t0 = time.perf_counter()
     rendered: list[str] = []
     for i, spec in enumerate(tables_spec, 1):
@@ -988,7 +1027,7 @@ def aggregate(
         metric = spec.get("metric", "?")
         t = time.perf_counter()
         try:
-            block = render_table(spec, store)
+            block = render_table(spec, store, model_filter)
             rendered.append(block)
             _log(f"  table {i}/{len(tables_spec)}: kind={kind} metric={metric} → OK ({time.perf_counter() - t:.2f}s)")
         except Exception as exc:
@@ -1039,12 +1078,27 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Append to --out instead of overwriting.",
     )
+    p.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        help=(
+            "Filter rendered rows to a single model (HF repo id, matches what --model of "
+            "ddi.run wrote). Store is unchanged."
+        ),
+    )
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    aggregate(args.exp_yaml, args.out, store=args.store, append=args.append)
+    aggregate(
+        args.exp_yaml,
+        args.out,
+        store=args.store,
+        append=args.append,
+        model_filter=args.model,
+    )
     return 0
 
 
