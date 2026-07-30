@@ -80,34 +80,102 @@ def load_model(
     return model, tokenizer
 
 
-def _find_patch_target(model: PreTrainedModel) -> torch.nn.Module:
-    """Return the sub-module that owns `_update_causal_mask` (`model` or `model.model`)."""
+# Two transformers APIs to support (#30):
+#   - <4.53: per-model `_update_causal_mask` method (patched per-instance in `patch_model`).
+#   - >=4.53: module-level `transformers.masking_utils.create_causal_mask` (patched globally
+#     at import time — the per-model hook was removed in 4.53).
+# Same short-circuit semantics on both: 4D float additive mask → pass through unchanged.
+try:
+    import transformers.masking_utils as _masking_utils  # type: ignore[import-not-found]
+
+    _HAS_MASKING_UTILS = True
+except ImportError:
+    _masking_utils = None  # type: ignore[assignment]
+    _HAS_MASKING_UTILS = False
+
+
+def _is_ddi_additive_mask(m) -> bool:
+    """4D float mask = DDI's additive mask, safe to pass through unchanged.
+
+    HF's own path uses bool 4D internally in some code paths, and 2D attention masks
+    (padding masks) must still be lifted to a causal mask by the original. A DDI
+    additive mask is unambiguously float 4D — short-circuit exactly that shape+dtype,
+    delegate everything else so we don't break any of HF's own callers.
+    """
+    return (
+        isinstance(m, torch.Tensor) and m.dim() == 4 and m.dtype.is_floating_point
+    )
+
+
+# ---- >=4.53 path: patch masking_utils.create_causal_mask once at import ------------------
+
+_ORIGINAL_CREATE_CAUSAL_MASK = None
+
+
+def _install_create_causal_mask_hook() -> None:
+    """Idempotently swap `create_causal_mask` for a DDI-aware version. >=4.53 only."""
+    global _ORIGINAL_CREATE_CAUSAL_MASK
+    if not _HAS_MASKING_UTILS or _ORIGINAL_CREATE_CAUSAL_MASK is not None:
+        return
+    _ORIGINAL_CREATE_CAUSAL_MASK = _masking_utils.create_causal_mask
+
+    def _ddi_create_causal_mask(*args, **kwargs):
+        m = kwargs.get("attention_mask")
+        if m is None and args:
+            # Positional call: `create_causal_mask(config, ..., attention_mask, ...)`.
+            # Scan positional args for a 4D float tensor rather than guess the signature.
+            for a in args:
+                if _is_ddi_additive_mask(a):
+                    return a
+        if _is_ddi_additive_mask(m):
+            return m
+        return _ORIGINAL_CREATE_CAUSAL_MASK(*args, **kwargs)
+
+    _masking_utils.create_causal_mask = _ddi_create_causal_mask
+
+
+def _uninstall_create_causal_mask_hook() -> None:
+    """Restore the original module-level function. For tests + cleanup."""
+    global _ORIGINAL_CREATE_CAUSAL_MASK
+    if _ORIGINAL_CREATE_CAUSAL_MASK is None or not _HAS_MASKING_UTILS:
+        return
+    _masking_utils.create_causal_mask = _ORIGINAL_CREATE_CAUSAL_MASK
+    _ORIGINAL_CREATE_CAUSAL_MASK = None
+
+
+# Install the >=4.53 hook once at import — it's module-scoped so per-model patching is a no-op
+# on that path. The <4.53 hook is per-instance and stays in `patch_model` below.
+_install_create_causal_mask_hook()
+
+
+# ---- <4.53 path: per-model `_update_causal_mask` patch -----------------------------------
+
+def _find_patch_target(model: PreTrainedModel) -> torch.nn.Module | None:
+    """Return the sub-module that owns `_update_causal_mask`, or None on >=4.53."""
     if hasattr(model, "_update_causal_mask"):
         return model
     inner = getattr(model, "model", None)
     if inner is not None and hasattr(inner, "_update_causal_mask"):
         return inner
-    raise AttributeError(
-        f"{type(model).__name__} exposes no `_update_causal_mask` on itself or `.model`; "
-        "the DDI wrapper is not compatible with this model class"
-    )
+    return None
 
 
 def patch_model(model: PreTrainedModel) -> PreTrainedModel:
-    """Install an instance-level `_update_causal_mask` that returns a 4D float mask unchanged."""
+    """On <4.53 install a per-instance `_update_causal_mask`; on >=4.53 a no-op (global hook)."""
     target = _find_patch_target(model)
+    if target is None:
+        if _HAS_MASKING_UTILS:
+            # >=4.53 — the global create_causal_mask hook is already installed; nothing to do.
+            return model
+        raise AttributeError(
+            f"{type(model).__name__} exposes no `_update_causal_mask` on itself or `.model`, "
+            "and transformers.masking_utils is not available either — the DDI wrapper is not "
+            "compatible with this transformers version"
+        )
     original = target._update_causal_mask
 
-    # WHY only float 4D: HF's own path uses bool 4D internally in some code paths, and 2D
-    # attention masks (padding masks) must still be lifted to a causal mask by the original.
-    # A DDI additive mask is unambiguously float 4D — short-circuit exactly that shape+dtype,
-    # delegate everything else so we don't break any of HF's own callers.
     def _ddi_update_causal_mask(self, attention_mask, *args, **kwargs):
-        if (
-            isinstance(attention_mask, torch.Tensor)
-            and attention_mask.dim() == 4
-            and attention_mask.dtype.is_floating_point
-        ):
+        if _is_ddi_additive_mask(attention_mask):
             return attention_mask
         return original(attention_mask, *args, **kwargs)
 
@@ -117,12 +185,10 @@ def patch_model(model: PreTrainedModel) -> PreTrainedModel:
 
 
 def unpatch_model(model: PreTrainedModel) -> None:
-    """Restore the original `_update_causal_mask` (for tests and cleanup)."""
+    """Restore the original `_update_causal_mask` (for tests and cleanup). No-op on >=4.53."""
     target = _find_patch_target(model)
-    if not hasattr(target, _ORIGINAL_ATTR):
-        raise AttributeError(
-            f"{type(model).__name__} is not patched by DDI; nothing to restore"
-        )
+    if target is None or not hasattr(target, _ORIGINAL_ATTR):
+        return
     # Deleting the instance attribute unshadows the class-level descriptor so
     # `target._update_causal_mask` returns to the fresh-bind-per-access behaviour it had
     # before patching. Directly assigning `original` back would leave an instance attribute in
