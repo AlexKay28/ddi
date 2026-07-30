@@ -1,9 +1,10 @@
 # DDI reproducibility Makefile — see experiments/SERVERLESS.md for the full flow.
 
-.PHONY: exp-% hf-fetch yt-fetch publish-summary test list-experiments gpu-check help
+.PHONY: exp-% hf-fetch yt-fetch yt-fetch-records publish-summary test list-experiments gpu-check help
 
 YT_PROXY ?= watt
 YT_MODELS_ROOT ?= //home/gena/alexkay28/tickets/ALIGNMENT-2445/models
+YT_RECORDS_ROOT ?= //home/gena/alexkay28/tickets/ALIGNMENT-2445/data/records_cache
 
 # Python interpreter used by every target below except `test`. Default is the
 # system `python3` — matches the offline serverless container's setup where
@@ -21,6 +22,7 @@ help:
 	@echo "  make exp-<name> MODEL=<hf-id> [BACKENDS=sdpa,fa2]   # run experiments/<name>.yaml"
 	@echo "  make hf-fetch MODEL=<hf-id>        # cache a HF model into HF_HOME (from HF Hub)"
 	@echo "  make yt-fetch MODEL=<hf-id>        # cache a HF model into HF_HOME (from YT, no HF access needed)"
+	@echo "  make yt-fetch-records              # restore results/splits/*_records.jsonl from YT (dataset cache)"
 	@echo "  make publish-summary SUMMARY=... ISSUE=<n>"
 	@echo "  make test                          # run pytest"
 	@echo "  make list-experiments              # list all available exp-* targets"
@@ -66,6 +68,23 @@ yt-fetch:
 	    yt --proxy=$(YT_PROXY) read-file "$$src/$$f" > "$$snap/$$f"; \
 	done; \
 	echo "cached $(MODEL) -> $$dest"
+
+# Restore the primed dataset record cache from our YT mirror, for hosts with
+# no direct HF access. Unlike yt-fetch (models), this does NOT reconstruct an
+# HF_HOME hub cache: mirroring the raw HF hub snapshot is not sufficient to
+# make `datasets.load_dataset()` work offline (its offline path needs its own
+# prebuilt arrow cache, not just the raw source files). Instead this restores
+# results/splits/*_records.jsonl directly (see ddi/data/records_cache.py) -
+# every ddi.data loader checks that cache first and never touches the HF Hub
+# on a hit. Requires the cache to have already been mirrored to
+# YT_RECORDS_ROOT (see upload_records_cache_to_yt.sh).
+yt-fetch-records:
+	@mkdir -p results/splits; \
+	for f in $$(yt --proxy=$(YT_PROXY) list $(YT_RECORDS_ROOT)); do \
+	    echo "fetching $$f ..."; \
+	    yt --proxy=$(YT_PROXY) read-file "$(YT_RECORDS_ROOT)/$$f" > "results/splits/$$f"; \
+	done; \
+	echo "cached dataset records -> results/splits/"
 
 # Publish a summary.md to a tracking GitHub issue.
 publish-summary:
