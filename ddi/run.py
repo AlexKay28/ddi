@@ -1300,6 +1300,7 @@ def run(
     yaml_path: Path,
     seed_override: int | None = None,
     model_override: str | None = None,
+    backends_override: list[str] | None = None,
 ) -> None:
     """Load a YAML file and dispatch on `kind:`."""
     cfg, cfg_hash = load_yaml(yaml_path)
@@ -1318,6 +1319,11 @@ def run(
             f"YAML at {yaml_path}: 'model' must be set in the YAML or overridden with --model"
         )
 
+    if backends_override is not None:
+        # Only `kind: timing` actually consumes `backends:`; setting it on other kinds is a no-op
+        # (the dispatcher ignores the field), which is fine for a uniform CLI shape.
+        cfg["backends"] = backends_override
+
     if seed_override is not None:
         seed = seed_override
     elif "seed" in cfg:
@@ -1330,6 +1336,16 @@ def run(
     _seed_all(seed)
     _log(f"loading YAML {yaml_path} (kind={kind}, seed={seed}, cfg_hash={cfg_hash[:8]})")
     _DISPATCH[kind](cfg, cfg_hash, seed, yaml_path)
+
+
+def _parse_backends(value: str) -> list[str]:
+    """Comma-separated backend list, e.g. `sdpa` or `sdpa,fa2`."""
+    items = [b.strip() for b in value.split(",") if b.strip()]
+    if not items:
+        raise argparse.ArgumentTypeError(
+            f"--backends expected a non-empty comma-separated list, got {value!r}"
+        )
+    return items
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1347,8 +1363,22 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="model to run (required unless the YAML sets `model:`)",
     )
+    parser.add_argument(
+        "--backends",
+        type=_parse_backends,
+        default=None,
+        help=(
+            "override `backends:` from YAML (comma-separated: sdpa,fa2). "
+            "Only used by kind: timing; ignored for other kinds."
+        ),
+    )
     args = parser.parse_args(argv)
-    run(args.yaml_path, seed_override=args.seed, model_override=args.model)
+    run(
+        args.yaml_path,
+        seed_override=args.seed,
+        model_override=args.model,
+        backends_override=args.backends,
+    )
     return 0
 
 

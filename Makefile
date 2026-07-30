@@ -18,7 +18,7 @@ PY ?= python3
 
 help:
 	@echo "usage:"
-	@echo "  make exp-<name> MODEL=<hf-id>       # run experiments/<name>.yaml end-to-end"
+	@echo "  make exp-<name> MODEL=<hf-id> [BACKENDS=sdpa,fa2]   # run experiments/<name>.yaml"
 	@echo "  make hf-fetch MODEL=<hf-id>        # cache a HF model into HF_HOME (from HF Hub)"
 	@echo "  make yt-fetch MODEL=<hf-id>        # cache a HF model into HF_HOME (from YT, no HF access needed)"
 	@echo "  make publish-summary SUMMARY=... ISSUE=<n>"
@@ -26,11 +26,15 @@ help:
 	@echo "  make list-experiments              # list all available exp-* targets"
 	@echo "  make gpu-check                     # confirm CUDA is visible"
 
-# One-shot experiment: matches any experiments/<name>.yaml. MODEL is optional at
-# the make layer — ddi.run itself raises loudly if the YAML has no `model:` and
-# no --model was passed.
+# One-shot experiment: matches any experiments/<name>.yaml.
+#   MODEL     optional at the make layer — ddi.run raises loudly if the YAML has no `model:`
+#             and no --model was passed.
+#   BACKENDS  comma-separated override of the YAML's `backends:` list (e.g. `sdpa` or
+#             `sdpa,fa2`). Only kind: timing consumes it; ignored for other kinds. Handy for
+#             skipping the fa2 sub-blocks that #70 leaves empty on hosts without flash-attn:
+#             `make exp-c3 MODEL=... BACKENDS=sdpa`.
 exp-%:
-	$(PY) -m ddi.run experiments/$*.yaml $(if $(MODEL),--model $(MODEL))
+	$(PY) -m ddi.run experiments/$*.yaml $(if $(MODEL),--model $(MODEL)) $(if $(BACKENDS),--backends $(BACKENDS))
 	$(PY) -m ddi.aggregate experiments/$*.yaml --out logs/$*_summary.md
 
 # Fetch a HF model once from the HF Hub (respects HF_HOME).
