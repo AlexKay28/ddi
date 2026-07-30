@@ -33,14 +33,32 @@ def _run(cmd: list[str]) -> str:
     return subprocess.run(cmd, check=True, capture_output=True, text=True).stdout
 
 
+def _git_or(sentinel: str) -> tuple[str, bool]:
+    """Return `(git_sha, dirty)`, or `(sentinel, False)` if we're outside a git repo.
+
+    Serverless containers ship the code as plain files with no `.git` dir; the earlier
+    behaviour (unconditional `git rev-parse` with `check=True`) crashed every runner cell
+    on such hosts, and per-cell isolation silently swallowed the failure — the aggregator
+    then reported "no rows in store" without any hint that git was the culprit. The
+    sidecar helper in `ddi/reports/_provenance.py::_git_sha` uses the same fallback.
+    """
+    if shutil.which("git") is None:
+        return sentinel, False
+    try:
+        git_sha = _run(["git", "rev-parse", "HEAD"]).strip()
+        dirty = bool(_run(["git", "status", "--porcelain"]).strip())
+    except (subprocess.CalledProcessError, OSError):
+        return sentinel, False
+    return git_sha or sentinel, dirty
+
+
 def capture(
     config_hash: str,
     seed: int,
     model_revision: str,
     dataset_revision: str,
 ) -> Provenance:
-    git_sha = _run(["git", "rev-parse", "HEAD"]).strip()
-    dirty = bool(_run(["git", "status", "--porcelain"]).strip())
+    git_sha, dirty = _git_or("not-a-git-repo")
 
     if torch.cuda.is_available():
         gpu_model = torch.cuda.get_device_name(0)
