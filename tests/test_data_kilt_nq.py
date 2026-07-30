@@ -210,3 +210,46 @@ def test_deterministic() -> None:
     ids_b = [r["id"] for r in load("kilt_nq", "val", seed=0)]
     assert ids_a == ids_b
     assert len(ids_a) == len(set(ids_a))  # no dupes within a split
+
+
+# ---------------------------------------------------------------------------
+# offline-safe: cache short-circuits the HF fetch on the second call
+# ---------------------------------------------------------------------------
+
+
+def test_second_call_hits_cache_not_hf(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With every split cached under the current n_passages key, ``_load_hf_split``
+    must not fire. This is the check the offline-container path depends on.
+    """
+    from ddi.data.records_cache import write_split
+
+    # The cache key for kilt_nq is namespaced by n_passages (record payloads
+    # differ when N changes) — mirror that here so has_cached() finds them.
+    cache_name = kilt_nq._cache_name(kilt_nq._current_n_passages())
+
+    fake = [
+        {
+            "id": "k-0",
+            "info_contexts": ["p1"],
+            "meta": {"retriever": "kilt_provenance", "n_passages": 1, "gold_title": "T"},
+        }
+    ]
+    for s in ("train", "val", "test"):
+        write_split(cache_name, 0, s, fake)
+
+    def boom(*_a: object, **_kw: object) -> list[dict]:
+        raise AssertionError("HF fetch invoked despite warm cache")
+
+    monkeypatch.setattr(kilt_nq, "_load_hf_split", boom)
+
+    got = list(load("kilt_nq", "val", seed=0))
+    assert got == fake
+
+
+def test_cache_key_changes_with_n_passages() -> None:
+    """Changing n_passages must switch to a different cache file (payload differs)."""
+    a = kilt_nq._cache_name(3)
+    b = kilt_nq._cache_name(5)
+    assert a != b
+    assert a == "kilt_nq_n3"
+    assert b == "kilt_nq_n5"

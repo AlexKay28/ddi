@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from ddi.data import list_datasets, load, manifest
+from ddi.data import hotpot_qa, list_datasets, load, manifest
 
 _INTEGRATION = os.environ.get("DDI_INTEGRATION") == "1"
 _INTEGRATION_REASON = "HotpotQA loader hits HuggingFace; opt in with DDI_INTEGRATION=1"
@@ -75,3 +75,30 @@ def test_deterministic() -> None:
     a = [r["id"] for r in load("hotpot_qa", "val", seed=0)]
     b = [r["id"] for r in load("hotpot_qa", "val", seed=0)]
     assert a == b
+
+
+# ---------------------------------------------------------------------------
+# offline-safe: cache short-circuits the HF fetch on the second call
+# ---------------------------------------------------------------------------
+
+
+def test_second_call_hits_cache_not_hf(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Once the cache is warm, load() must not call _load_hf_split again.
+
+    The first call is faked by pre-populating the record cache; if the loader
+    still reached for HF it would trip ``boom`` and fail loudly.
+    """
+    from ddi.data.records_cache import write_split
+
+    # Pre-populate every split so has_cached() returns True.
+    fake = [{"id": "hq-0", "info_contexts": [], "meta": {}}]
+    for s in ("train", "val", "test"):
+        write_split("hotpot_qa", 0, s, fake)
+
+    def boom(*_a: object, **_kw: object) -> list[dict]:
+        raise AssertionError("HF fetch invoked despite warm cache")
+
+    monkeypatch.setattr(hotpot_qa, "_load_hf_split", boom)
+
+    got = list(load("hotpot_qa", "val", seed=0))
+    assert got == fake

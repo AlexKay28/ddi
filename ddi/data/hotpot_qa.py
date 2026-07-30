@@ -16,7 +16,12 @@ from collections.abc import Iterator
 
 from ddi.data.loaders import Split, register_loader
 from ddi.data.manifest import validate_or_write
+from ddi.data.records_cache import has_cached, read_split, write_split
 from ddi.data.splits import hash_split
+
+# All splits this loader emits; needed by both the cache-presence check and the
+# record-persistence loop below.
+_SPLITS: tuple[Split, ...] = ("train", "val", "test")
 
 # The dataset ID we resolve on the HF hub. If it changes upstream, change it here so the choice is
 # visible without spelunking through the loader body.
@@ -87,6 +92,14 @@ def _all_splits(seed: int) -> dict[Split, list[dict]]:
 
 @register_loader("hotpot_qa")
 def load_hotpot_qa(split: Split, seed: int) -> Iterator[dict]:
+    # Fast path: every split's records file exists on disk from a previous fetch.
+    # Skip the HF-hub round-trip entirely so offline containers can serve. Note we
+    # still gate on *all* splits (not just the requested one) so the manifest hash
+    # — computed from the full partition — is stable regardless of load order.
+    if has_cached("hotpot_qa", seed, _SPLITS):
+        yield from read_split("hotpot_qa", seed, split)
+        return
+
     by_split = _all_splits(seed)
 
     hashes: dict[Split, tuple[int, str]] = {
@@ -94,6 +107,11 @@ def load_hotpot_qa(split: Split, seed: int) -> Iterator[dict]:
         for name, recs in by_split.items()
     }
     validate_or_write(f"hotpot_qa__seed{seed}", hashes)
+
+    # Persist every split now (not just the requested one) so a subsequent call
+    # for a different split still hits the fast path.
+    for s in _SPLITS:
+        write_split("hotpot_qa", seed, s, sorted(by_split[s], key=lambda r: r["id"]))
 
     for rec in sorted(by_split[split], key=lambda r: r["id"]):
         yield rec

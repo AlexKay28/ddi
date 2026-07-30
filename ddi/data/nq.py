@@ -13,7 +13,11 @@ from collections.abc import Iterator
 
 from ddi.data.loaders import Split, register_loader
 from ddi.data.manifest import validate_or_write
+from ddi.data.records_cache import has_cached, read_split, write_split
 from ddi.data.splits import hash_split
+
+# All splits this loader emits. `test` is a locally-derived half of validation.
+_SPLITS: tuple[Split, ...] = ("train", "val", "test")
 
 # The dataset ID we resolve on the HF hub. If it changes upstream, change it here so the choice is
 # visible without spelunking through the loader body.
@@ -77,6 +81,10 @@ def _all_splits(seed: int) -> dict[Split, list[dict]]:
 
 @register_loader("nq")
 def load_nq(split: Split, seed: int) -> Iterator[dict]:
+    if has_cached("nq", seed, _SPLITS):
+        yield from read_split("nq", seed, split)
+        return
+
     by_split = _all_splits(seed)
 
     hashes: dict[Split, tuple[int, str]] = {
@@ -87,6 +95,9 @@ def load_nq(split: Split, seed: int) -> Iterator[dict]:
     # validation set); key the manifest per seed so seeds 1/2 don't collide with seed 0's
     # frozen split (issue #40).
     validate_or_write(f"nq__seed{seed}", hashes)
+
+    for s in _SPLITS:
+        write_split("nq", seed, s, sorted(by_split[s], key=lambda r: r["id"]))
 
     for rec in sorted(by_split[split], key=lambda r: r["id"]):
         yield rec

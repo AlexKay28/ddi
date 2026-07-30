@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from ddi.data import list_datasets, load, manifest
+from ddi.data import list_datasets, load, manifest, musique
 
 
 @pytest.fixture(autouse=True)
@@ -85,3 +85,25 @@ def test_deterministic() -> None:
     a = [r["id"] for r in load("musique", "val", seed=0)]
     b = [r["id"] for r in load("musique", "val", seed=0)]
     assert a == b
+
+
+# ---------------------------------------------------------------------------
+# offline-safe: cache short-circuits the HF fetch on the second call
+# ---------------------------------------------------------------------------
+
+
+def test_second_call_hits_cache_not_hf(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Warm cache must bypass ``_load_hf_split`` entirely — offline-container safe."""
+    from ddi.data.records_cache import write_split
+
+    fake = [{"id": "mq-0", "info_contexts": [], "meta": {"n_hops": 2}}]
+    for s in ("train", "val", "test"):
+        write_split("musique", 0, s, fake)
+
+    def boom(*_a: object, **_kw: object) -> list[dict]:
+        raise AssertionError("HF fetch invoked despite warm cache")
+
+    monkeypatch.setattr(musique, "_load_hf_split", boom)
+
+    got = list(load("musique", "val", seed=0))
+    assert got == fake

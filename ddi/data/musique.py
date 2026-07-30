@@ -16,7 +16,12 @@ from collections.abc import Iterator
 
 from ddi.data.loaders import Split, register_loader
 from ddi.data.manifest import validate_or_write
+from ddi.data.records_cache import has_cached, read_split, write_split
 from ddi.data.splits import hash_split
+
+# All splits this loader emits. `test` is a locally-derived half of validation
+# (dgslibisey/MuSiQue has no public test with answers) — see _all_splits.
+_SPLITS: tuple[Split, ...] = ("train", "val", "test")
 
 # WHY dgslibisey/MuSiQue: highest apparent monthly downloads among the community mirrors
 # (~12.9k/mo vs ~9.7k/mo for bdsaglam/musique at the time of writing), and its row counts
@@ -103,6 +108,10 @@ def _all_splits(seed: int) -> dict[Split, list[dict]]:
 
 @register_loader("musique")
 def load_musique(split: Split, seed: int) -> Iterator[dict]:
+    if has_cached("musique", seed, _SPLITS):
+        yield from read_split("musique", seed, split)
+        return
+
     by_split = _all_splits(seed)
 
     hashes: dict[Split, tuple[int, str]] = {
@@ -110,6 +119,9 @@ def load_musique(split: Split, seed: int) -> Iterator[dict]:
         for name, recs in by_split.items()
     }
     validate_or_write(f"musique__seed{seed}", hashes)
+
+    for s in _SPLITS:
+        write_split("musique", seed, s, sorted(by_split[s], key=lambda r: r["id"]))
 
     for rec in sorted(by_split[split], key=lambda r: r["id"]):
         yield rec
