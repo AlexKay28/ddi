@@ -61,6 +61,22 @@ once with `meta-llama/Llama-3.1-8B-Instruct` — and the three C4 YAMLs
 **If `HF_HOME` is not a persistent volume,** the fetch is thrown away when the
 container exits and every run re-downloads ~15 GB. Mount the volume.
 
+### 3b. Prime the dataset cache (once, on a networked node)
+
+Datasets are fetched from the HF hub the first time each `(name, seed)` pair is loaded,
+then persisted under `results/splits/<name>__seed<seed>__<split>_records.jsonl`.
+Subsequent runs (including fully offline containers) read from those files.
+
+Run this once on a build node with network access, BEFORE deploying to the offline
+container:
+
+    for name in hotpot_qa musique kilt_nq nq synthetic_qa; do
+      python3 -c "from ddi.data import load; list(load('$name', 'val', 0))"
+    done
+
+Ship the `results/splits/` directory to the container alongside the code. The container
+never needs to touch the HF hub for datasets.
+
 ### 4. Run the experiment (offline)
 
 ```bash

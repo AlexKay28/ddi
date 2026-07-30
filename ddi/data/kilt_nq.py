@@ -48,7 +48,11 @@ from collections.abc import Iterator
 
 from ddi.data.loaders import Split, register_loader
 from ddi.data.manifest import validate_or_write
+from ddi.data.records_cache import has_cached, read_split, write_split
 from ddi.data.splits import hash_split
+
+# All splits this loader emits. `test` is a locally-derived half of validation.
+_SPLITS: tuple[Split, ...] = ("train", "val", "test")
 
 _HF_DATASET_ID = "kilt_tasks"
 _HF_CONFIG = "nq"
@@ -214,9 +218,27 @@ def _all_splits(seed: int, n_passages: int) -> dict[Split, list[dict]]:
     return {"train": train, "val": val, "test": test}
 
 
+def _cache_name(n_passages: int) -> str:
+    """Cache key that includes n_passages.
+
+    KILT record IDs are stable across n_passages settings (the manifest hash is
+    on IDs only, per the module docstring's "Manifest note"), but the record
+    *payload* — ``info_contexts`` length and ``meta["n_passages"]`` — changes
+    with N. Segregating the cache by N prevents a run with N=10 from silently
+    reading a stale N=5 cache written by an earlier build node.
+    """
+    return f"kilt_nq_n{n_passages}"
+
+
 @register_loader("kilt_nq")
 def load_kilt_nq(split: Split, seed: int) -> Iterator[dict]:
     n_passages = _current_n_passages()
+    cache_name = _cache_name(n_passages)
+
+    if has_cached(cache_name, seed, _SPLITS):
+        yield from read_split(cache_name, seed, split)
+        return
+
     by_split = _all_splits(seed, n_passages)
 
     hashes: dict[Split, tuple[int, str]] = {
@@ -224,6 +246,9 @@ def load_kilt_nq(split: Split, seed: int) -> Iterator[dict]:
         for name, recs in by_split.items()
     }
     validate_or_write(f"kilt_nq__seed{seed}", hashes)
+
+    for s in _SPLITS:
+        write_split(cache_name, seed, s, sorted(by_split[s], key=lambda r: r["id"]))
 
     for rec in sorted(by_split[split], key=lambda r: r["id"]):
         yield rec
