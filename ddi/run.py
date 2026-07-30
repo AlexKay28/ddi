@@ -575,7 +575,7 @@ def _cache_correctness(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path
 
     Rewritten in #105: the old dataset-driven runner emitted per-doc
     ``kv_deterministic`` / ``kv_cache_roundtrip`` rows keyed by record; no
-    on-`main` YAML uses that shape any more, and ``cache_correctness_c4.yaml``
+    on-`main` YAML uses that shape any more, and ``cache_correctness.yaml``
     requires the mode/N/L grid instead. The new runner follows ``_timing_cell``:
     synthesise ``N`` docs of length ``L`` and one query of length ``Q``, then
     run one forward pass per mode and compare each mode's logits against
