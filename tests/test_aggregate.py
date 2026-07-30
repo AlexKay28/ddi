@@ -1,4 +1,11 @@
-"""Tests for ddi/aggregate.py — YAML-driven table builder (issue #86)."""
+"""Tests for ddi/aggregate.py — YAML-driven JSON table builder.
+
+The aggregator now emits a single JSON envelope per YAML: each ``report.tables[]``
+entry becomes one object with a normalized ``{model: axis1: axis2: ...: value}``
+data body. These tests walk the emitted dict; the colorization / delta annotations
+that used to be asserted on Markdown output are gone (consumers now compute deltas
+from the raw values).
+"""
 
 from __future__ import annotations
 
@@ -8,8 +15,13 @@ from pathlib import Path
 import pytest
 import yaml
 
-from ddi.aggregate import _render_cell, aggregate, render_table
-from ddi.reports._provenance import FOOTER_MARKER
+from ddi.aggregate import (
+    _row_model,
+    aggregate,
+    collect_table,
+    iter_rows,
+    load_rows,
+)
 
 
 def _write_row(
@@ -53,76 +65,107 @@ def _seed_quality_store(store: Path) -> None:
         _write_row(store, f"phase2_train_free:Qwen:{ds}:blind:seed=0:sha:r0", "f1", 0.1)
 
 
-def test_render_quality_kind_shape(tmp_path: Path) -> None:
+def test_collect_quality_kind_shape(tmp_path: Path) -> None:
     store = tmp_path / "runs.jsonl"
     _seed_quality_store(store)
     spec = {"kind": "quality", "rows": "mask", "cols": "dataset", "metric": "f1"}
-    out = render_table(spec, store)
+    body = collect_table(spec, store)
 
-    # Header carries the fixed dataset column order from #72 (pruned in #105 to the
-    # four live QA datasets — composition / ddi_stress__* are gone).
-    header = next(line for line in out.splitlines() if line.startswith("| mask |"))
-    cols = [c.strip() for c in header.strip().strip("|").split("|")]
-    assert cols == [
-        "mask",
-        "synthetic_qa",
-        "hotpot_qa",
-        "musique",
-        "kilt_nq",
-    ]
-    # `full` row is the baseline (no Δ annotation).
-    full_row = next(line for line in out.splitlines() if line.startswith("| full |"))
-    assert "Δ" not in full_row
-    # `ddi_qf` row shows Δ vs full and (0.79 vs 0.80 = -1.25%) qualifies for 🟢.
-    qf_row = next(line for line in out.splitlines() if line.startswith("| ddi_qf |"))
-    assert "Δ−1.3%" in qf_row  # .1f formatting rounds 1.25 → 1.3 (banker's rounding)
-    assert "🟢" in qf_row
-    # `blind` row never gets 🟢 (ground-rule-7 collision).
-    blind_row = next(line for line in out.splitlines() if line.startswith("| blind |"))
-    assert "🟢" not in blind_row
+    assert body["kind"] == "quality"
+    assert body["metric"] == "f1"
+    assert body["models"] == ["Qwen"]
+    # data body is {model: {mask: {dataset: value}}}.
+    qwen = body["data"]["Qwen"]
+    # Mask order: `full`, `ddi_qf`, `blind` per _QUALITY_PREFERRED_MASKS.
+    assert list(qwen) == ["full", "ddi_qf", "blind"]
+    # Every dataset column present, no dashes / nulls.
+    for mask in ("full", "ddi_qf", "blind"):
+        assert set(qwen[mask]) == {"synthetic_qa", "hotpot_qa", "musique", "kilt_nq"}
+    # Raw numeric values, no delta annotations.
+    assert qwen["full"]["hotpot_qa"] == pytest.approx(0.8)
+    assert qwen["ddi_qf"]["hotpot_qa"] == pytest.approx(0.79)
+    assert qwen["blind"]["synthetic_qa"] == pytest.approx(0.1)
 
 
-def test_quality_excludes_nq_column(tmp_path: Path) -> None:
+def test_collect_quality_missing_cell_omits_key(tmp_path: Path) -> None:
+    """A dataset with no rows for a given mask must be OMITTED (no null, no dash)."""
+    store = tmp_path / "runs.jsonl"
+    # Only `full` on hotpot_qa; `ddi_qf` on musique. Cross-cells absent.
+    _write_row(store, "phase2_train_free:Qwen:hotpot_qa:full:seed=0:sha:r0", "f1", 0.7)
+    _write_row(store, "phase2_train_free:Qwen:musique:ddi_qf:seed=0:sha:r0", "f1", 0.4)
+
+    body = collect_table({"kind": "quality", "metric": "f1"}, store)
+    qwen = body["data"]["Qwen"]
+
+    assert "hotpot_qa" in qwen["full"]
+    assert "musique" not in qwen["full"], "missing musique/full cell must be omitted"
+    assert "musique" in qwen["ddi_qf"]
+    assert "hotpot_qa" not in qwen["ddi_qf"]
+
+
+def test_collect_quality_excludes_nq_and_stress_and_composition(tmp_path: Path) -> None:
+    """Historical rows for pruned datasets are silently dropped."""
     store = tmp_path / "runs.jsonl"
     _write_row(store, "phase2_train_free:Qwen:nq:full:seed=0:sha:r0", "f1", 0.9)
-    _write_row(store, "phase2_train_free:Qwen:synthetic_qa:full:seed=0:sha:r0", "f1", 0.3)
-    out = render_table(
-        {"kind": "quality", "rows": "mask", "cols": "dataset", "metric": "f1"}, store
+    _write_row(
+        store, "phase2_train_free:Qwen:composition:full:seed=0:sha:r0", "f1", 0.5
     )
-    header = next(line for line in out.splitlines() if line.startswith("| mask |"))
-    assert " nq " not in header
-    assert "synthetic_qa" in header
-
-
-def test_quality_drops_stale_stress_and_composition_rows(tmp_path: Path) -> None:
-    """Post-#89 the composition / ddi_stress loaders are gone; historical rows must be
-    silently dropped rather than blowing up the renderer or leaking into a column."""
-    store = tmp_path / "runs.jsonl"
-    # Stale rows that used to feed removed columns.
-    _write_row(store, "phase2_train_free:Qwen:composition:full:seed=0:sha:r0", "f1", 0.5)
     _write_row(
         store,
         "phase2_train_free:Qwen:ddi_stress__fact_chain:full:seed=0:sha:r0",
         "f1",
         0.55,
     )
-    # A live row so the renderer has something to emit (else it raises).
     _write_row(store, "phase2_train_free:Qwen:hotpot_qa:full:seed=0:sha:r0", "f1", 0.7)
 
-    out = render_table(
-        {"kind": "quality", "rows": "mask", "cols": "dataset", "metric": "f1"}, store
+    body = collect_table({"kind": "quality", "metric": "f1"}, store)
+    qwen_full = body["data"]["Qwen"]["full"]
+    assert "nq" not in qwen_full
+    assert "composition" not in qwen_full
+    assert "ddi_stress__fact_chain" not in qwen_full
+    assert qwen_full["hotpot_qa"] == pytest.approx(0.7)
+
+
+def test_collect_quality_backing_rows_and_seeds(tmp_path: Path) -> None:
+    """backing_rows counts every row that contributed; seeds is the sorted distinct set."""
+    store = tmp_path / "runs.jsonl"
+    _write_row(
+        store, "phase2_train_free:Qwen:hotpot_qa:full:seed=0:sha:r0", "f1", 0.7, seed=0
     )
-    header = next(line for line in out.splitlines() if line.startswith("| mask |"))
-    assert "composition" not in header
-    assert "ds/fact_chain" not in header
-    assert "hotpot_qa" in header
+    _write_row(
+        store, "phase2_train_free:Qwen:hotpot_qa:full:seed=1:sha:r0", "f1", 0.72, seed=1
+    )
+    _write_row(
+        store, "phase2_train_free:Qwen:hotpot_qa:full:seed=2:sha:r0", "f1", 0.74, seed=2
+    )
+
+    body = collect_table({"kind": "quality", "metric": "f1"}, store)
+    assert body["backing_rows"] == 3
+    assert body["distinct_run_ids"] == 3
+    assert body["seeds"] == [0, 1, 2]
+    # Mean across seeds.
+    assert body["data"]["Qwen"]["full"]["hotpot_qa"] == pytest.approx(0.72)
+
+
+def test_collect_quality_rejects_unknown_metric(tmp_path: Path) -> None:
+    store = tmp_path / "runs.jsonl"
+    _seed_quality_store(store)
+    with pytest.raises(ValueError, match="unknown metric"):
+        collect_table({"kind": "quality", "metric": "bogus"}, store)
+
+
+def test_collect_quality_empty_store_raises(tmp_path: Path) -> None:
+    store = tmp_path / "runs.jsonl"
+    store.touch()
+    with pytest.raises(ValueError, match="no phase2_train_free rows"):
+        collect_table({"kind": "quality", "metric": "f1"}, store)
 
 
 # ---- kind: timing ---------------------------------------------------------------------------
 
 
 def _seed_timing_store(store: Path) -> None:
-    """Seed one (L=512, sdpa) sub-block with full + ddi_qf + blind at N=1..25."""
+    """Seed one (L=512, sdpa) sub-block with full + ddi_qf at N=1..25."""
     for n in (1, 3, 5, 9, 13, 25):
         # `full` arm — TTFT scales roughly linearly with N.
         _write_row(
@@ -152,49 +195,72 @@ def _seed_timing_store(store: Path) -> None:
         )
 
 
-def test_render_timing_kind_shape(tmp_path: Path) -> None:
+def test_collect_timing_kind_shape(tmp_path: Path) -> None:
     store = tmp_path / "runs.jsonl"
     _seed_timing_store(store)
-    spec = {
-        "kind": "timing",
-        "rows": "mask",
-        "cols": "N",
-        "metric": "realized",
-        "split_by": ["L", "backend"],
-    }
-    out = render_table(spec, store)
-
-    # Header advertises the metric and one sub-block per (model, L, backend).
-    assert "timing — realized speedup" in out
-    assert "Qwen" in out
-    assert "L=512" in out
-    assert "backend=sdpa" in out
-    # Header columns fixed to N=1..25.
-    header = next(line for line in out.splitlines() if line.startswith("| mask |"))
-    cols = [c.strip() for c in header.strip().strip("|").split("|")]
-    assert cols == ["mask", "N=1", "N=3", "N=5", "N=9", "N=13", "N=25"]
-    # `full` row: realized ≡ 1.0×.
-    full_row = next(line for line in out.splitlines() if line.startswith("| full |"))
-    assert "1.00x" in full_row
-    # `ddi_qf` row: realized = full/variant TTFT = 1.5×.
-    qf_row = next(line for line in out.splitlines() if line.startswith("| ddi_qf |"))
-    assert "1.50x" in qf_row
+    body = collect_table(
+        {"kind": "timing", "metric": "realized"},
+        store,
+    )
+    assert body["kind"] == "timing"
+    assert body["metric"] == "realized"
+    # Data shape: {model: {L: {backend: {mask: {N: value}}}}}.
+    qwen = body["data"]["Qwen"]
+    assert list(qwen) == ["512"]  # L keys stringified
+    sdpa = qwen["512"]["sdpa"]
+    assert list(sdpa) == ["full", "ddi_qf"]  # mask order
+    # N keys are stringified ints, ordered per _TIMING_N_COLUMNS.
+    assert list(sdpa["full"]) == ["1", "3", "5", "9", "13", "25"]
+    # full is defined as realized=1.0 everywhere.
+    assert sdpa["full"]["1"] == pytest.approx(1.0)
+    assert sdpa["full"]["25"] == pytest.approx(1.0)
+    # ddi_qf: realized = full_ttft / variant_ttft = 100n / (100n/1.5) = 1.5.
+    assert sdpa["ddi_qf"]["3"] == pytest.approx(1.5)
 
 
-def test_timing_derives_realization_ratio(tmp_path: Path) -> None:
+def test_collect_timing_derives_realization_ratio(tmp_path: Path) -> None:
     store = tmp_path / "runs.jsonl"
     _seed_timing_store(store)
-    spec = {
-        "kind": "timing",
-        "rows": "mask",
-        "cols": "N",
-        "metric": "realization",
-        "split_by": ["L", "backend"],
-    }
-    out = render_table(spec, store)
-    # At N=3, analytical=3.0, realized=1.5 → realization = 0.500.
-    qf_row = next(line for line in out.splitlines() if line.startswith("| ddi_qf |"))
-    assert "0.500" in qf_row
+    body = collect_table({"kind": "timing", "metric": "realization"}, store)
+    # At any N, analytical=N, realized=1.5 → realization = 1.5 / N.
+    ddi_qf = body["data"]["Qwen"]["512"]["sdpa"]["ddi_qf"]
+    assert ddi_qf["3"] == pytest.approx(0.5)
+    assert ddi_qf["9"] == pytest.approx(1.5 / 9)
+
+
+def test_collect_timing_ttft_raw_values(tmp_path: Path) -> None:
+    store = tmp_path / "runs.jsonl"
+    _seed_timing_store(store)
+    body = collect_table({"kind": "timing", "metric": "ttft"}, store)
+    # Raw milliseconds, no formatting.
+    full = body["data"]["Qwen"]["512"]["sdpa"]["full"]
+    assert full["1"] == pytest.approx(100.0)
+    assert full["25"] == pytest.approx(2500.0)
+
+
+def test_collect_timing_missing_metric_cell_omits_key(tmp_path: Path) -> None:
+    """A mask with no ttft row at a given N must OMIT that N key entirely."""
+    store = tmp_path / "runs.jsonl"
+    # Only N=1 and N=5 for full — N=3 is a hole.
+    for n in (1, 5):
+        _write_row(
+            store,
+            f"phase3_timing:Qwen:N={n}:L=512:Q=1:full:sdpa:seed=0:sha",
+            "ftt_median_ms",
+            100.0 * n,
+        )
+    body = collect_table({"kind": "timing", "metric": "ttft"}, store)
+    full = body["data"]["Qwen"]["512"]["sdpa"]["full"]
+    assert "1" in full and "5" in full
+    assert "3" not in full  # missing cell — key omitted, no null
+    assert "25" not in full
+
+
+def test_collect_timing_rejects_unknown_metric(tmp_path: Path) -> None:
+    store = tmp_path / "runs.jsonl"
+    _seed_timing_store(store)
+    with pytest.raises(ValueError, match="unknown metric"):
+        collect_table({"kind": "timing", "metric": "bogus"}, store)
 
 
 # ---- kind: throughput -----------------------------------------------------------------------
@@ -225,28 +291,35 @@ def _seed_throughput_store(store: Path) -> None:
         )
 
 
-def test_render_throughput_kind_shape(tmp_path: Path) -> None:
+def test_collect_throughput_kind_shape(tmp_path: Path) -> None:
     store = tmp_path / "runs.jsonl"
     _seed_throughput_store(store)
-    spec = {"kind": "throughput", "rows": "mode", "cols": "N", "metric": "qps"}
-    out = render_table(spec, store)
-    header = next(line for line in out.splitlines() if line.startswith("| mode |"))
-    cols = [c.strip() for c in header.strip().strip("|").split("|")]
-    assert cols == ["mode", "N=3", "N=9"]
-    cache_row = next(
-        line for line in out.splitlines() if line.startswith("| ddi_cache |")
-    )
-    cells = [c.strip() for c in cache_row.strip().strip("|").split("|")]
-    assert cells == ["ddi_cache", "12.0000", "20.0000"]
-    # Row order follows _THROUGHPUT_PREFERRED_MODES.
-    row_labels = [
-        line.split("|")[1].strip()
-        for line in out.splitlines()
-        if line.startswith("|") and "N=" not in line and "---" not in line
-    ]
-    # Skip the header row label ("mode") — keep only data rows.
-    data_labels = [lbl for lbl in row_labels if lbl != "mode"]
-    assert data_labels == ["ddi_cache", "ddi_recompute", "full_causal"]
+    body = collect_table({"kind": "throughput", "metric": "qps"}, store)
+    assert body["kind"] == "throughput"
+    assert body["metric"] == "qps"
+    qwen = body["data"]["Qwen"]
+    # Mode order follows _THROUGHPUT_PREFERRED_MODES.
+    assert list(qwen) == ["ddi_cache", "ddi_recompute", "full_causal"]
+    # N keys sorted numerically.
+    assert list(qwen["ddi_cache"]) == ["3", "9"]
+    assert qwen["ddi_cache"]["3"] == pytest.approx(12.0)
+    assert qwen["ddi_cache"]["9"] == pytest.approx(20.0)
+    assert qwen["full_causal"]["3"] == pytest.approx(2.5)
+
+
+def test_collect_throughput_metric_defaults_to_qps(tmp_path: Path) -> None:
+    """Spec without ``metric`` defaults to ``qps``."""
+    store = tmp_path / "runs.jsonl"
+    _seed_throughput_store(store)
+    body = collect_table({"kind": "throughput"}, store)
+    assert body["metric"] == "qps"
+
+
+def test_collect_throughput_empty_store_raises(tmp_path: Path) -> None:
+    store = tmp_path / "runs.jsonl"
+    store.touch()
+    with pytest.raises(ValueError, match="no phase4_throughput rows"):
+        collect_table({"kind": "throughput", "metric": "qps"}, store)
 
 
 # ---- kind: correctness ----------------------------------------------------------------------
@@ -254,25 +327,22 @@ def test_render_throughput_kind_shape(tmp_path: Path) -> None:
 
 def _seed_correctness_store(store: Path) -> None:
     """Seed one (model, L=512) sub-block with full_causal / ddi_recompute / ddi_cache
-    across N in {3, 9, 25}, with two queries per doc so max/mean differ.
+    across N in {3, 9, 25}, two queries per doc so max/mean differ.
     """
     for n in (3, 9, 25):
         for q in (0, 1):
-            # `full_causal` is the baseline — always 0.0 per the runner contract.
             _write_row(
                 store,
                 f"phase4_cache:Qwen:full_causal:N={n}:L=512:seed=0:sha:q{q}",
                 "max_abs_logit_diff",
                 0.0,
             )
-            # `ddi_recompute` — small non-zero diff; second query is worse so max() must win.
             _write_row(
                 store,
                 f"phase4_cache:Qwen:ddi_recompute:N={n}:L=512:seed=0:sha:q{q}",
                 "max_abs_logit_diff",
                 1e-5 if q == 0 else 5e-5,
             )
-            # `ddi_cache` — a hair larger than recompute (cache round-trip noise).
             _write_row(
                 store,
                 f"phase4_cache:Qwen:ddi_cache:N={n}:L=512:seed=0:sha:q{q}",
@@ -281,88 +351,43 @@ def _seed_correctness_store(store: Path) -> None:
             )
 
 
-def test_render_correctness_kind_shape(tmp_path: Path) -> None:
-    """kind: correctness renders one sub-table per (model, L) with mode × N cells."""
+def test_collect_correctness_kind_shape(tmp_path: Path) -> None:
     store = tmp_path / "runs.jsonl"
     _seed_correctness_store(store)
-    spec = {
-        "kind": "correctness",
-        "rows": "mode",
-        "cols": "N",
-        "metric": "max_abs_logit_diff",
-    }
-    out = render_table(spec, store)
-
-    assert "correctness — max_abs_logit_diff" in out
-    assert "Qwen — L=512" in out
-    header = next(line for line in out.splitlines() if line.startswith("| mode |"))
-    cols = [c.strip() for c in header.strip().strip("|").split("|")]
-    assert cols == ["mode", "N=3", "N=9", "N=25"]
+    body = collect_table({"kind": "correctness"}, store)
+    assert body["kind"] == "correctness"
+    assert body["metric"] == "max_abs_logit_diff"
+    qwen = body["data"]["Qwen"]
+    # Mode order: full_causal first (baseline), then remaining modes alphabetically.
+    assert list(qwen) == ["full_causal", "ddi_cache", "ddi_recompute"]
+    # Under each mode: {L: {N: value}} — L stringified, N stringified, both sorted.
+    assert list(qwen["ddi_recompute"]) == ["512"]
+    assert list(qwen["ddi_recompute"]["512"]) == ["3", "9", "25"]
 
 
-def test_render_correctness_full_causal_is_baseline_zero(tmp_path: Path) -> None:
-    """`full_causal` row always renders 0.00e+00 (baseline by definition)."""
-    store = tmp_path / "runs.jsonl"
-    _seed_correctness_store(store)
-    out = render_table({"kind": "correctness", "metric": "max_abs_logit_diff"}, store)
-    full_row = next(line for line in out.splitlines() if line.startswith("| full_causal |"))
-    cells = [c.strip() for c in full_row.strip().strip("|").split("|")]
-    # cells[0] == "full_causal"; every value cell must be exact zero in scientific form.
-    for cell in cells[1:]:
-        assert cell == "0.00e+00", f"baseline cell not zero: {cell!r}"
-
-
-def test_render_correctness_cell_uses_max_across_queries(tmp_path: Path) -> None:
+def test_collect_correctness_uses_max_across_queries(tmp_path: Path) -> None:
     """The cell aggregator must take max across queries (worst-case gate, not mean)."""
     store = tmp_path / "runs.jsonl"
     _seed_correctness_store(store)
-    out = render_table({"kind": "correctness", "metric": "max_abs_logit_diff"}, store)
-    recompute_row = next(
-        line for line in out.splitlines() if line.startswith("| ddi_recompute |")
-    )
-    # Q0=1e-5, Q1=5e-5 → max = 5e-5 → formatted "5.00e-05".
-    assert "5.00e-05" in recompute_row
-    # If the renderer took the mean, the value would be 3.00e-05 — must NOT appear.
-    assert "3.00e-05" not in recompute_row
+    body = collect_table({"kind": "correctness"}, store)
+    ddi_recompute_512 = body["data"]["Qwen"]["ddi_recompute"]["512"]
+    # Q0=1e-5, Q1=5e-5 → max = 5e-5.
+    assert ddi_recompute_512["3"] == pytest.approx(5e-5)
+    # Mean would be 3e-5 — must NOT match.
+    assert ddi_recompute_512["3"] != pytest.approx(3e-5)
 
 
-def test_render_correctness_row_order_full_causal_first(tmp_path: Path) -> None:
-    """Row order: full_causal first (baseline), then remaining modes alphabetically."""
+def test_collect_correctness_full_causal_zero(tmp_path: Path) -> None:
+    """`full_causal` rows are recorded verbatim (0.0 from the store)."""
     store = tmp_path / "runs.jsonl"
     _seed_correctness_store(store)
-    out = render_table({"kind": "correctness", "metric": "max_abs_logit_diff"}, store)
-    mode_labels = [
-        line.split("|")[1].strip()
-        for line in out.splitlines()
-        if line.startswith("|") and "N=" not in line and "---" not in line
-    ]
-    data_labels = [lbl for lbl in mode_labels if lbl != "mode"]
-    # `ddi_cache` < `ddi_recompute` alphabetically → cache comes before recompute.
-    assert data_labels == ["full_causal", "ddi_cache", "ddi_recompute"]
+    body = collect_table({"kind": "correctness"}, store)
+    for n in ("3", "9", "25"):
+        assert body["data"]["Qwen"]["full_causal"]["512"][n] == pytest.approx(0.0)
 
 
-def test_render_correctness_scientific_notation(tmp_path: Path) -> None:
-    """Cells render as scientific notation (`{value:.2e}`) — bf16 diffs are O(1e-4)."""
-    store = tmp_path / "runs.jsonl"
-    _seed_correctness_store(store)
-    out = render_table({"kind": "correctness", "metric": "max_abs_logit_diff"}, store)
-    # Some cell in the body has scientific-notation form with lowercase `e`.
-    body_rows = [
-        line for line in out.splitlines() if line.startswith("| ") and "e-" in line
-    ]
-    assert body_rows, "no scientific-notation cell found in correctness table"
-
-
-def test_render_correctness_appends_provenance_footer(tmp_path: Path) -> None:
-    store = tmp_path / "runs.jsonl"
-    _seed_correctness_store(store)
-    out = render_table({"kind": "correctness", "metric": "max_abs_logit_diff"}, store)
-    assert FOOTER_MARKER in out
-    assert out.count(FOOTER_MARKER) == 1
-
-
-def test_render_correctness_multiple_ls_emits_sub_blocks(tmp_path: Path) -> None:
-    """One sub-table per (model, L) — different L values must each get their own block."""
+def test_collect_correctness_multiple_ls(tmp_path: Path) -> None:
+    """Different L values each get their own key under the mode."""
     store = tmp_path / "runs.jsonl"
     _write_row(
         store,
@@ -376,88 +401,90 @@ def test_render_correctness_multiple_ls_emits_sub_blocks(tmp_path: Path) -> None
         "max_abs_logit_diff",
         0.0,
     )
-    out = render_table({"kind": "correctness", "metric": "max_abs_logit_diff"}, store)
-    assert "Qwen — L=256" in out
-    assert "Qwen — L=512" in out
+    body = collect_table({"kind": "correctness"}, store)
+    fc = body["data"]["Qwen"]["full_causal"]
+    assert set(fc) == {"256", "512"}
 
 
-def test_render_correctness_empty_store_raises(tmp_path: Path) -> None:
-    """No phase4_cache rows in the store → loud error, not empty output."""
+def test_collect_correctness_empty_store_raises(tmp_path: Path) -> None:
     store = tmp_path / "runs.jsonl"
     store.touch()
     with pytest.raises(ValueError, match="no phase4_cache rows"):
-        render_table({"kind": "correctness", "metric": "max_abs_logit_diff"}, store)
+        collect_table({"kind": "correctness"}, store)
 
 
-# ---- Colorization contract ------------------------------------------------------------------
+# ---- kind: restart_quality ------------------------------------------------------------------
 
 
-def test_color_floor_vs_floor_no_green() -> None:
-    """Both values below 0.01 → no 🟢 (baseline is noise)."""
-    cell = _render_cell(0.003, 0.005)
-    assert "🟢" not in cell
-    # Percentage would explode, so the small-baseline branch shows absolute Δ.
-    assert "Δ" in cell
+def _seed_restart_quality_store(store: Path) -> None:
+    for ds in ("synthetic_qa", "hotpot_qa"):
+        _write_row(
+            store,
+            f"phase4_restart:Qwen:{ds}:tag:sequential:seed=0:sha:r0",
+            "f1",
+            0.75,
+        )
+        _write_row(
+            store,
+            f"phase4_restart:Qwen:{ds}:tag:restart:seed=0:sha:r0",
+            "f1",
+            0.74,
+        )
 
 
-def test_color_loss_ceiling_no_green() -> None:
-    """Loss above the ceiling on both arms → no 🟢 (uniform-over-vocab, not parity)."""
-    cell = _render_cell(15.0, 15.1, is_loss=True)
-    assert "🟢" not in cell
-
-
-def test_color_real_parity_gets_green() -> None:
-    """Real signal on both arms with |Δ| < 5% of full → 🟢."""
-    cell = _render_cell(0.79, 0.80)
-    assert "🟢" in cell
-    assert "Δ" in cell
-
-
-def test_color_blind_row_disallows_green() -> None:
-    """allow_green=False (used on the blind row) suppresses 🟢 even at parity."""
-    cell = _render_cell(0.79, 0.80, allow_green=False)
-    assert "🟢" not in cell
-
-
-def test_color_over_threshold_no_green() -> None:
-    """|Δ| ≥ 5% of full → no 🟢."""
-    cell = _render_cell(0.7, 0.8)
-    assert "🟢" not in cell
-
-
-# ---- Provenance footer ----------------------------------------------------------------------
-
-
-def test_render_table_appends_provenance_footer(tmp_path: Path) -> None:
+def test_collect_restart_quality_kind_shape(tmp_path: Path) -> None:
     store = tmp_path / "runs.jsonl"
-    _seed_quality_store(store)
-    out = render_table(
-        {"kind": "quality", "rows": "mask", "cols": "dataset", "metric": "f1"}, store
+    _seed_restart_quality_store(store)
+    body = collect_table({"kind": "restart_quality", "metric": "f1"}, store)
+    assert body["kind"] == "restart_quality"
+    qwen = body["data"]["Qwen"]
+    # Layout order: sequential first (baseline), then restart.
+    assert list(qwen) == ["sequential", "restart"]
+    assert qwen["sequential"]["synthetic_qa"] == pytest.approx(0.75)
+    assert qwen["restart"]["hotpot_qa"] == pytest.approx(0.74)
+
+
+def test_collect_restart_quality_empty_store_raises(tmp_path: Path) -> None:
+    store = tmp_path / "runs.jsonl"
+    store.touch()
+    with pytest.raises(ValueError, match="no phase4_restart rows"):
+        collect_table({"kind": "restart_quality", "metric": "f1"}, store)
+
+
+# ---- Dispatcher errors ----------------------------------------------------------------------
+
+
+def test_collect_table_rejects_unknown_kind(tmp_path: Path) -> None:
+    store = tmp_path / "runs.jsonl"
+    store.touch()
+    with pytest.raises(ValueError, match="unknown table kind"):
+        collect_table({"kind": "not_a_kind"}, store)
+
+
+# ---- Model filter ---------------------------------------------------------------------------
+
+
+def test_model_filter_narrows_quality(tmp_path: Path) -> None:
+    """model_filter drops rows whose run_id doesn't name the requested model."""
+    store = tmp_path / "runs.jsonl"
+    _write_row(
+        store, "phase2_train_free:ModelA:hotpot_qa:full:seed=0:sha:r0", "f1", 0.7
     )
-    assert FOOTER_MARKER in out
-    # Footer mentions the store path and a store-hash prefix ("sha256 `...`").
-    assert "sha256" in out
+    _write_row(
+        store, "phase2_train_free:ModelB:hotpot_qa:full:seed=0:sha:r0", "f1", 0.5
+    )
+    body = collect_table(
+        {"kind": "quality", "metric": "f1"}, store, model_filter="ModelA"
+    )
+    assert body["models"] == ["ModelA"]
+    assert "ModelB" not in body["data"]
+    assert body["data"]["ModelA"]["full"]["hotpot_qa"] == pytest.approx(0.7)
 
 
-def test_all_three_kinds_include_footer(tmp_path: Path) -> None:
-    """Every kind must emit exactly one footer marker per table."""
-    store = tmp_path / "runs.jsonl"
-    _seed_quality_store(store)
-    _seed_timing_store(store)
-    _seed_throughput_store(store)
-    for spec in [
-        {"kind": "quality", "rows": "mask", "cols": "dataset", "metric": "f1"},
-        {"kind": "timing", "rows": "mask", "cols": "N", "metric": "ttft"},
-        {"kind": "throughput", "rows": "mode", "cols": "N", "metric": "qps"},
-    ]:
-        out = render_table(spec, store)
-        assert out.count(FOOTER_MARKER) == 1, f"kind {spec['kind']} missing exactly one footer"
+# ---- End-to-end: aggregate() writes an envelope with tables[] --------------------------------
 
 
-# ---- End-to-end: aggregate() composes two tables --------------------------------------------
-
-
-def test_aggregate_composes_two_tables(tmp_path: Path) -> None:
+def test_aggregate_composes_envelope(tmp_path: Path) -> None:
     store = tmp_path / "runs.jsonl"
     _seed_quality_store(store)
     _seed_throughput_store(store)
@@ -470,60 +497,86 @@ def test_aggregate_composes_two_tables(tmp_path: Path) -> None:
                 "model": "Qwen",
                 "report": {
                     "tables": [
-                        {
-                            "kind": "quality",
-                            "rows": "mask",
-                            "cols": "dataset",
-                            "metric": "f1",
-                        },
-                        {
-                            "kind": "throughput",
-                            "rows": "mode",
-                            "cols": "N",
-                            "metric": "qps",
-                        },
+                        {"kind": "quality", "metric": "f1"},
+                        {"kind": "throughput", "metric": "qps"},
                     ]
                 },
             }
         )
     )
-    out = tmp_path / "summary.md"
+    out = tmp_path / "summary.json"
     aggregate(exp_yaml, out, store=store)
 
-    text = out.read_text()
-    # Both tables present.
-    assert "### Qwen — F1" in text
-    assert "throughput — qps" in text
-    # Exactly one footer per table.
-    assert text.count(FOOTER_MARKER) == 2
+    envelope = json.loads(out.read_text())
+    # Envelope fields present.
+    assert envelope["yaml"] == str(exp_yaml)
+    assert envelope["store"] == str(store)
+    assert envelope["model_filter"] is None
+    assert isinstance(envelope["generated_utc"], str)
+    assert envelope["generated_utc"].endswith("Z")
+    assert isinstance(envelope["git_sha"], str)
+    # store_sha256_8 is 8 hex chars (or "missing" if the store file were absent — it isn't).
+    assert len(envelope["store_sha256_8"]) == 8
+    # Two tables in the order declared in the YAML.
+    kinds = [t["kind"] for t in envelope["tables"]]
+    assert kinds == ["quality", "throughput"]
 
 
-def test_aggregate_append_mode_preserves_prior_content(tmp_path: Path) -> None:
+def test_aggregate_missing_store_sets_store_sha256_missing(tmp_path: Path) -> None:
+    """When the store file is absent, envelope carries store_sha256_8 = "missing"."""
     store = tmp_path / "runs.jsonl"
-    _seed_throughput_store(store)
-    out = tmp_path / "summary.md"
-    out.write_text("# preface\n")
+    _seed_quality_store(store)  # write, so tables render
     exp_yaml = tmp_path / "exp.yaml"
     exp_yaml.write_text(
         yaml.safe_dump(
-            {
-                "report": {
-                    "tables": [
-                        {
-                            "kind": "throughput",
-                            "rows": "mode",
-                            "cols": "N",
-                            "metric": "qps",
-                        }
-                    ]
-                }
-            }
+            {"report": {"tables": [{"kind": "quality", "metric": "f1"}]}}
         )
     )
-    aggregate(exp_yaml, out, store=store, append=True)
-    text = out.read_text()
-    assert text.startswith("# preface\n")
-    assert "throughput — qps" in text
+    # Point the envelope at a non-existent path for the hash step — collect_table itself
+    # takes the same argument so we need a workable store for collection. Emulate the
+    # missing-file branch on the envelope helper directly.
+    out = tmp_path / "summary.json"
+    aggregate(exp_yaml, out, store=store)
+    envelope = json.loads(out.read_text())
+    # Not the "missing" branch here — sanity that the happy path still writes 8 hex.
+    assert len(envelope["store_sha256_8"]) == 8
+
+    from ddi.aggregate import _store_sha256_8
+    assert _store_sha256_8(tmp_path / "no-such-file.jsonl") == "missing"
+
+
+def test_aggregate_model_filter_echoed_in_envelope(tmp_path: Path) -> None:
+    store = tmp_path / "runs.jsonl"
+    _write_row(
+        store, "phase2_train_free:ModelA:hotpot_qa:full:seed=0:sha:r0", "f1", 0.7
+    )
+    exp_yaml = tmp_path / "exp.yaml"
+    exp_yaml.write_text(
+        yaml.safe_dump(
+            {"report": {"tables": [{"kind": "quality", "metric": "f1"}]}}
+        )
+    )
+    out = tmp_path / "summary.json"
+    aggregate(exp_yaml, out, store=store, model_filter="ModelA")
+    envelope = json.loads(out.read_text())
+    assert envelope["model_filter"] == "ModelA"
+
+
+def test_aggregate_overwrites_out(tmp_path: Path) -> None:
+    """Each aggregate() run overwrites --out fully (no --append mode)."""
+    store = tmp_path / "runs.jsonl"
+    _seed_throughput_store(store)
+    out = tmp_path / "summary.json"
+    out.write_text("garbage that should be replaced")
+    exp_yaml = tmp_path / "exp.yaml"
+    exp_yaml.write_text(
+        yaml.safe_dump(
+            {"report": {"tables": [{"kind": "throughput", "metric": "qps"}]}}
+        )
+    )
+    aggregate(exp_yaml, out, store=store)
+    envelope = json.loads(out.read_text())
+    assert envelope["tables"][0]["kind"] == "throughput"
 
 
 def test_aggregate_rejects_unknown_kind(tmp_path: Path) -> None:
@@ -534,7 +587,7 @@ def test_aggregate_rejects_unknown_kind(tmp_path: Path) -> None:
         yaml.safe_dump({"report": {"tables": [{"kind": "not_a_kind"}]}})
     )
     with pytest.raises(ValueError, match="unknown table kind"):
-        aggregate(exp_yaml, tmp_path / "summary.md", store=store)
+        aggregate(exp_yaml, tmp_path / "summary.json", store=store)
 
 
 def test_aggregate_rejects_empty_tables(tmp_path: Path) -> None:
@@ -543,4 +596,68 @@ def test_aggregate_rejects_empty_tables(tmp_path: Path) -> None:
     exp_yaml = tmp_path / "exp.yaml"
     exp_yaml.write_text(yaml.safe_dump({"report": {"tables": []}}))
     with pytest.raises(ValueError, match="report.tables is empty"):
-        aggregate(exp_yaml, tmp_path / "summary.md", store=store)
+        aggregate(exp_yaml, tmp_path / "summary.json", store=store)
+
+
+def test_aggregate_cli_has_no_append_flag() -> None:
+    """The --append flag was dropped in the JSON refactor."""
+    from ddi.aggregate import _build_parser
+    parser = _build_parser()
+    # Flatten every option string across every action.
+    all_options = [opt for a in parser._actions for opt in a.option_strings]
+    assert "--append" not in all_options
+
+
+# ---- load_rows / _row_model preserved from #115 ---------------------------------------------
+
+
+def test_load_rows_no_filter_returns_all(tmp_path: Path) -> None:
+    store = tmp_path / "runs.jsonl"
+    _write_row(store, "phase2_train_free:A:hotpot_qa:full:seed=0:sha:r0", "f1", 0.1)
+    _write_row(store, "phase2_train_free:B:hotpot_qa:full:seed=0:sha:r0", "f1", 0.2)
+    rows = load_rows(store)
+    assert len(rows) == 2
+
+
+def test_load_rows_model_filter_narrows(tmp_path: Path) -> None:
+    store = tmp_path / "runs.jsonl"
+    _write_row(store, "phase2_train_free:A:hotpot_qa:full:seed=0:sha:r0", "f1", 0.1)
+    _write_row(store, "phase2_train_free:B:hotpot_qa:full:seed=0:sha:r0", "f1", 0.2)
+    rows = load_rows(store, model_filter="A")
+    assert len(rows) == 1
+    assert _row_model(rows[0]) == "A"
+
+
+def test_load_rows_model_filter_drops_shapeless_rows(tmp_path: Path) -> None:
+    """Rows whose run_id doesn't match ``<prefix>:<model>:...`` are dropped by any filter."""
+    store = tmp_path / "runs.jsonl"
+    _write_row(store, "phase2_train_free:A:hotpot_qa:full:seed=0:sha:r0", "f1", 0.1)
+    # Malformed run_id with no colon at all — _row_model returns None.
+    _write_row(store, "no-colon-run-id", "f1", 0.9)
+    rows = load_rows(store, model_filter="A")
+    # Only the one shapely row for A.
+    assert len(rows) == 1
+
+
+def test_row_model_extracts_second_segment() -> None:
+    assert _row_model({"run_id": "phase2_train_free:Qwen:foo:bar"}) == "Qwen"
+    assert _row_model({"run_id": "phase3_timing:Llama-3.1:N=1:L=512"}) == "Llama-3.1"
+
+
+def test_row_model_returns_none_for_bad_shape() -> None:
+    assert _row_model({"run_id": ""}) is None
+    assert _row_model({"run_id": "single-segment"}) is None
+    assert _row_model({"run_id": ":empty-prefix:xx"}) is None
+    assert _row_model({}) is None
+
+
+def test_iter_rows_skips_blank_lines(tmp_path: Path) -> None:
+    """iter_rows is tolerant of blank lines in the JSONL."""
+    store = tmp_path / "runs.jsonl"
+    store.write_text(
+        '{"run_id": "a:x", "metric": "f1", "value": 0.1}\n'
+        '\n'
+        '{"run_id": "b:y", "metric": "f1", "value": 0.2}\n'
+    )
+    rows = list(iter_rows(store))
+    assert len(rows) == 2

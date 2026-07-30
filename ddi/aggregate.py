@@ -1,78 +1,57 @@
-"""YAML-driven table builder (issue #86, sub-issue of #81).
+"""YAML-driven table builder — JSON output edition.
 
-One CLI reads the ``report.tables:`` block from an experiment YAML and emits
-one Markdown table per entry (with the #79 provenance footer), concatenated
-into a single ``summary.md``. Replaces every ``ddi/reports/*.py`` renderer.
+One CLI reads the ``report.tables:`` block from an experiment YAML and emits a
+single JSON file: one object per entry in ``tables[]``, wrapped in an envelope
+that carries the store hash, git SHA, and model filter used at collection time.
 
 Dispatch on ``kind``:
 
-- ``quality``       → phase2_train_free rows, rows=mask × cols=dataset, cells with
-                      the #72 colorization contract (``value (Δ vs full)``, 🟢 when
-                      |Δ| < 5% of ``full`` and both values have signal).
-- ``timing``        → phase3_timing rows, rows=mask × cols=N. Optional
-                      ``split_by: [L, backend]`` emits one sub-table per group.
-                      ``realized`` and ``realization`` derived by pairing each
-                      variant row with the matching ``full`` row at the same
-                      ``(model, N, L, backend, seed)``.
-- ``throughput``    → phase4_throughput rows, rows=mode × cols=N.
-- ``restart_quality``→ phase4_restart rows, rows=layout × cols=dataset. Same
-                      colorization contract as ``quality``; ``sequential`` is
-                      the baseline layout.
-- ``correctness``   → phase4_cache rows, rows=mode × cols=N, one sub-block per
-                      (model, L). Cells render ``max_abs_logit_diff`` in
-                      scientific notation; ``full_causal`` is the baseline
-                      (always 0.00e+00 by definition).
+- ``quality``       → phase2_train_free rows, ``{model: {mask: {dataset: value}}}``.
+- ``timing``        → phase3_timing rows, ``{model: {L: {backend: {mask: {N: value}}}}}``.
+                      ``realized`` and ``realization`` are DERIVED by pairing variant
+                      rows with matching ``full`` rows at ``(model, N, L, backend, seed)``.
+- ``throughput``    → phase4_throughput rows, ``{model: {mode: {N: value}}}``.
+- ``restart_quality``→ phase4_restart rows, ``{model: {layout: {dataset: value}}}``.
+- ``correctness``   → phase4_cache rows, ``{model: {mode: {L: {N: value}}}}``
+                      (worst-case max across queries).
 
 Design notes / why:
 
-- **Delegates row access** to ``ddi.report.iter_rows`` / ``filter_rows`` so the
-  store format stays owned by one module.
-- **Reuses** ``ddi.reports._provenance.render_provenance_footer`` — every
-  emitted table ends with the same footer #79 stamps.
-- **Deterministic** by design: sorted iteration everywhere, no timestamps in
-  the table body (the footer is the only volatile field, marked stable by the
-  ``<!-- provenance -->`` line so tests can grep for it).
-- **Open/closed for new kinds**: dispatcher ``_RENDERERS`` is a plain dict —
-  a new kind adds one entry and one ``_render_<kind>`` function.
+- **Delegates row access** to ``iter_rows`` / ``filter_rows`` so the store format
+  stays owned by one module.
+- **JSON output** — colorization, delta annotations, and the provenance-footer
+  blockquote are gone. Consumers who need Δ vs a baseline compute it from the raw
+  values.
+- **Missing cells omit the key entirely** (no ``null``, no ``"—"``). Absence is
+  detectable by the consumer.
+- **Insertion order is meaningful** — the ordered mask/N/L axes are baked into
+  dict insertion order (Python 3.7+). ``json.dumps(..., sort_keys=False)``.
+- **Provenance envelope** reuses ``ddi.reports._provenance`` helpers for the git
+  SHA and store hash so the format stays identical to the pre-refactor footer.
+- **Open/closed for new kinds**: dispatcher ``_COLLECTORS`` is a plain dict —
+  a new kind adds one entry and one ``_collect_<kind>`` function.
 
 CLI:
 
-    python -m ddi.aggregate <exp.yaml> --out <summary.md>
-                            [--store results/runs.jsonl] [--append]
-
-The YAML block shape (excerpt from #81):
-
-    report:
-      tables:
-        - kind: quality
-          rows: mask
-          cols: dataset
-          metric: f1
-        - kind: timing
-          rows: mask
-          cols: N
-          metric: realized
-          split_by: [L, backend]
-        - kind: throughput
-          rows: mode
-          cols: N
-          metric: qps
+    python -m ddi.aggregate <exp.yaml> --out <summary.json>
+                            [--store results/runs.jsonl] [--model REPO_ID]
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import subprocess
 import sys
 import time
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Iterator
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import yaml
-
-from ddi.reports._provenance import render_provenance_footer
 
 # ---- Store readers (inlined from the deleted ddi.report in #89) ----------------------------
 #
@@ -133,7 +112,7 @@ def _row_model(row: dict) -> str | None:
 def load_rows(store: Path, model_filter: str | None = None) -> list[dict]:
     """Read the JSONL store into a list, optionally filtered to one model.
 
-    Every renderer calls this at the top instead of ``iter_rows(store)`` so that a
+    Every collector calls this at the top instead of ``iter_rows(store)`` so that a
     ``--model`` CLI override applied to ``aggregate`` propagates uniformly. The store
     itself is append-only and shared across every run — the filter lets a caller who
     only cares about one model get a clean summary from a store that has many.
@@ -143,68 +122,15 @@ def load_rows(store: Path, model_filter: str | None = None) -> list[dict]:
         return rows
     return [r for r in rows if _row_model(r) == model_filter]
 
-# ---- Colorization contract (from color_tables.py, #72 Qwen comment) ------------------------
+
+# ---- Quality kind ---------------------------------------------------------------------------
 #
-# The rules that govern ``render_cell`` are load-bearing for how the paper reads: 🟢 only
-# means "quality parity" when the metric can actually discriminate. The floor / ceiling
-# suppression rules exist so a degenerate metric (F1 = 0.00 under blind AND under full on a
-# saturated dataset) never reads as a "win" for a variant that simply happens to also be at
-# floor. The historical failure case here was the ``ds/contra`` stress family (dropped in #89).
-
-_GREEN_THRESHOLD = 0.05  # |Δ| below 5% of |full| → 🟢
-_SMALL_BASELINE = 0.05  # |full| below this → show absolute Δ (percentage would explode)
-_LOSS_CEILING = 10.0  # loss above this ≈ uniform-over-vocab; "parity" isn't meaningful
-_SIGNAL_FLOOR = 0.01  # accuracy metrics below this on BOTH arms → no green (both at noise)
-
-
-def _render_cell(
-    variant: float,
-    full: float,
-    *,
-    is_loss: bool = False,
-    allow_green: bool = True,
-) -> str:
-    """Return the cell string ``value (Δ vs full)`` with optional 🟢 prefix.
-
-    See module docstring for the contract; keep behavior byte-identical to
-    ``/tmp/color_tables.py::render_cell`` — the paper's tables were
-    reviewed with those exact rules.
-    """
-    val = f"{variant:.4f}" if not is_loss else f"{variant:.2f}"
-    abs_diff = variant - full
-    sign = "+" if abs_diff >= 0 else "−"
-    if abs(full) >= _SMALL_BASELINE:
-        pct = abs_diff / abs(full) * 100.0
-        diff_str = f"Δ{sign}{abs(pct):.1f}%"
-        within_threshold = abs(pct) / 100.0 < _GREEN_THRESHOLD
-    else:
-        # Baseline too small for a meaningful percentage — fall back to absolute Δ.
-        abs_disp = f"{abs(abs_diff):.4f}" if not is_loss else f"{abs(abs_diff):.2f}"
-        diff_str = f"Δ{sign}{abs_disp}"
-        # A drop from 0.03 to 0.00 is a 100% relative collapse, not "parity" — key off
-        # |full| as the threshold, not a fixed absolute number.
-        within_threshold = (
-            abs(abs_diff) <= abs(full) * _GREEN_THRESHOLD if full != 0 else abs_diff == 0
-        )
-    # Suppress green when both sides are at floor / ceiling — parity there is degenerate.
-    if is_loss:
-        has_signal = not (full >= _LOSS_CEILING and variant >= _LOSS_CEILING)
-    else:
-        has_signal = not (full < _SIGNAL_FLOOR and variant < _SIGNAL_FLOOR)
-    prefix = "🟢 " if (allow_green and within_threshold and has_signal) else ""
-    return f"{prefix}{val} ({diff_str})"
-
-
-def _fmt(v: float, *, is_loss: bool = False) -> str:
-    return f"{v:.4f}" if not is_loss else f"{v:.2f}"
-
-
-# ---- Quality kind (parity with T2_em / T2_f1 / T2_presence / T2_loss) -----------------------
-#
-# Column order and dataset mapping are lifted verbatim from
-# ``ddi/reports/phase2_quality.py`` so the tables read identically in the tracking issues.
+# Dataset whitelist is lifted from the pre-JSON renderer; historical rows for pruned
+# datasets (`nq`, `composition`, `ddi_stress__*`) are silently dropped rather than surfacing
+# as extra keys in the JSON.
 
 _QUALITY_PREFIX = "phase2_train_free:"
+_QUALITY_METRICS: frozenset[str] = frozenset({"em", "f1", "presence", "loss"})
 
 _QUALITY_DATASET_COLUMNS: tuple[str, ...] = (
     "synthetic_qa",
@@ -214,22 +140,12 @@ _QUALITY_DATASET_COLUMNS: tuple[str, ...] = (
 )
 
 # ``nq`` is degenerate (no docs); older EXP-01 rows still exist in the store — drop them
-# explicitly so the aggregator matches the #72 templates. ``composition`` /
-# ``ddi_stress__*`` also stay in the drop list: their loaders / runners were deleted in
-# #89, but historical rows may still live in results/runs.jsonl and must be silently
-# skipped rather than crashing the renderer.
+# explicitly. ``composition`` / ``ddi_stress__*`` also stay in the drop list: their loaders /
+# runners were deleted in #89, but historical rows may still live in results/runs.jsonl and
+# must be silently skipped rather than surfacing as noise keys in the JSON.
 _QUALITY_DROPPED_DATASETS: frozenset[str] = frozenset({"nq"})
 
 _QUALITY_PREFERRED_MASKS: tuple[str, ...] = ("full", "ddi_qf", "blind")
-
-_QUALITY_METRIC_HEADERS: dict[str, str] = {
-    "em": "EM",
-    "f1": "F1",
-    "presence": "presence",
-    "loss": "loss",
-}
-
-_EM_DASH = "—"
 
 
 def _quality_parse_run_id(run_id: str) -> tuple[str, str, str, int] | None:
@@ -237,7 +153,7 @@ def _quality_parse_run_id(run_id: str) -> tuple[str, str, str, int] | None:
 
     Shape: ``phase2_train_free:{model}:{dataset}:{variant}:seed={seed}:{sha}:{record_id}``.
     Returns None if the shape does not match — a malformed row is silently skipped so a
-    single bad line in the store never breaks a render.
+    single bad line in the store never breaks a collection.
     """
     parts = run_id.split(":")
     if len(parts) < 7 or (parts[0] + ":") != _QUALITY_PREFIX:
@@ -256,11 +172,7 @@ def _quality_parse_run_id(run_id: str) -> tuple[str, str, str, int] | None:
 
 
 def _quality_dataset_to_column(dataset: str) -> str | None:
-    """Map a store dataset name to a column label, or None to drop the row.
-
-    The ``ddi_stress`` and ``composition`` datasets were dropped in #89; historical
-    rows are silently skipped (they no longer map to any live column).
-    """
+    """Map a store dataset name to a column label, or None to drop the row."""
     if dataset in _QUALITY_DROPPED_DATASETS:
         return None
     if dataset == "ddi_stress" or dataset.startswith("ddi_stress__") or dataset == "composition":
@@ -275,14 +187,14 @@ def _quality_mask_order(masks: Iterable[str]) -> list[str]:
     return ordered + extras
 
 
-def _render_quality(spec: dict, store: Path, model_filter: str | None = None) -> str:
+def _collect_quality(spec: dict, store: Path, model_filter: str | None = None) -> dict:
+    """Return the JSON body for one report.tables[] entry (kind: quality)."""
     metric = spec.get("metric")
-    if metric not in _QUALITY_METRIC_HEADERS:
+    if metric not in _QUALITY_METRICS:
         raise ValueError(
             f"quality: unknown metric {metric!r}; expected one of "
-            f"{sorted(_QUALITY_METRIC_HEADERS)}"
+            f"{sorted(_QUALITY_METRICS)}"
         )
-    is_loss = metric == "loss"
 
     all_rows = load_rows(store, model_filter)
     if not any(str(r.get("run_id", "")).startswith(_QUALITY_PREFIX) for r in all_rows):
@@ -318,67 +230,39 @@ def _render_quality(spec: dict, store: Path, model_filter: str | None = None) ->
     for (model, mask, _col) in per_cell:
         masks_seen[model].append(mask)
 
-    header_cols = " | ".join(_QUALITY_DATASET_COLUMNS)
-    header_sep = "|".join(["---"] * (len(_QUALITY_DATASET_COLUMNS) + 1))
-    metric_label = _QUALITY_METRIC_HEADERS[metric]
-
-    blocks: list[str] = []
+    data: dict[str, dict[str, dict[str, float]]] = {}
     for model in models:
-        lines = [
-            f"### {model} — {metric_label}",
-            "",
-            f"| mask | {header_cols} |",
-            f"|{header_sep}|",
-        ]
-        masks = _quality_mask_order(masks_seen[model])
-        # Full baseline per column (needed for Δ on the variant rows).
-        full_vals: dict[str, float | None] = {}
-        for col in _QUALITY_DATASET_COLUMNS:
-            values = per_cell.get((model, "full", col))
-            full_vals[col] = (sum(values) / len(values)) if values else None
-        for mask in masks:
-            cells: list[str] = []
+        model_body: dict[str, dict[str, float]] = {}
+        for mask in _quality_mask_order(masks_seen[model]):
+            mask_body: dict[str, float] = {}
             for col in _QUALITY_DATASET_COLUMNS:
                 values = per_cell.get((model, mask, col))
                 if not values:
-                    cells.append(_EM_DASH)
-                    continue
-                val = sum(values) / len(values)
-                if mask == "full":
-                    cells.append(_fmt(val, is_loss=is_loss))
-                    continue
-                full = full_vals.get(col)
-                if full is None:
-                    # No baseline to Δ against — fall back to raw formatting.
-                    cells.append(_fmt(val, is_loss=is_loss))
-                    continue
-                # `blind` row is *never* coloured — parity there is a ground-rule-7 failure,
-                # not a win (see color_tables.py comment and #72 Qwen comment).
-                allow_green = mask != "blind"
-                cells.append(
-                    _render_cell(val, full, is_loss=is_loss, allow_green=allow_green)
-                )
-            lines.append(f"| {mask} | " + " | ".join(cells) + " |")
-        blocks.append("\n".join(lines))
+                    continue  # missing cell → key omitted entirely
+                mask_body[col] = sum(values) / len(values)
+            if mask_body:
+                model_body[mask] = mask_body
+        if model_body:
+            data[model] = model_body
 
-    # One footer covers the union of sub-tables — same store slice, per-block would duplicate.
-    return "\n\n".join(blocks) + "\n" + render_provenance_footer(store, backing_rows)
+    return {
+        "kind": "quality",
+        "metric": metric,
+        "backing_rows": len(backing_rows),
+        "distinct_run_ids": len({r.get("run_id") for r in backing_rows}),
+        "seeds": sorted({int((r.get("provenance") or {}).get("seed", 0)) for r in backing_rows}),
+        "models": models,
+        "data": data,
+    }
 
 
-# ---- Cache/restart_quality kind (C4 restart-position layout parity) ------------------------
+# ---- Restart-quality kind (C4 restart-position layout parity) ------------------------------
 #
-# Layout must not change quality: `sequential` is the baseline (mirrors quality's `full`
-# baseline / Δ convention) and `restart` is compared against it. Columns reuse the same fixed
-# dataset roster as the quality kind.
+# `sequential` is the baseline layout; `restart` is the variant. The JSON body uses the
+# same dataset whitelist as ``quality``; deltas vs `sequential` are a consumer concern.
 
 _RESTART_PREFIX = "phase4_restart:"
-_RESTART_METRIC_HEADERS: dict[str, str] = {
-    "em": "EM",
-    "f1": "F1",
-    "presence": "presence",
-    "loss": "loss",
-}
-_RESTART_BASELINE_LAYOUT = "sequential"
+_RESTART_METRICS: frozenset[str] = frozenset({"em", "f1", "presence", "loss"})
 _RESTART_PREFERRED_LAYOUTS: tuple[str, ...] = ("sequential", "restart")
 
 
@@ -408,14 +292,14 @@ def _restart_layout_order(layouts: Iterable[str]) -> list[str]:
     return ordered + extras
 
 
-def _render_restart_quality(spec: dict, store: Path, model_filter: str | None = None) -> str:
+def _collect_restart_quality(spec: dict, store: Path, model_filter: str | None = None) -> dict:
+    """Return the JSON body for one report.tables[] entry (kind: restart_quality)."""
     metric = spec.get("metric")
-    if metric not in _RESTART_METRIC_HEADERS:
+    if metric not in _RESTART_METRICS:
         raise ValueError(
             f"restart_quality: unknown metric {metric!r}; expected one of "
-            f"{sorted(_RESTART_METRIC_HEADERS)}"
+            f"{sorted(_RESTART_METRICS)}"
         )
-    is_loss = metric == "loss"
 
     all_rows = load_rows(store, model_filter)
     if not any(str(r.get("run_id", "")).startswith(_RESTART_PREFIX) for r in all_rows):
@@ -424,7 +308,6 @@ def _render_restart_quality(spec: dict, store: Path, model_filter: str | None = 
             "Run the cache/restart_quality task first."
         )
 
-    # (model, layout, column) -> [per-record values]
     per_cell: dict[tuple[str, str, str], list[float]] = defaultdict(list)
     backing_rows: list[dict] = []
     for row in filter_rows(all_rows, metric=metric):
@@ -451,50 +334,33 @@ def _render_restart_quality(spec: dict, store: Path, model_filter: str | None = 
     for (model, layout, _col) in per_cell:
         layouts_seen[model].append(layout)
 
-    header_cols = " | ".join(_QUALITY_DATASET_COLUMNS)
-    header_sep = "|".join(["---"] * (len(_QUALITY_DATASET_COLUMNS) + 1))
-    metric_label = _RESTART_METRIC_HEADERS[metric]
-
-    blocks: list[str] = []
+    data: dict[str, dict[str, dict[str, float]]] = {}
     for model in models:
-        lines = [
-            f"### {model} — {metric_label} (restart-layout parity)",
-            "",
-            f"| layout | {header_cols} |",
-            f"|{header_sep}|",
-        ]
-        layouts = _restart_layout_order(layouts_seen[model])
-        baseline_vals: dict[str, float | None] = {}
-        for col in _QUALITY_DATASET_COLUMNS:
-            values = per_cell.get((model, _RESTART_BASELINE_LAYOUT, col))
-            baseline_vals[col] = (sum(values) / len(values)) if values else None
-        for layout in layouts:
-            cells: list[str] = []
+        model_body: dict[str, dict[str, float]] = {}
+        for layout in _restart_layout_order(layouts_seen[model]):
+            layout_body: dict[str, float] = {}
             for col in _QUALITY_DATASET_COLUMNS:
                 values = per_cell.get((model, layout, col))
                 if not values:
-                    cells.append(_EM_DASH)
                     continue
-                val = sum(values) / len(values)
-                if layout == _RESTART_BASELINE_LAYOUT:
-                    cells.append(_fmt(val, is_loss=is_loss))
-                    continue
-                baseline = baseline_vals.get(col)
-                if baseline is None:
-                    cells.append(_fmt(val, is_loss=is_loss))
-                    continue
-                cells.append(_render_cell(val, baseline, is_loss=is_loss))
-            lines.append(f"| {layout} | " + " | ".join(cells) + " |")
-        blocks.append("\n".join(lines))
+                layout_body[col] = sum(values) / len(values)
+            if layout_body:
+                model_body[layout] = layout_body
+        if model_body:
+            data[model] = model_body
 
-    return "\n\n".join(blocks) + "\n" + render_provenance_footer(store, backing_rows)
+    return {
+        "kind": "restart_quality",
+        "metric": metric,
+        "backing_rows": len(backing_rows),
+        "distinct_run_ids": len({r.get("run_id") for r in backing_rows}),
+        "seeds": sorted({int((r.get("provenance") or {}).get("seed", 0)) for r in backing_rows}),
+        "models": models,
+        "data": data,
+    }
 
 
-# ---- Timing kind (parity with T_perf_ttft / tpot / sparsity / analytical / realized / ratio)
-#
-# Shape mirrors ``ddi/reports/phase3_realization.py``: N columns fixed to
-# ``(1, 3, 5, 9, 13, 25)``, one sub-table per (model, L, backend) triple, ``realized`` and
-# ``realization`` are DERIVED at render time by pairing variant rows with matching ``full``.
+# ---- Timing kind ---------------------------------------------------------------------------
 
 _TIMING_PREFIX = "phase3_timing:"
 _TIMING_FULL_VARIANT = "full"
@@ -502,18 +368,13 @@ _TIMING_FULL_VARIANT = "full"
 _TIMING_N_COLUMNS: tuple[int, ...] = (1, 3, 5, 9, 13, 25)
 _TIMING_PREFERRED_MASKS: tuple[str, ...] = ("full", "ddi_qf", "blind")
 
-_TIMING_METRIC_HEADERS: dict[str, str] = {
-    "ttft": "TTFT (median ms)",
-    "tpot": "TPOT (median ms)",
-    "sparsity": "mask sparsity",
-    "analytical": "analytical speedup",
-    "realized": "realized speedup",
-    "realization": "realization ratio",
-}
+_TIMING_METRICS: frozenset[str] = frozenset(
+    {"ttft", "tpot", "sparsity", "analytical", "realized", "realization"}
+)
 
 # Map short metric name from YAML → store metric name it aggregates. `realized` and
 # `realization` are DERIVED so they need TTFT rows on both the variant and `full` arms.
-_TIMING_SHORT_TO_STORE: dict[str, str] = {
+_TIMING_METRIC_ALIAS: dict[str, str] = {
     "ttft": "ftt_median_ms",
     "tpot": "tpot_median_ms",
     "sparsity": "mask_sparsity",
@@ -636,37 +497,19 @@ def _timing_apply_derived(
                 metrics["realization"] = realized / analytical
 
 
-def _timing_fmt_cell(metric: str, value: float | None) -> str:
-    if value is None:
-        return _EM_DASH
-    if metric in ("ttft", "tpot"):
-        return f"{value:.2f}"
-    if metric in ("analytical", "realized"):
-        return f"{value:.2f}x"
-    if metric == "realization":
-        return f"{value:.3f}"
-    if metric == "sparsity":
-        return f"{value:.3f}"
-    return f"{value:.4f}"
-
-
-def _render_timing(spec: dict, store: Path, model_filter: str | None = None) -> str:
+def _collect_timing(spec: dict, store: Path, model_filter: str | None = None) -> dict:
+    """Return the JSON body for one report.tables[] entry (kind: timing)."""
     metric = spec.get("metric")
-    if metric not in _TIMING_METRIC_HEADERS:
+    if metric not in _TIMING_METRICS:
         raise ValueError(
             f"timing: unknown metric {metric!r}; expected one of "
-            f"{sorted(_TIMING_METRIC_HEADERS)}"
-        )
-    split_by = spec.get("split_by") or []
-    if not isinstance(split_by, (list, tuple)):
-        raise ValueError(f"timing: split_by must be a list, got {type(split_by).__name__}")
-    unknown = [s for s in split_by if s not in ("L", "backend")]
-    if unknown:
-        raise ValueError(
-            f"timing: split_by keys must be a subset of ['L', 'backend'], got extras {unknown}"
+            f"{sorted(_TIMING_METRICS)}"
         )
 
-    if not any(str(r.get("run_id", "")).startswith(_TIMING_PREFIX) for r in load_rows(store, model_filter)):
+    if not any(
+        str(r.get("run_id", "")).startswith(_TIMING_PREFIX)
+        for r in load_rows(store, model_filter)
+    ):
         raise ValueError(
             f"timing[{metric}]: no phase3_timing rows in store {store}. "
             "Run the phase3 sweep first."
@@ -676,8 +519,8 @@ def _render_timing(spec: dict, store: Path, model_filter: str | None = None) -> 
     _timing_apply_derived(per_cell)
 
     # Aggregate values per (model, L, backend, mask, N) by mean across seeds. Track masks
-    # separately so a variant with only derived metrics missing still renders as em-dashes
-    # rather than vanishing from the table.
+    # separately so a variant with only derived metrics missing still shows up (with an
+    # empty-inner dict pruned rather than surfaced as null).
     agg: dict[tuple[str, int, str, str, int], list[float]] = defaultdict(list)
     all_masks: dict[tuple[str, int, str], set[str]] = defaultdict(set)
     for (model, variant, n, l_, backend, _seed), metrics in per_cell.items():
@@ -689,70 +532,68 @@ def _render_timing(spec: dict, store: Path, model_filter: str | None = None) -> 
             continue
         agg[(model, l_, backend, variant, n)].append(val)
 
-    metric_label = _TIMING_METRIC_HEADERS[metric]
-    header_cols = " | ".join(f"N={n}" for n in _TIMING_N_COLUMNS)
-    header_sep = "|".join(["---"] * (len(_TIMING_N_COLUMNS) + 1))
-
-    blocks: list[str] = [f"# timing — {metric_label}"]
-
+    # Build the nested dict: {model: {L: {backend: {mask: {N: value}}}}}.
+    # Outer axes sorted ascendingly; masks follow _timing_mask_order; N follows the
+    # fixed column order.
     triples = sorted(all_masks)
+    data: dict[str, dict[str, dict[str, dict[str, dict[str, float]]]]] = {}
     for (model, l_, backend) in triples:
-        # Honor split_by: if L is absent from split_by, we roll up all L's — but since our
-        # store keys carry L, "roll up" would require a re-aggregation pass. The current
-        # renderer semantics (see phase3_realization._render_perf_metric) always split on
-        # (model, L, backend); split_by is documented as an OPTIONAL hint. Preserve that.
-        header_parts = [f"## {model}"]
-        if "L" in split_by or not split_by:
-            header_parts.append(f"L={l_}")
-        if "backend" in split_by or not split_by:
-            header_parts.append(f"backend={backend}")
-        heading = " — ".join(header_parts) if len(header_parts) > 1 else header_parts[0]
-        lines = [heading, "", f"| mask | {header_cols} |", f"|{header_sep}|"]
-        masks = _timing_mask_order(all_masks[(model, l_, backend)])
-        for mask in masks:
-            cells: list[str] = []
+        model_body = data.setdefault(model, {})
+        l_body = model_body.setdefault(str(l_), {})
+        backend_body = l_body.setdefault(backend, {})
+        for mask in _timing_mask_order(all_masks[(model, l_, backend)]):
+            mask_body: dict[str, float] = {}
             for n in _TIMING_N_COLUMNS:
                 vals = agg.get((model, l_, backend, mask, n))
                 if not vals:
-                    cells.append(_EM_DASH)
-                else:
-                    cells.append(_timing_fmt_cell(metric, sum(vals) / len(vals)))
-            lines.append(f"| {mask} | " + " | ".join(cells) + " |")
-        blocks.append("\n".join(lines))
+                    continue
+                mask_body[str(n)] = sum(vals) / len(vals)
+            if mask_body:
+                backend_body[mask] = mask_body
+        if not backend_body:
+            l_body.pop(backend, None)
+        if not l_body:
+            model_body.pop(str(l_), None)
+    # Drop any model that ended up empty after pruning.
+    data = {m: body for m, body in data.items() if body}
 
-    return "\n\n".join(blocks) + "\n" + render_provenance_footer(store, backing_rows)
+    return {
+        "kind": "timing",
+        "metric": metric,
+        "backing_rows": len(backing_rows),
+        "distinct_run_ids": len({r.get("run_id") for r in backing_rows}),
+        "seeds": sorted({int((r.get("provenance") or {}).get("seed", 0)) for r in backing_rows}),
+        "models": sorted(data),
+        "data": data,
+    }
 
 
-# ---- Throughput kind (parity with F5 — phase4_throughput) ----------------------------------
-#
-# F5 in ``ddi/reports/phase4_throughput.py`` renders a PLOT; the ``kind: throughput`` table
-# entry in the YAML spec (#81) is the *tabular* form of the same data — rows=mode × cols=N,
-# cells = mean qps at that mode/N.
+# ---- Throughput kind ------------------------------------------------------------------------
 
 _THROUGHPUT_PREFIX = "phase4_throughput:"
 _THROUGHPUT_PREFERRED_MODES: tuple[str, ...] = ("ddi_cache", "ddi_recompute", "full_causal")
 
 
-def _throughput_parse_run_id(run_id: str) -> tuple[str, str] | None:
-    """Return ``(mode, N_str_or_none)`` from a phase4_throughput run_id.
+def _throughput_parse_run_id(run_id: str) -> tuple[str, str, str] | None:
+    """Return ``(model, mode, N_str_or_"n/a")`` from a phase4_throughput run_id.
 
     Shape: ``phase4_throughput:{model}:{mode}:{layout}:reuse={reuse}:seed={seed}:{sha}``
-    or with an optional ``N={N}`` segment inserted before ``reuse=`` when the runner
-    encodes the doc count. We tolerate both: a run without ``N=`` maps to the sentinel
-    N column ``"n/a"``, which the aggregator surfaces as a single unnamed N column.
+    or with an optional ``N={N}`` segment inserted before ``reuse=``. A run without ``N=``
+    maps to the sentinel N key ``"n/a"``.
     """
     if not run_id.startswith(_THROUGHPUT_PREFIX):
         return None
     parts = run_id.split(":")
     if len(parts) < 7:
         return None
+    model = parts[1]
     mode = parts[2]
-    n_str = None
+    n_str: str | None = None
     for seg in parts[3:]:
         if seg.startswith("N="):
             n_str = seg[2:]
             break
-    return mode, (n_str if n_str is not None else "n/a")
+    return model, mode, (n_str if n_str is not None else "n/a")
 
 
 def _throughput_mode_order(modes: Iterable[str]) -> list[str]:
@@ -762,7 +603,8 @@ def _throughput_mode_order(modes: Iterable[str]) -> list[str]:
     return ordered + extras
 
 
-def _render_throughput(spec: dict, store: Path, model_filter: str | None = None) -> str:
+def _collect_throughput(spec: dict, store: Path, model_filter: str | None = None) -> dict:
+    """Return the JSON body for one report.tables[] entry (kind: throughput)."""
     metric = spec.get("metric") or "qps"
 
     all_rows = load_rows(store, model_filter)
@@ -772,22 +614,22 @@ def _render_throughput(spec: dict, store: Path, model_filter: str | None = None)
             "Run the phase4 sweep first."
         )
 
-    # (mode, N) -> [values]
-    per_cell: dict[tuple[str, str], list[float]] = defaultdict(list)
-    all_ns: set[str] = set()
+    per_cell: dict[tuple[str, str, str], list[float]] = defaultdict(list)
+    all_ns_per_model: dict[str, set[str]] = defaultdict(set)
+    all_modes_per_model: dict[str, set[str]] = defaultdict(set)
     backing_rows: list[dict] = []
     for row in filter_rows(all_rows, metric=metric):
-        rid = str(row.get("run_id", ""))
-        parsed = _throughput_parse_run_id(rid)
+        parsed = _throughput_parse_run_id(str(row.get("run_id", "")))
         if parsed is None:
             continue
-        mode, n_str = parsed
+        model, mode, n_str = parsed
         try:
             val = float(row["value"])
         except (KeyError, TypeError, ValueError):
             continue
-        per_cell[(mode, n_str)].append(val)
-        all_ns.add(n_str)
+        per_cell[(model, mode, n_str)].append(val)
+        all_ns_per_model[model].add(n_str)
+        all_modes_per_model[model].add(mode)
         backing_rows.append(row)
 
     if not per_cell:
@@ -795,7 +637,7 @@ def _render_throughput(spec: dict, store: Path, model_filter: str | None = None)
             f"throughput[{metric}]: no phase4_throughput rows carried metric={metric!r}."
         )
 
-    # Sort N columns numerically when possible, else lexicographic (keeps the "n/a" sentinel
+    # Sort N keys numerically when possible, else lexicographic (keeps the "n/a" sentinel
     # at the end deterministically).
     def _n_sort_key(n_str: str) -> tuple[int, int | str]:
         try:
@@ -803,32 +645,39 @@ def _render_throughput(spec: dict, store: Path, model_filter: str | None = None)
         except ValueError:
             return (1, n_str)
 
-    n_cols = sorted(all_ns, key=_n_sort_key)
-    modes = _throughput_mode_order({m for (m, _n) in per_cell})
+    models = sorted(all_modes_per_model)
+    data: dict[str, dict[str, dict[str, float]]] = {}
+    for model in models:
+        model_body: dict[str, dict[str, float]] = {}
+        n_keys = sorted(all_ns_per_model[model], key=_n_sort_key)
+        for mode in _throughput_mode_order(all_modes_per_model[model]):
+            mode_body: dict[str, float] = {}
+            for n in n_keys:
+                vals = per_cell.get((model, mode, n))
+                if not vals:
+                    continue
+                mode_body[n] = sum(vals) / len(vals)
+            if mode_body:
+                model_body[mode] = mode_body
+        if model_body:
+            data[model] = model_body
 
-    header_cols = " | ".join(f"N={n}" for n in n_cols)
-    header_sep = "|".join(["---"] * (len(n_cols) + 1))
-    lines = [
-        f"# throughput — {metric}",
-        "",
-        f"| mode | {header_cols} |",
-        f"|{header_sep}|",
-    ]
-    for mode in modes:
-        cells: list[str] = []
-        for n in n_cols:
-            vals = per_cell.get((mode, n))
-            cells.append(_EM_DASH if not vals else f"{sum(vals) / len(vals):.4f}")
-        lines.append(f"| {mode} | " + " | ".join(cells) + " |")
-    return "\n".join(lines) + "\n" + render_provenance_footer(store, backing_rows)
+    return {
+        "kind": "throughput",
+        "metric": metric,
+        "backing_rows": len(backing_rows),
+        "distinct_run_ids": len({r.get("run_id") for r in backing_rows}),
+        "seeds": sorted({int((r.get("provenance") or {}).get("seed", 0)) for r in backing_rows}),
+        "models": models,
+        "data": data,
+    }
 
 
-# ---- Correctness kind (parity with cache_correctness rows) ---------------------------------
+# ---- Correctness kind ----------------------------------------------------------------------
 #
 # Cell = ``max(max_abs_logit_diff)`` across the ``n_queries_per_doc`` queries at each
 # (model, mode, N, L). ``max`` (not mean) is the worst-case gate — a single bad query
-# would otherwise be washed out. ``full_causal`` row is the baseline (0.00e+00 by
-# definition). Rendered in scientific notation because bf16 diffs sit at O(1e-4).
+# would otherwise be washed out.
 
 _CORRECTNESS_PREFIX = "phase4_cache:"
 _CORRECTNESS_BASELINE_MODE = "full_causal"
@@ -843,7 +692,6 @@ def _correctness_parse_run_id(run_id: str) -> tuple[str, str, int, int, int] | N
     if not run_id.startswith(_CORRECTNESS_PREFIX):
         return None
     parts = run_id.split(":")
-    # Minimum shape has 8 colon-separated segments (see docstring above).
     if len(parts) < 8:
         return None
     model, mode = parts[1], parts[2]
@@ -855,7 +703,6 @@ def _correctness_parse_run_id(run_id: str) -> tuple[str, str, int, int, int] | N
         l_ = int(l_seg[2:])
     except ValueError:
         return None
-    # Query index lives in the last segment as `q{i}`; be forgiving on trailing colons.
     q_seg = parts[-1]
     if not q_seg.startswith("q"):
         return None
@@ -878,7 +725,8 @@ def _correctness_mode_order(modes: Iterable[str]) -> list[str]:
     return ordered
 
 
-def _render_correctness(spec: dict, store: Path, model_filter: str | None = None) -> str:
+def _collect_correctness(spec: dict, store: Path, model_filter: str | None = None) -> dict:
+    """Return the JSON body for one report.tables[] entry (kind: correctness)."""
     metric = spec.get("metric") or "max_abs_logit_diff"
 
     all_rows = load_rows(store, model_filter)
@@ -888,7 +736,6 @@ def _render_correctness(spec: dict, store: Path, model_filter: str | None = None
             "Run the cache/correctness task first."
         )
 
-    # (model, mode, L, N) -> [values across query_i]; aggregated via max below.
     per_cell: dict[tuple[str, str, int, int], list[float]] = defaultdict(list)
     all_ls_per_model: dict[str, set[int]] = defaultdict(set)
     all_ns_per_ml: dict[tuple[str, int], set[int]] = defaultdict(set)
@@ -914,48 +761,50 @@ def _render_correctness(spec: dict, store: Path, model_filter: str | None = None
             f"correctness[{metric}]: no phase4_cache rows carried metric={metric!r}."
         )
 
-    blocks: list[str] = [f"# correctness — {metric}"]
-    for model in sorted(all_ls_per_model):
+    models = sorted(all_ls_per_model)
+    data: dict[str, dict[str, dict[str, dict[str, float]]]] = {}
+    for model in models:
+        model_body: dict[str, dict[str, dict[str, float]]] = {}
         for l_ in sorted(all_ls_per_model[model]):
             ns = sorted(all_ns_per_ml[(model, l_)])
             modes = _correctness_mode_order(all_modes_per_ml[(model, l_)])
-            header_cols = " | ".join(f"N={n}" for n in ns)
-            header_sep = "|".join(["---"] * (len(ns) + 1))
-            lines = [
-                f"## {model} — L={l_}",
-                "",
-                f"| mode | {header_cols} |",
-                f"|{header_sep}|",
-            ]
+            # {mode: {L: {N: value}}} — mode is the outer axis under model per the spec.
             for mode in modes:
-                cells: list[str] = []
+                mode_body = model_body.setdefault(mode, {})
+                l_body: dict[str, float] = {}
                 for n in ns:
-                    if mode == _CORRECTNESS_BASELINE_MODE:
-                        # Baseline is itself — render as explicit zero regardless of
-                        # whether the runner emitted the row (it always does, but this
-                        # keeps the table honest if a partial store sneaks in).
-                        cells.append(f"{0.0:.2e}")
-                        continue
                     vals = per_cell.get((model, mode, l_, n))
                     if not vals:
-                        cells.append(_EM_DASH)
-                    else:
-                        # Worst-case gate: max, not mean. See renderer docstring.
-                        cells.append(f"{max(vals):.2e}")
-                lines.append(f"| {mode} | " + " | ".join(cells) + " |")
-            blocks.append("\n".join(lines))
+                        continue
+                    # Worst-case gate: max, not mean.
+                    l_body[str(n)] = max(vals)
+                if l_body:
+                    mode_body[str(l_)] = l_body
+            # Prune modes that ended up with no L blocks (shouldn't happen given the loop
+            # structure, but keeps the missing-cell contract clean).
+            model_body = {mode: body for mode, body in model_body.items() if body}
+        if model_body:
+            data[model] = model_body
 
-    return "\n\n".join(blocks) + "\n" + render_provenance_footer(store, backing_rows)
+    return {
+        "kind": "correctness",
+        "metric": metric,
+        "backing_rows": len(backing_rows),
+        "distinct_run_ids": len({r.get("run_id") for r in backing_rows}),
+        "seeds": sorted({int((r.get("provenance") or {}).get("seed", 0)) for r in backing_rows}),
+        "models": models,
+        "data": data,
+    }
 
 
 # ---- Dispatcher + public API ---------------------------------------------------------------
 
-_RENDERERS: dict[str, Callable[[dict, Path], str]] = {
-    "quality": _render_quality,
-    "timing": _render_timing,
-    "throughput": _render_throughput,
-    "restart_quality": _render_restart_quality,
-    "correctness": _render_correctness,
+_COLLECTORS: dict[str, Callable[[dict, Path, str | None], dict]] = {
+    "quality": _collect_quality,
+    "timing": _collect_timing,
+    "throughput": _collect_throughput,
+    "restart_quality": _collect_restart_quality,
+    "correctness": _collect_correctness,
 }
 
 
@@ -964,42 +813,97 @@ def _log(msg: str) -> None:
     print(f"[ddi.aggregate] {msg}", file=sys.stderr, flush=True)
 
 
-def render_table(spec: dict, store: Path, model_filter: str | None = None) -> str:
-    """Render one ``report.tables[]`` entry to a Markdown string with provenance footer.
+def collect_table(spec: dict, store: Path, model_filter: str | None = None) -> dict:
+    """Collect one ``report.tables[]`` entry into a JSON-serializable dict.
 
     ``spec`` keys:
       - ``kind``: ``quality`` | ``timing`` | ``throughput`` | ``restart_quality`` |
         ``correctness``.
       - ``rows`` / ``cols``: axis names (informational; the emitted shape is fixed per kind).
       - ``metric``: which metric to render.
-      - ``split_by`` (optional, timing only): list of axes to split sub-tables on.
 
-    ``model_filter`` scopes every renderer to a single model — the store is shared and
+    ``model_filter`` scopes every collector to a single model — the store is shared and
     append-only, so a caller that just ran one model wants to see only that model in the
     summary.
     """
     kind = spec.get("kind")
-    if kind not in _RENDERERS:
+    if kind not in _COLLECTORS:
         raise ValueError(
-            f"unknown table kind {kind!r}; expected one of {sorted(_RENDERERS)}"
+            f"unknown table kind {kind!r}; expected one of {sorted(_COLLECTORS)}"
         )
-    return _RENDERERS[kind](spec, store, model_filter)
+    return _COLLECTORS[kind](spec, store, model_filter)
+
+
+# ---- Provenance envelope helpers -----------------------------------------------------------
+#
+# Stdlib-only replicas of the (git SHA, store-hash) helpers that used to live in
+# ddi/reports/_provenance.py; kept local rather than imported so this module has no
+# markdown-formatting dependency at all. Behaviour matches:
+#   - git SHA falls back to "not-a-git-repo" when git is missing / not a repo
+#   - store hash is the first 8 hex chars of sha256(store bytes), or "missing" when absent
+
+
+def _git_sha() -> str:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return "not-a-git-repo"
+    sha = result.stdout.strip()
+    return sha if sha else "not-a-git-repo"
+
+
+def _store_sha256_8(store: Path) -> str:
+    try:
+        data = Path(store).read_bytes()
+    except (FileNotFoundError, OSError):
+        return "missing"
+    return hashlib.sha256(data).hexdigest()[:8]
+
+
+def _generated_utc() -> str:
+    """UTC timestamp in ISO8601 with a ``Z`` suffix (seconds precision)."""
+    ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    if ts.endswith("+00:00"):
+        ts = ts[: -len("+00:00")] + "Z"
+    return ts
+
+
+def _envelope(
+    exp_yaml: Path,
+    store: Path,
+    model_filter: str | None,
+    tables: list[dict],
+) -> dict:
+    """Build the top-level JSON envelope stamped with git + store + timestamp."""
+    return {
+        "yaml": str(exp_yaml),
+        "generated_utc": _generated_utc(),
+        "git_sha": _git_sha(),
+        "store": str(store),
+        "store_sha256_8": _store_sha256_8(store),
+        "model_filter": model_filter,
+        "tables": tables,
+    }
 
 
 def aggregate(
     exp_yaml: Path,
     out: Path,
     store: Path = Path("results/runs.jsonl"),
-    append: bool = False,
     model_filter: str | None = None,
 ) -> None:
-    """Read ``report.tables:`` from ``exp_yaml``, emit each table into ``out``.
+    """Read ``report.tables:`` from ``exp_yaml``, emit each table into ``out`` as JSON.
 
-    Each ``report.tables[]`` entry becomes one Markdown block ending with a provenance
-    footer, separated by blank lines. If ``append`` is True, blocks are appended to an
-    existing ``out``; otherwise ``out`` is overwritten.
+    ``out`` is fully overwritten each call. Multi-run aggregation is a post-processing
+    concern — the top-level envelope carries ``generated_utc`` / ``store_sha256_8`` /
+    ``git_sha`` that would be ambiguous if multiple runs were merged into one file.
 
-    ``model_filter`` scopes the rendered tables to rows whose ``run_id`` names that model.
+    ``model_filter`` scopes the collected tables to rows whose ``run_id`` names that model.
     The store itself is left untouched.
     """
     exp_yaml = Path(exp_yaml)
@@ -1019,33 +923,38 @@ def aggregate(
         raise ValueError(f"{exp_yaml}: report.tables is empty — nothing to render.")
 
     scope = f" (model={model_filter})" if model_filter else ""
-    _log(f"loading YAML {exp_yaml}; {len(tables_spec)} table(s) to render from store {store}{scope}")
+    _log(
+        f"loading YAML {exp_yaml}; {len(tables_spec)} table(s) to collect from store "
+        f"{store}{scope}"
+    )
     t0 = time.perf_counter()
-    rendered: list[str] = []
+    tables: list[dict] = []
     for i, spec in enumerate(tables_spec, 1):
         kind = spec.get("kind", "?")
         metric = spec.get("metric", "?")
         t = time.perf_counter()
         try:
-            block = render_table(spec, store, model_filter)
-            rendered.append(block)
-            _log(f"  table {i}/{len(tables_spec)}: kind={kind} metric={metric} → OK ({time.perf_counter() - t:.2f}s)")
+            tables.append(collect_table(spec, store, model_filter))
+            _log(
+                f"  table {i}/{len(tables_spec)}: kind={kind} metric={metric} → OK "
+                f"({time.perf_counter() - t:.2f}s)"
+            )
         except Exception as exc:
-            _log(f"  table {i}/{len(tables_spec)}: kind={kind} metric={metric} → FAILED: {exc!r}")
+            _log(
+                f"  table {i}/{len(tables_spec)}: kind={kind} metric={metric} → "
+                f"FAILED: {exc!r}"
+            )
             raise
-    body = "\n\n".join(rendered)
-    if not body.endswith("\n"):
-        body += "\n"
 
+    envelope = _envelope(exp_yaml, store, model_filter, tables)
     out.parent.mkdir(parents=True, exist_ok=True)
-    mode = "a" if append else "w"
-    with out.open(mode, encoding="utf-8") as f:
-        if append and out.exists() and out.stat().st_size > 0:
-            f.write("\n")
-        f.write(body)
+    with out.open("w", encoding="utf-8") as f:
+        # Insertion order is meaningful (ordered mask/N/L axes), so sort_keys=False.
+        json.dump(envelope, f, indent=2, sort_keys=False)
+        f.write("\n")
     _log(
-        f"wrote {len(rendered)} table(s) to {out} "
-        f"({'append' if append else 'overwrite'}, {time.perf_counter() - t0:.2f}s total)"
+        f"wrote {len(tables)} table(s) to {out} "
+        f"({time.perf_counter() - t0:.2f}s total)"
     )
 
 
@@ -1056,8 +965,9 @@ def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="python -m ddi.aggregate",
         description=(
-            "Read report.tables from an experiment YAML and emit Markdown tables "
-            "(with provenance footer) into summary.md."
+            "Read report.tables from an experiment YAML and emit a JSON summary "
+            "(one object per table, wrapped in an envelope stamped with git SHA, "
+            "store hash, and model filter)."
         ),
     )
     p.add_argument("exp_yaml", type=Path, help="Path to experiment YAML.")
@@ -1065,7 +975,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--out",
         type=Path,
         required=True,
-        help="Path to write the composed summary.md.",
+        help="Path to write the composed summary.json.",
     )
     p.add_argument(
         "--store",
@@ -1074,16 +984,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Path to the JSONL store (default: results/runs.jsonl).",
     )
     p.add_argument(
-        "--append",
-        action="store_true",
-        help="Append to --out instead of overwriting.",
-    )
-    p.add_argument(
         "--model",
         type=str,
         default=None,
         help=(
-            "Filter rendered rows to a single model (HF repo id, matches what --model of "
+            "Filter collected rows to a single model (HF repo id, matches what --model of "
             "ddi.run wrote). Store is unchanged."
         ),
     )
@@ -1096,7 +1001,6 @@ def main(argv: list[str] | None = None) -> int:
         args.exp_yaml,
         args.out,
         store=args.store,
-        append=args.append,
         model_filter=args.model,
     )
     return 0

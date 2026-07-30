@@ -74,7 +74,7 @@ every run" bugs. They are set by the **operator**, not by the Makefile, so a
 misconfigured cache surfaces immediately rather than being papered over.
 
 The runner writes rows to `results/runs.jsonl` and emits
-`logs/quality_summary.md` from the YAML's `report:` block. Substitute any of the
+`logs/quality_summary.json` from the YAML's `report:` block. Substitute any of the
 five YAML names and the matching `MODEL=` — same command shape works for
 `exp-cache_correctness`, `exp-cache_throughput`, `exp-cache_restart` (all
 `MODEL=Qwen/Qwen2.5-7B-Instruct`), and `exp-quality` / `exp-performance` with
@@ -86,7 +86,7 @@ also scopes the aggregated summary to that model.
 Before pasting the summary into a GitHub issue, sanity-check the run:
 
 ```bash
-grep -E "FAIL|Traceback|OOM" logs/quality_summary.md logs/*.log 2>/dev/null | head
+grep -E "FAIL|Traceback|OOM" logs/quality_summary.json logs/*.log 2>/dev/null | head
 ```
 
 Zero hits = clean run. Otherwise, inspect the offending cell in
@@ -96,13 +96,13 @@ without flash-attn per #70; OOM per the one-per-GPU rule above) or real.
 ### 6. Publish the summary to the tracking issue
 
 ```bash
-make publish-summary SUMMARY=logs/quality_summary.md ISSUE=74
+make publish-summary SUMMARY=logs/quality_summary.json ISSUE=74
 ```
 
-This posts the rendered Markdown (tables + provenance footer per
-[#79](https://github.com/AlexKay28/ddi/issues/79)) as a comment on the tracking
-GitHub issue. The mapping from YAML to issue number is in
-[`README.md`](README.md#index).
+This posts the JSON summary as a comment on the tracking GitHub issue. The mapping
+from YAML to issue number is in [`README.md`](README.md#index). (The file renders
+as a raw JSON code block in the issue body — a friendlier rendering is a
+`publish-summary` concern to address later.)
 
 ---
 
