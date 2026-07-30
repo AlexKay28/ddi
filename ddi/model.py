@@ -7,7 +7,9 @@ that was the archaeology's central bug class.
 
 from __future__ import annotations
 
+import os
 import types
+from pathlib import Path
 
 import torch
 from transformers import (
@@ -23,6 +25,44 @@ _ORIGINAL_ATTR = "__ddi_original_update_causal_mask__"
 _HF_ATTN_IMPLEMENTATION = {"fa2": "flash_attention_2"}
 
 
+def _resolve_offline_snapshot(name: str) -> str:
+    """Resolve a HF repo id to a local snapshot dir when `HF_HUB_OFFLINE=1`.
+
+    Some patched transformers builds (observed on Yandex-provided containers) call
+    `model_info(<repo_id>)` from inside `AutoTokenizer.from_pretrained` regardless of
+    `HF_HUB_OFFLINE`, which fails with `OfflineModeIsEnabled` even when the model is
+    fully cached. The upstream code short-circuits that path when the argument is a
+    local directory (`_is_local` True), so we resolve the id → local snapshot dir up
+    front. Silently returns `name` unchanged if we can't find a cache — the downstream
+    error will be equivalent to the current behaviour.
+    """
+    if not os.environ.get("HF_HUB_OFFLINE"):
+        return name
+    if os.path.isdir(name):  # Already a local path — nothing to do.
+        return name
+
+    hf_home = os.environ.get("HF_HOME") or os.path.join(
+        os.path.expanduser("~"), ".cache", "huggingface"
+    )
+    cache_dir = Path(hf_home) / "hub" / f"models--{name.replace('/', '--')}"
+    snapshots = cache_dir / "snapshots"
+    if not snapshots.is_dir():
+        return name
+
+    # Prefer the ref that HF's own from_pretrained would resolve (`refs/main`) so the
+    # snapshot we pick matches what an online load would have picked.
+    ref = cache_dir / "refs" / "main"
+    if ref.is_file():
+        snap = snapshots / ref.read_text().strip()
+        if snap.is_dir():
+            return str(snap)
+    # Fall back to any snapshot dir (yt-fetch writes exactly one, named `yt-cache`).
+    for entry in sorted(snapshots.iterdir()):
+        if entry.is_dir():
+            return str(entry)
+    return name
+
+
 def load_model(
     name: str,
     dtype: torch.dtype = torch.bfloat16,
@@ -31,10 +71,11 @@ def load_model(
     hf_attn_implementation = _HF_ATTN_IMPLEMENTATION.get(
         attn_implementation, attn_implementation
     )
+    resolved = _resolve_offline_snapshot(name)
     model = AutoModelForCausalLM.from_pretrained(
-        name, torch_dtype=dtype, attn_implementation=hf_attn_implementation
+        resolved, torch_dtype=dtype, attn_implementation=hf_attn_implementation
     )
-    tokenizer = AutoTokenizer.from_pretrained(name)
+    tokenizer = AutoTokenizer.from_pretrained(resolved)
     patch_model(model)
     return model, tokenizer
 
