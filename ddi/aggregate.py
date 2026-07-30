@@ -823,7 +823,7 @@ def _render_throughput(spec: dict, store: Path, model_filter: str | None = None)
     return "\n".join(lines) + "\n" + render_provenance_footer(store, backing_rows)
 
 
-# ---- Correctness kind (parity with cache_correctness_c4 rows) ------------------------------
+# ---- Correctness kind (parity with cache_correctness rows) ---------------------------------
 #
 # Cell = ``max(max_abs_logit_diff)`` across the ``n_queries_per_doc`` queries at each
 # (model, mode, N, L). ``max`` (not mean) is the worst-case gate — a single bad query
