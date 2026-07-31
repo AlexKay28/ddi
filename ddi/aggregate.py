@@ -797,6 +797,146 @@ def _collect_correctness(spec: dict, store: Path, model_filter: str | None = Non
     }
 
 
+# ---- Finetune / perplexity kinds (parity with ddi/finetune.py rows, #120) ------------------
+#
+# These are intentionally thin — dump matching store rows keyed by (model, step) or
+# (model, epoch). We don't have a paper-shape for these yet; the goal is only that
+# `make exp-finetune` completes end-to-end and surfaces the training trajectory + pplx
+# trajectory in the summary JSON for eyeballing. Fancier renderers (loss curves,
+# pplx-vs-teacher deltas) are #120 follow-ups.
+
+_FINETUNE_PREFIX = "finetune:"
+
+
+def _finetune_parse_run_id(run_id: str) -> dict | None:
+    """Parse ``finetune:{model}:ddi_qf:seed=S:{sha}:step=N`` or ``:epoch=E``.
+
+    Returns ``{"model", "seed", "step" | "epoch"}`` or ``None`` if the shape doesn't
+    match. Malformed rows are dropped silently.
+    """
+    parts = run_id.split(":")
+    if len(parts) < 6 or (parts[0] + ":") != _FINETUNE_PREFIX:
+        return None
+    model, _tag, seed_field, _sha = parts[1], parts[2], parts[3], parts[4]
+    if not seed_field.startswith("seed="):
+        return None
+    try:
+        seed = int(seed_field[len("seed="):])
+    except ValueError:
+        return None
+    tail = parts[5]
+    if tail.startswith("step="):
+        try:
+            return {"model": model, "seed": seed, "step": int(tail[len("step="):])}
+        except ValueError:
+            return None
+    if tail.startswith("epoch="):
+        try:
+            return {"model": model, "seed": seed, "epoch": int(tail[len("epoch="):])}
+        except ValueError:
+            return None
+    return None
+
+
+def _collect_finetune_loss(spec: dict, store: Path, model_filter: str | None = None) -> dict:
+    """Dump per-step training rows (kl_loss + lr) keyed by (model, step)."""
+    all_rows = load_rows(store, model_filter)
+    if not any(str(r.get("run_id", "")).startswith(_FINETUNE_PREFIX) for r in all_rows):
+        raise ValueError(
+            f"finetune_loss: no finetune rows in store {store}. "
+            "Run the finetune YAML first."
+        )
+    # (model, step) -> {metric: value}
+    per_step: dict[tuple[str, int], dict[str, float]] = {}
+    backing_rows: list[dict] = []
+    seeds: set[int] = set()
+    for row in all_rows:
+        parsed = _finetune_parse_run_id(str(row.get("run_id", "")))
+        if parsed is None or "step" not in parsed:
+            continue
+        metric = row.get("metric")
+        if metric not in ("kl_loss", "lr"):
+            continue
+        try:
+            value = float(row["value"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        key = (parsed["model"], parsed["step"])
+        per_step.setdefault(key, {})[metric] = value
+        seeds.add(parsed["seed"])
+        backing_rows.append(row)
+
+    # {model: {step: {kl_loss, lr}}}
+    data: dict[str, dict[str, dict[str, float]]] = {}
+    for (model, step), metrics in per_step.items():
+        data.setdefault(model, {})[str(step)] = metrics
+    # Sort step keys numerically within each model.
+    for model in data:
+        data[model] = {
+            str(k): data[model][str(k)] for k in sorted(int(s) for s in data[model])
+        }
+
+    return {
+        "kind": "finetune_loss",
+        "backing_rows": len(backing_rows),
+        "distinct_run_ids": len({r.get("run_id") for r in backing_rows}),
+        "seeds": sorted(seeds),
+        "models": sorted(data),
+        "data": data,
+    }
+
+
+def _collect_perplexity(spec: dict, store: Path, model_filter: str | None = None) -> dict:
+    """Dump per-epoch perplexity rows keyed by (model, epoch).
+
+    Emits every ``perplexity_*`` metric name unchanged (pre/post student, teacher)
+    so a reader can compare trajectories without hunting through the store.
+    """
+    all_rows = load_rows(store, model_filter)
+    if not any(str(r.get("run_id", "")).startswith(_FINETUNE_PREFIX) for r in all_rows):
+        raise ValueError(
+            f"perplexity: no finetune rows in store {store}. "
+            "Run the finetune YAML first."
+        )
+    # (model, epoch) -> {metric: value}
+    per_epoch: dict[tuple[str, int], dict[str, float]] = {}
+    backing_rows: list[dict] = []
+    seeds: set[int] = set()
+    for row in all_rows:
+        parsed = _finetune_parse_run_id(str(row.get("run_id", "")))
+        if parsed is None or "epoch" not in parsed:
+            continue
+        metric = row.get("metric")
+        if not isinstance(metric, str) or not metric.startswith("perplexity_"):
+            continue
+        try:
+            value = float(row["value"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        key = (parsed["model"], parsed["epoch"])
+        per_epoch.setdefault(key, {})[metric] = value
+        seeds.add(parsed["seed"])
+        backing_rows.append(row)
+
+    # {model: {epoch: {perplexity_*: value}}}
+    data: dict[str, dict[str, dict[str, float]]] = {}
+    for (model, epoch), metrics in per_epoch.items():
+        data.setdefault(model, {})[str(epoch)] = metrics
+    for model in data:
+        data[model] = {
+            str(k): data[model][str(k)] for k in sorted(int(e) for e in data[model])
+        }
+
+    return {
+        "kind": "perplexity",
+        "backing_rows": len(backing_rows),
+        "distinct_run_ids": len({r.get("run_id") for r in backing_rows}),
+        "seeds": sorted(seeds),
+        "models": sorted(data),
+        "data": data,
+    }
+
+
 # ---- Dispatcher + public API ---------------------------------------------------------------
 
 _COLLECTORS: dict[str, Callable[[dict, Path, str | None], dict]] = {
@@ -805,6 +945,8 @@ _COLLECTORS: dict[str, Callable[[dict, Path, str | None], dict]] = {
     "throughput": _collect_throughput,
     "restart_quality": _collect_restart_quality,
     "correctness": _collect_correctness,
+    "finetune_loss": _collect_finetune_loss,
+    "perplexity": _collect_perplexity,
 }
 
 

@@ -367,8 +367,12 @@ def run_quality(cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path) 
     if not isinstance(metrics, list) or not metrics:
         raise ValueError("quality: 'metrics' must be a non-empty list")
 
-    _log(f"quality: loading model {model_name!r}")
-    model, tokenizer = inference.load(model_name)
+    checkpoint = cfg.get("checkpoint")
+    if checkpoint is not None:
+        _log(f"quality: loading model {model_name!r} from checkpoint {checkpoint!r}")
+    else:
+        _log(f"quality: loading model {model_name!r}")
+    model, tokenizer = inference.load(model_name, checkpoint_dir=checkpoint)
     model.eval()
     if torch.cuda.is_available():
         model = model.to("cuda")
@@ -449,6 +453,7 @@ def _timing_cell(
     seed: int,
     cfg_hash: str,
     store_path: Path,
+    checkpoint: str | None = None,
 ) -> None:
     """One (mask, N, L, backend) grid cell.  Fresh model load per backend (matches phase3)."""
     if backend == "fa2" and not torch.cuda.is_available():
@@ -458,7 +463,7 @@ def _timing_cell(
         )
 
     # Fresh load per backend — HF picks attn kernel at from_pretrained time.
-    model, _tokenizer = inference.load(model_name, backend=backend)
+    model, _tokenizer = inference.load(model_name, backend=backend, checkpoint_dir=checkpoint)
     model.eval()
     if torch.cuda.is_available():
         model = model.to("cuda")
@@ -529,6 +534,7 @@ def run_timing(cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path) -
     warmup = int(cfg.get("warmup", 3))
     n_new_tokens = int(cfg.get("n_new_tokens", 16))
     store_path = _store_path_for(cfg)
+    checkpoint = cfg.get("checkpoint")
 
     for lst_name, lst in (("Ns", Ns), ("Ls", Ls), ("backends", backends), ("masks", masks)):
         if not isinstance(lst, list) or not lst:
@@ -557,6 +563,7 @@ def run_timing(cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path) -
                             seed=seed,
                             cfg_hash=cfg_hash,
                             store_path=store_path,
+                            checkpoint=checkpoint,
                         )
                         tracker.ok(t)
                     except Exception as exc:
@@ -615,7 +622,8 @@ def _cache_correctness(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path
             "cache/correctness: 'full_causal' must be in modes (baseline reference)"
         )
 
-    model, tokenizer = inference.load(model_name)
+    checkpoint = cfg.get("checkpoint")
+    model, tokenizer = inference.load(model_name, checkpoint_dir=checkpoint)
     model.eval()
     if torch.cuda.is_available():
         model = model.to("cuda")
@@ -1012,7 +1020,8 @@ def _cache_throughput(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path:
             f"cache/throughput: warmup_requests={warmup_requests} must be < n_requests={n_requests}"
         )
 
-    model, tokenizer = inference.load(model_name)
+    checkpoint = cfg.get("checkpoint")
+    model, tokenizer = inference.load(model_name, checkpoint_dir=checkpoint)
     model.eval()
     if torch.cuda.is_available():
         model = model.to("cuda")
@@ -1133,7 +1142,8 @@ def _cache_restart_quality(
     max_records = cfg.get("max_records")
     max_new_tokens = int(cfg.get("max_new_tokens", 64))
 
-    model, tokenizer = inference.load(model_name)
+    checkpoint = cfg.get("checkpoint")
+    model, tokenizer = inference.load(model_name, checkpoint_dir=checkpoint)
     model.eval()
     if torch.cuda.is_available():
         model = model.to("cuda")
@@ -1285,6 +1295,73 @@ def run_cache(cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path) ->
 
 
 # ---------------------------------------------------------------------------
+# kind: finetune — self-distillation trainer for ddi_qf (issue #120).
+# ---------------------------------------------------------------------------
+
+
+def run_finetune(cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path) -> None:
+    """Dispatch a `kind: finetune` YAML: teacher=full, student=ddi_qf, KL loss.
+
+    Wraps `ddi.finetune.finetune` in a `_CellTracker` so the progress log shape
+    matches every other kind.  The finetuner emits its own per-step / per-epoch
+    rows; this dispatcher owns only the "cell 1/1" boundary + provenance stamp.
+    """
+    from ddi.finetune import finetune as _do_finetune
+
+    model_name = _require(cfg, "model", "finetune")
+    datasets = _require(cfg, "datasets", "finetune")
+    output_dir = Path(_require(cfg, "output_dir", "finetune"))
+
+    if not isinstance(datasets, list) or not datasets:
+        raise ValueError("finetune: 'datasets' must be a non-empty list")
+
+    max_records = cfg.get("max_records")
+    held_out_frac = float(cfg.get("held_out_frac", 0.05))
+    epochs = int(cfg.get("epochs", 1))
+    lr = float(cfg.get("lr", 1e-5))
+    weight_decay = float(cfg.get("weight_decay", 0.0))
+    kl_temperature = float(cfg.get("kl_temperature", 1.0))
+    grad_accum_steps = int(cfg.get("grad_accum_steps", 1))
+    warmup_steps = int(cfg.get("warmup_steps", 100))
+    log_every = int(cfg.get("log_every", 50))
+    store_path = _store_path_for(cfg)
+
+    prov = capture(
+        config_hash=cfg_hash,
+        seed=seed,
+        model_revision=model_name,
+        dataset_revision="+".join(datasets),
+    )
+
+    tracker = _CellTracker("finetune", 1)
+    cell_desc = f"model={model_name} datasets={datasets} out={output_dir}"
+    t = tracker.start(cell_desc)
+    try:
+        _do_finetune(
+            model_name,
+            datasets,
+            output_dir,
+            seed=seed,
+            max_records=max_records,
+            held_out_frac=held_out_frac,
+            epochs=epochs,
+            lr=lr,
+            weight_decay=weight_decay,
+            kl_temperature=kl_temperature,
+            grad_accum_steps=grad_accum_steps,
+            warmup_steps=warmup_steps,
+            log_every=log_every,
+            provenance=prov,
+            store_path=store_path,
+        )
+        tracker.ok(t)
+    except Exception as exc:  # per-cell isolation matches every other dispatcher
+        _log_cell_failure(f"finetune({cell_desc})", exc)
+        tracker.fail(t)
+    tracker.summary()
+
+
+# ---------------------------------------------------------------------------
 # Dispatch table + CLI entry.
 # ---------------------------------------------------------------------------
 
@@ -1293,6 +1370,7 @@ _DISPATCH = {
     "quality": run_quality,
     "timing": run_timing,
     "cache": run_cache,
+    "finetune": run_finetune,
 }
 
 

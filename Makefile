@@ -1,6 +1,6 @@
 # DDI reproducibility Makefile — see experiments/SERVERLESS.md for the full flow.
 
-.PHONY: exp-% hf-fetch yt-fetch yt-fetch-records publish-summary test list-experiments gpu-check help
+.PHONY: exp-% finetune hf-fetch yt-fetch yt-fetch-records publish-summary test list-experiments gpu-check help
 
 YT_PROXY ?= watt
 YT_MODELS_ROOT ?= //home/gena/alexkay28/tickets/ALIGNMENT-2445/models
@@ -20,6 +20,8 @@ PY ?= python3
 help:
 	@echo "usage:"
 	@echo "  make exp-<name> MODEL=<hf-id> [BACKENDS=sdpa,fa2]   # run experiments/<name>.yaml"
+	@echo "  make finetune MODEL=<hf-id>        # self-distillation train (issue #120) — writes"
+	@echo "                                     # results/checkpoints/... + finetune_summary.json"
 	@echo "  make hf-fetch MODEL=<hf-id>        # cache a HF model into HF_HOME (from HF Hub)"
 	@echo "  make yt-fetch MODEL=<hf-id>        # cache a HF model into HF_HOME (from YT, no HF access needed)"
 	@echo "  make yt-fetch-records              # restore results/splits/*_records.jsonl from YT (dataset cache)"
@@ -38,6 +40,13 @@ help:
 exp-%:
 	$(PY) -m ddi.run experiments/$*.yaml $(if $(MODEL),--model $(MODEL)) $(if $(BACKENDS),--backends $(BACKENDS))
 	$(PY) -m ddi.aggregate experiments/$*.yaml --out logs/$*_summary.json $(if $(MODEL),--model $(MODEL))
+
+# Self-distillation trainer (issue #120): teacher = base + full mask, student = base + ddi_qf.
+# Wraps `exp-finetune` so it's visible in `make help` — the actual work still goes through the
+# `exp-%` pattern rule (same YAML, same summary output, same MODEL= plumbing).
+finetune:
+	@test -n "$(MODEL)" || (echo "usage: make finetune MODEL=<hf-id>" && exit 2)
+	$(MAKE) exp-finetune MODEL=$(MODEL)
 
 # Fetch a HF model once from the HF Hub (respects HF_HOME).
 hf-fetch:

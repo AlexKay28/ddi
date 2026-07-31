@@ -1,0 +1,29 @@
+# Issue #120 — self-distillation fine-tuner.
+#
+# Teacher = base model + `full` causal mask (frozen).
+# Student = base model + `ddi_qf` mask (same weights, only mask differs).
+# Loss    = temperature-scaled KL divergence on answer-position logits.
+#
+# Goal: does training under ddi_qf close the C1 quality gap? First-result
+# pipeline; renderers / multi-seed / LoRA are follow-ups (see #120).
+#
+# Schema: experiments/README.md + issue #81 YAML format section.
+
+kind: finetune
+model: Qwen/Qwen2.5-7B-Instruct
+seed: 0
+datasets: [hotpot_qa, musique, kilt_nq, synthetic_qa]
+output_dir: results/checkpoints/Qwen__Qwen2.5-7B-Instruct__ddi_qf__seed0
+max_records: null        # null = full train split; set to e.g. 500 for a smoke test
+held_out_frac: 0.05
+epochs: 1
+lr: 1.0e-5
+kl_temperature: 1.0
+grad_accum_steps: 4
+warmup_steps: 100        # linear LR warmup then constant. Drop to ~20 for a smoke run.
+log_every: 50
+
+report:
+  tables:
+    - kind: finetune_loss    # renderer TBD (see #120 follow-ups)
+    - kind: perplexity       # renderer TBD (see #120 follow-ups)

@@ -424,6 +424,92 @@ def test_cache_correctness_dispatch_writes_expected_rows(tmp_path: Path) -> None
     assert len(rows) == expected, f"expected {expected} rows, got {len(rows)}"
 
 
+def test_finetune_dispatch_writes_expected_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """kind: finetune dispatcher forwards YAML args to ddi.finetune.finetune and
+    the wrapping cell tracker emits one 'cell 1/1' line + a summary line — matches
+    the dispatch shape of every other kind.
+
+    We monkey-patch `ddi.finetune.finetune` to a recorder so this test stays
+    pure-unit (no model load) while still exercising the full ``run.py``
+    dispatch path (YAML parse → provenance capture → cell tracker).
+    """
+    from ddi import finetune as ddi_finetune
+
+    seen: dict[str, object] = {}
+
+    def _fake_finetune(model_name, datasets, output_dir, **kwargs):
+        seen["model_name"] = model_name
+        seen["datasets"] = datasets
+        seen["output_dir"] = output_dir
+        seen["kwargs"] = kwargs
+        # Emit one row so the test can also check the store-path plumbing.
+        from ddi.store import append
+
+        append(
+            "finetune:test:ddi_qf:seed=0:xx:step=1",
+            "kl_loss",
+            1.23,
+            kwargs["provenance"],
+            store=kwargs["store_path"],
+        )
+
+    monkeypatch.setattr(ddi_finetune, "finetune", _fake_finetune)
+
+    store = tmp_path / "runs.jsonl"
+    output_dir = tmp_path / "ckpt"
+    body = (
+        "kind: finetune\nseed: 0\nmodel: irrelevant\n"
+        "datasets: [dsA, dsB]\n"
+        f"output_dir: {output_dir}\n"
+        "max_records: 4\nheld_out_frac: 0.25\nepochs: 2\n"
+        "lr: 5.0e-5\nkl_temperature: 2.0\ngrad_accum_steps: 2\n"
+        "warmup_steps: 7\nlog_every: 10\n"
+        f"output_store: {store}\n"
+    )
+    p = _write_yaml(tmp_path, body)
+    ddi_run.run(p)
+
+    assert seen["model_name"] == "irrelevant"
+    assert seen["datasets"] == ["dsA", "dsB"]
+    assert seen["output_dir"] == output_dir
+    kw = seen["kwargs"]
+    assert kw["max_records"] == 4
+    assert kw["held_out_frac"] == 0.25
+    assert kw["epochs"] == 2
+    assert kw["lr"] == 5e-5
+    assert kw["kl_temperature"] == 2.0
+    assert kw["grad_accum_steps"] == 2
+    assert kw["warmup_steps"] == 7
+    assert kw["log_every"] == 10
+    assert kw["store_path"] == store
+    # Provenance is stamped by the dispatcher, not the caller.
+    assert kw["provenance"].seed == 0
+    assert kw["provenance"].model_revision == "irrelevant"
+
+    # Store row plumbing: the fake finetuner's append went through.
+    rows = _read_rows(store)
+    assert rows and rows[0]["metric"] == "kl_loss" and rows[0]["value"] == 1.23
+
+
+def test_finetune_dispatch_missing_datasets_raises(tmp_path: Path) -> None:
+    body = (
+        "kind: finetune\nseed: 0\nmodel: irrelevant\n"
+        f"output_dir: {tmp_path / 'ckpt'}\n"
+    )
+    p = _write_yaml(tmp_path, body)
+    with pytest.raises(ValueError, match="missing required key: 'datasets'"):
+        ddi_run.run(p)
+
+
+def test_finetune_dispatch_missing_output_dir_raises(tmp_path: Path) -> None:
+    body = "kind: finetune\nseed: 0\nmodel: irrelevant\ndatasets: [ds]\n"
+    p = _write_yaml(tmp_path, body)
+    with pytest.raises(ValueError, match="missing required key: 'output_dir'"):
+        ddi_run.run(p)
+
+
 @_INTEG
 def test_cache_restart_quality_dispatch_writes_expected_rows(tmp_path: Path) -> None:
     """End-to-end: kind: cache task: restart_quality → phase4_restart rows for each dataset x layout."""

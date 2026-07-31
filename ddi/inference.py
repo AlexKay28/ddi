@@ -56,16 +56,24 @@ def load(
     model_id: str,
     dtype: str = "bf16",
     backend: str = "sdpa",
+    checkpoint_dir: str | None = None,
 ) -> tuple[PreTrainedModel, PreTrainedTokenizerBase]:
     """Load an HF causal-LM + tokenizer with the chosen attention backend.
 
     `backend` maps directly to HF's `attn_implementation` (`sdpa`, `flash_attention_2`,
     `eager`). Delegates to `ddi.model.load_model`, which also installs the DDI mask
     patch so 4D float masks pass through `_update_causal_mask` unchanged.
+
+    If ``checkpoint_dir`` is set, weights are loaded from that local directory
+    (an HF-layout snapshot written by e.g. `ddi.finetune`) rather than the
+    ``model_id`` hub repo. The `model_id` is still surfaced for provenance so a
+    downstream reader knows which base architecture the checkpoint was trained
+    from.
     """
     torch_dtype = _resolve_dtype(dtype)
     attn_impl = "flash_attention_2" if backend == "fa2" else backend
-    return load_model(model_id, dtype=torch_dtype, attn_implementation=attn_impl)
+    load_name = checkpoint_dir if checkpoint_dir is not None else model_id
+    return load_model(load_name, dtype=torch_dtype, attn_implementation=attn_impl)
 
 
 def encode(
