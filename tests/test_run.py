@@ -464,7 +464,8 @@ def test_finetune_dispatch_writes_expected_rows(
         "datasets: [dsA, dsB]\n"
         f"output_dir: {output_dir}\n"
         "max_records: 4\nheld_out_frac: 0.25\nepochs: 2\n"
-        "lr: 5.0e-5\nkl_temperature: 2.0\ngrad_accum_steps: 2\nlog_every: 10\n"
+        "lr: 5.0e-5\nkl_temperature: 2.0\ngrad_accum_steps: 2\n"
+        "warmup_steps: 7\nlog_every: 10\n"
         f"output_store: {store}\n"
     )
     p = _write_yaml(tmp_path, body)
@@ -480,6 +481,7 @@ def test_finetune_dispatch_writes_expected_rows(
     assert kw["lr"] == 5e-5
     assert kw["kl_temperature"] == 2.0
     assert kw["grad_accum_steps"] == 2
+    assert kw["warmup_steps"] == 7
     assert kw["log_every"] == 10
     assert kw["store_path"] == store
     # Provenance is stamped by the dispatcher, not the caller.

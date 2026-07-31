@@ -1322,6 +1322,7 @@ def run_finetune(cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path)
     weight_decay = float(cfg.get("weight_decay", 0.0))
     kl_temperature = float(cfg.get("kl_temperature", 1.0))
     grad_accum_steps = int(cfg.get("grad_accum_steps", 1))
+    warmup_steps = int(cfg.get("warmup_steps", 100))
     log_every = int(cfg.get("log_every", 50))
     store_path = _store_path_for(cfg)
 
@@ -1348,6 +1349,7 @@ def run_finetune(cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path)
             weight_decay=weight_decay,
             kl_temperature=kl_temperature,
             grad_accum_steps=grad_accum_steps,
+            warmup_steps=warmup_steps,
             log_every=log_every,
             provenance=prov,
             store_path=store_path,

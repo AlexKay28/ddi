@@ -160,6 +160,24 @@ def _linear_warmup_lr(step: int, warmup_steps: int, base_lr: float) -> float:
     return base_lr * (step + 1) / warmup_steps
 
 
+def _flush_optimizer_step(
+    optimizer: torch.optim.Optimizer,
+    warmup_steps: int,
+    base_lr: float,
+    step_before: int,
+) -> float:
+    """Compute LR for the current step, apply to every param group, step, zero grads.
+
+    Returned LR is what was applied on THIS step. Callers use it for logging.
+    """
+    current_lr = _linear_warmup_lr(step_before, warmup_steps, base_lr)
+    for group in optimizer.param_groups:
+        group["lr"] = current_lr
+    optimizer.step()
+    optimizer.zero_grad(set_to_none=True)
+    return current_lr
+
+
 def finetune(
     model_name: str,
     datasets: list[str],
@@ -173,6 +191,7 @@ def finetune(
     weight_decay: float = 0.0,
     kl_temperature: float = 1.0,
     grad_accum_steps: int = 1,
+    warmup_steps: int = 100,
     log_every: int = 50,
     provenance: Provenance,
     store_path: Path,
@@ -188,6 +207,8 @@ def finetune(
         raise ValueError(f"epochs must be >= 1, got {epochs}")
     if kl_temperature <= 0:
         raise ValueError(f"kl_temperature must be > 0, got {kl_temperature}")
+    if warmup_steps < 0:
+        raise ValueError(f"warmup_steps must be >= 0, got {warmup_steps}")
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -224,7 +245,6 @@ def finetune(
         lr=lr,
         weight_decay=weight_decay,
     )
-    warmup_steps = 100
     run_prefix = f"finetune:{model_name}:ddi_qf:seed={seed}:{provenance.git_sha[:8]}"
 
     # ---- Baseline perplexities (epoch 0, before any update) ----
@@ -253,12 +273,21 @@ def finetune(
 
     # ---- Training loop ----
     global_step = 0
+    # Count backward() calls, not enumerate index — skipped records (empty answer,
+    # encode failure) must NOT count toward the grad-accum boundary, otherwise a
+    # run of consecutive skips can fire optimizer.step() with stale gradients.
+    accum_since_step = 0
     optimizer.zero_grad(set_to_none=True)
 
     for epoch in range(epochs):
         _log(f"epoch {epoch + 1}/{epochs}: {len(train_records)} records")
         for rec_i, record in enumerate(train_records):
+            is_last_record = (rec_i + 1) == len(train_records)
             if not record["possible_answers"]:
+                if is_last_record and accum_since_step > 0:
+                    _flush_optimizer_step(optimizer, warmup_steps, lr, global_step)
+                    global_step += 1
+                    accum_since_step = 0
                 continue
             try:
                 full_ids, doc_lengths, query_len, answer_len = _encode_record(
@@ -266,8 +295,16 @@ def finetune(
                 )
             except Exception as exc:
                 _log(f"skip record id={record.get('id', '?')}: encode failed: {exc!r}")
+                if is_last_record and accum_since_step > 0:
+                    _flush_optimizer_step(optimizer, warmup_steps, lr, global_step)
+                    global_step += 1
+                    accum_since_step = 0
                 continue
             if answer_len == 0:
+                if is_last_record and accum_since_step > 0:
+                    _flush_optimizer_step(optimizer, warmup_steps, lr, global_step)
+                    global_step += 1
+                    accum_since_step = 0
                 continue
 
             full_ids = full_ids.to(device)
@@ -319,14 +356,14 @@ def finetune(
             ) * (T_temp ** 2)
 
             (loss / grad_accum_steps).backward()
+            accum_since_step += 1
 
-            if (rec_i + 1) % grad_accum_steps == 0 or (rec_i + 1) == len(train_records):
-                current_lr = _linear_warmup_lr(global_step, warmup_steps, lr)
-                for group in optimizer.param_groups:
-                    group["lr"] = current_lr
-                optimizer.step()
-                optimizer.zero_grad(set_to_none=True)
+            if accum_since_step >= grad_accum_steps or is_last_record:
+                current_lr = _flush_optimizer_step(
+                    optimizer, warmup_steps, lr, global_step
+                )
                 global_step += 1
+                accum_since_step = 0
 
                 if global_step % log_every == 0:
                     loss_val = float(loss.detach().item())
