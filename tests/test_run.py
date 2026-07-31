@@ -60,8 +60,8 @@ def test_run_unknown_kind_raises(tmp_path: Path) -> None:
 
 
 def test_run_missing_seed_raises(tmp_path: Path) -> None:
-    # `kind` is valid but no seed is set anywhere.
-    p = _write_yaml(tmp_path, "kind: quality\n")
+    # `kind` and `model` are valid but no seed is set anywhere.
+    p = _write_yaml(tmp_path, "kind: quality\nmodel: irrelevant\n")
     with pytest.raises(ValueError, match="'seed' must be set"):
         ddi_run.run(p)
 
@@ -74,7 +74,7 @@ def test_run_seed_override_wins_over_yaml(tmp_path: Path, monkeypatch: pytest.Mo
         seen["seed"] = seed
 
     monkeypatch.setitem(ddi_run._DISPATCH, "quality", _fake_quality)
-    p = _write_yaml(tmp_path, "kind: quality\nseed: 5\n")
+    p = _write_yaml(tmp_path, "kind: quality\nmodel: irrelevant\nseed: 5\n")
     ddi_run.run(p, seed_override=99)
     assert seen["seed"] == 99
 
@@ -155,7 +155,7 @@ def test_sparsity_matches_target() -> None:
 def test_quality_requires_model(tmp_path: Path) -> None:
     body = "kind: quality\nseed: 0\ndatasets: [nq]\nmasks: [full]\nmetrics: [f1]\n"
     p = _write_yaml(tmp_path, body)
-    with pytest.raises(ValueError, match="missing required key: 'model'"):
+    with pytest.raises(ValueError, match="'model' must be set"):
         ddi_run.run(p)
 
 

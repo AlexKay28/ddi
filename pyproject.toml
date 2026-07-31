@@ -12,6 +12,7 @@ dependencies = [
     "datasets>=2.14",
     "numpy",
     "pyyaml",
+    "bitsandbytes>=0.50.0",
 ]
 
 [project.optional-dependencies]

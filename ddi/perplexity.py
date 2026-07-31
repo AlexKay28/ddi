@@ -98,7 +98,7 @@ def compute_perplexity(
             ).to(model.device)
 
             allow = build_mask(
-                doc_lengths or [full_ids.shape[-1]],
+                doc_lengths,
                 query_len=query_len,
                 answer_len=answer_len,
                 variant=variant_here,  # type: ignore[arg-type]

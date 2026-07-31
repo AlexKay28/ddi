@@ -1210,7 +1210,7 @@ def _cache_restart_quality(
                         ).to(model.device)
 
                         allow = build_mask(
-                            doc_lengths or [full_ids.shape[-1]],
+                            doc_lengths,
                             query_len=query_len,
                             answer_len=answer_len,
                             variant=variant_here,  # type: ignore[arg-type]
@@ -1324,6 +1324,9 @@ def run_finetune(cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path)
     grad_accum_steps = int(cfg.get("grad_accum_steps", 1))
     warmup_steps = int(cfg.get("warmup_steps", 100))
     log_every = int(cfg.get("log_every", 50))
+    max_steps = cfg.get("max_steps")
+    if max_steps is not None:
+        max_steps = int(max_steps)
     store_path = _store_path_for(cfg)
 
     prov = capture(
@@ -1351,6 +1354,7 @@ def run_finetune(cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path)
             grad_accum_steps=grad_accum_steps,
             warmup_steps=warmup_steps,
             log_every=log_every,
+            max_steps=max_steps,
             provenance=prov,
             store_path=store_path,
         )

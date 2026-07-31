@@ -31,6 +31,7 @@ import sys
 from itertools import zip_longest
 from pathlib import Path
 
+import bitsandbytes as bnb
 import torch
 
 from ddi import inference
@@ -129,7 +130,7 @@ def _build_additive(
 ) -> torch.Tensor:
     """4D additive mask for a single record — matches _quality_cell's shape."""
     allow = build_mask(
-        doc_lengths or [query_len + answer_len],
+        doc_lengths,
         query_len=query_len,
         answer_len=answer_len,
         variant=variant,  # type: ignore[arg-type]
@@ -193,11 +194,17 @@ def finetune(
     grad_accum_steps: int = 1,
     warmup_steps: int = 100,
     log_every: int = 50,
+    max_steps: int | None = None,
     provenance: Provenance,
     store_path: Path,
 ) -> None:
     """Fine-tune ``model_name`` under ``ddi_qf`` via self-distillation from the same
     model under ``full``. See module docstring for the store-row schema.
+
+    ``max_steps``, if set, stops training after that many optimizer steps
+    (across all epochs) — useful for a quick end-to-end run without waiting on
+    the full dataset. The current epoch's post-training perplexity is still
+    computed on whatever partial progress was made.
     """
     if not datasets:
         raise ValueError("finetune: `datasets` must be non-empty")
@@ -209,6 +216,8 @@ def finetune(
         raise ValueError(f"kl_temperature must be > 0, got {kl_temperature}")
     if warmup_steps < 0:
         raise ValueError(f"warmup_steps must be >= 0, got {warmup_steps}")
+    if max_steps is not None and max_steps < 1:
+        raise ValueError(f"max_steps must be >= 1, got {max_steps}")
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -240,11 +249,15 @@ def finetune(
     if not train_records:
         raise ValueError("finetune: no training records after holdout split")
 
-    optimizer = torch.optim.AdamW(
-        [p for p in student.parameters() if p.requires_grad],
-        lr=lr,
-        weight_decay=weight_decay,
-    )
+    trainable_params = [p for p in student.parameters() if p.requires_grad]
+    # 8-bit optimizer states on CUDA: full AdamW states in bf16 already push a 7B
+    # teacher+student pair close to an 80GB GPU's limit (issue #120 follow-up).
+    # bitsandbytes needs CUDA tensors, so CPU-only runs (e.g. unit tests) keep
+    # plain torch.optim.AdamW.
+    if student.device.type == "cuda":
+        optimizer = bnb.optim.AdamW8bit(trainable_params, lr=lr, weight_decay=weight_decay)
+    else:
+        optimizer = torch.optim.AdamW(trainable_params, lr=lr, weight_decay=weight_decay)
     run_prefix = f"finetune:{model_name}:ddi_qf:seed={seed}:{provenance.git_sha[:8]}"
 
     # ---- Baseline perplexities (epoch 0, before any update) ----
@@ -279,6 +292,7 @@ def finetune(
     accum_since_step = 0
     optimizer.zero_grad(set_to_none=True)
 
+    stop_early = False
     for epoch in range(epochs):
         _log(f"epoch {epoch + 1}/{epochs}: {len(train_records)} records")
         for rec_i, record in enumerate(train_records):
@@ -288,6 +302,8 @@ def finetune(
                     _flush_optimizer_step(optimizer, warmup_steps, lr, global_step)
                     global_step += 1
                     accum_since_step = 0
+                    if max_steps is not None and global_step >= max_steps:
+                        stop_early = True
                 continue
             try:
                 full_ids, doc_lengths, query_len, answer_len = _encode_record(
@@ -299,12 +315,16 @@ def finetune(
                     _flush_optimizer_step(optimizer, warmup_steps, lr, global_step)
                     global_step += 1
                     accum_since_step = 0
+                    if max_steps is not None and global_step >= max_steps:
+                        stop_early = True
                 continue
             if answer_len == 0:
                 if is_last_record and accum_since_step > 0:
                     _flush_optimizer_step(optimizer, warmup_steps, lr, global_step)
                     global_step += 1
                     accum_since_step = 0
+                    if max_steps is not None and global_step >= max_steps:
+                        stop_early = True
                 continue
 
             full_ids = full_ids.to(device)
@@ -375,6 +395,11 @@ def finetune(
                         f"(epoch {epoch + 1}, rec {rec_i + 1}/{len(train_records)})"
                     )
 
+                if max_steps is not None and global_step >= max_steps:
+                    _log(f"max_steps={max_steps} reached; stopping early")
+                    stop_early = True
+                    break
+
         # ---- End-of-epoch perplexities ----
         if test_records:
             from ddi.perplexity import compute_perplexity
@@ -389,6 +414,9 @@ def finetune(
             append(epoch_rid, "perplexity_student_ddi_qf_post", pplx_post,
                    provenance, store=store_path)
             _log(f"epoch {epoch + 1} post: student_ddi_qf={pplx_post:.3f}")
+
+        if stop_early:
+            break
 
     # ---- Save the trained student as an HF-loadable directory ----
     _log(f"saving checkpoint -> {output_dir}")
