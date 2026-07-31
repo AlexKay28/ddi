@@ -6,6 +6,18 @@ YT_PROXY ?= watt
 YT_MODELS_ROOT ?= //home/gena/alexkay28/tickets/ALIGNMENT-2445/models
 YT_RECORDS_ROOT ?= //home/gena/alexkay28/tickets/ALIGNMENT-2445/data/records_cache
 
+# `finetune` defaults, baked in after a live OOM + offline-fetch run (issue #120):
+#   FT_OFFLINE          this repo has no direct HF Hub access outside a networked
+#                        dev box; set 0 to allow live Hub fetches instead.
+#   FT_GRAD_CHECKPOINT   a 7B teacher+student pair sits right at an 80GB GPU's
+#                        limit without it (see ddi/finetune.py's AdamW8bit comment);
+#                        set 0 to trade the memory headroom back for speed.
+#   FT_CUDA_ALLOC_CONF   works around allocator fragmentation on the same tight-fit
+#                        GPUs; rarely needs overriding.
+FT_OFFLINE ?= 1
+FT_GRAD_CHECKPOINT ?= 1
+FT_CUDA_ALLOC_CONF ?= expandable_segments:True
+
 # Python interpreter used by every target below except `test`. Default is the
 # system `python3` — matches the offline serverless container's setup where
 # torch/transformers/numpy are pre-installed at the OS level. Override on a
@@ -22,6 +34,8 @@ help:
 	@echo "  make exp-<name> MODEL=<hf-id> [BACKENDS=sdpa,fa2]   # run experiments/<name>.yaml"
 	@echo "  make finetune MODEL=<hf-id>        # self-distillation train (issue #120) — writes"
 	@echo "                                     # results/checkpoints/... + finetune_summary.json"
+	@echo "                                     # (offline + grad-checkpoint on by default; override"
+	@echo "                                     # via FT_OFFLINE/FT_GRAD_CHECKPOINT/FT_CUDA_ALLOC_CONF)"
 	@echo "  make hf-fetch MODEL=<hf-id>        # cache a HF model into HF_HOME (from HF Hub)"
 	@echo "  make yt-fetch MODEL=<hf-id>        # cache a HF model into HF_HOME (from YT, no HF access needed)"
 	@echo "  make yt-fetch-records              # restore results/splits/*_records.jsonl from YT (dataset cache)"
@@ -43,9 +57,14 @@ exp-%:
 
 # Self-distillation trainer (issue #120): teacher = base + full mask, student = base + ddi_qf.
 # Wraps `exp-finetune` so it's visible in `make help` — the actual work still goes through the
-# `exp-%` pattern rule (same YAML, same summary output, same MODEL= plumbing).
+# `exp-%` pattern rule (same YAML, same summary output, same MODEL= plumbing). Env vars set here
+# are the FT_* defaults above — override any of them on the command line, e.g.
+# `make finetune MODEL=... FT_GRAD_CHECKPOINT=0` to trade memory headroom back for speed.
 finetune:
 	@test -n "$(MODEL)" || (echo "usage: make finetune MODEL=<hf-id>" && exit 2)
+	HF_HUB_OFFLINE=$(FT_OFFLINE) TRANSFORMERS_OFFLINE=$(FT_OFFLINE) \
+	DDI_GRAD_CHECKPOINT=$(FT_GRAD_CHECKPOINT) \
+	PYTORCH_CUDA_ALLOC_CONF=$(FT_CUDA_ALLOC_CONF) \
 	$(MAKE) exp-finetune MODEL=$(MODEL)
 
 # Fetch a HF model once from the HF Hub (respects HF_HOME).
