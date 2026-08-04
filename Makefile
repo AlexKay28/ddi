@@ -97,16 +97,34 @@ hf-fetch:
 # snapshot dir) so `from_pretrained(MODEL)` resolves offline afterwards — same
 # contract as `hf-fetch`, different source. Requires the model to have already
 # been mirrored to YT_MODELS_ROOT (see experiments/SERVERLESS.md).
+# Two naming conventions exist on the YT mirror, depending on how the model
+# was uploaded:
+#   * Base models (upload_models_to_yt.sh) use the bare repo suffix —
+#     `Qwen/Qwen3.5-4B-Instruct` -> `Qwen3.5-4B-Instruct`.
+#   * Fine-tuned checkpoints (run_finetune.sh / the Nirvana finetune block's
+#     upload loop) use `safe_name` with `/` -> `__` —
+#     `Qwen/Qwen3.5-4B-Instruct__ddi_qf__seed0` ->
+#     `Qwen__Qwen3.5-4B-Instruct__ddi_qf__seed0`.
+# `basename` only handles the first; the `sed` transform only handles the
+# second. Try the `sed` form first (it's the one the automatic upload path
+# produces), then fall back to `basename` so base models still resolve.
 yt-fetch:
 	@test -n "$(MODEL)" || (echo "usage: make yt-fetch MODEL=<hf-id>" && exit 2)
 	@test -n "$(HF_HOME)" || (echo "usage: HF_HOME=<dir> make yt-fetch MODEL=<hf-id>" && exit 2)
-	@repo_name="$$(basename $(MODEL))"; \
+	@repo_name="$$(echo '$(MODEL)' | sed 's#/#__#g')"; \
 	cache_name="models--$$(echo '$(MODEL)' | sed 's#/#--#g')"; \
 	src="$(YT_MODELS_ROOT)/$$repo_name"; \
+	if ! yt --proxy=$(YT_PROXY) exists "$$src" | grep -q true; then \
+	    alt_name="$$(basename $(MODEL))"; \
+	    alt_src="$(YT_MODELS_ROOT)/$$alt_name"; \
+	    if yt --proxy=$(YT_PROXY) exists "$$alt_src" | grep -q true; then \
+	        repo_name="$$alt_name"; src="$$alt_src"; \
+	    else \
+	        echo "no such model on YT: $$src (also tried $$alt_src)" && exit 1; \
+	    fi; \
+	fi; \
 	dest="$(HF_HOME)/hub/$$cache_name"; \
 	snap="$$dest/snapshots/yt-cache"; \
-	yt --proxy=$(YT_PROXY) exists "$$src" | grep -q true || \
-	    (echo "no such model on YT: $$src" && exit 1); \
 	mkdir -p "$$snap" "$$dest/refs"; \
 	printf yt-cache > "$$dest/refs/main"; \
 	for f in $$(yt --proxy=$(YT_PROXY) list "$$src"); do \
