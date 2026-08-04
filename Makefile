@@ -1,6 +1,6 @@
 # DDI reproducibility Makefile — see experiments/SERVERLESS.md for the full flow.
 
-.PHONY: exp-% finetune hf-fetch yt-fetch yt-fetch-records publish-summary test list-experiments gpu-check help
+.PHONY: exp-% finetune hf-fetch yt-fetch yt-fetch-records publish-summary test lint setup list-experiments gpu-check help
 
 YT_PROXY ?= watt
 YT_MODELS_ROOT ?= //home/gena/alexkay28/tickets/ALIGNMENT-2445/models
@@ -47,6 +47,8 @@ help:
 	@echo "  make yt-fetch MODEL=<hf-id>        # cache a HF model into HF_HOME (from YT, no HF access needed)"
 	@echo "  make yt-fetch-records              # restore results/splits/*_records.jsonl from YT (dataset cache)"
 	@echo "  make publish-summary SUMMARY=... ISSUE=<n>"
+	@echo "  make setup                         # uv sync --extra dev (CI install step)"
+	@echo "  make lint                          # ruff check . (CI lint step)"
 	@echo "  make test                          # run pytest"
 	@echo "  make list-experiments              # list all available exp-* targets"
 	@echo "  make gpu-check                     # confirm CUDA is visible"
@@ -140,6 +142,20 @@ publish-summary:
 # Note: `uv run pytest` picks up a system-installed pytest without torch — use
 # `python -m pytest` via the venv interpreter instead. Also ensure the [dev]
 # extra (pytest) is installed before invoking.
+
+# CI-facing install step; mirrors the `test` target's sync so `make setup && make lint`
+# in CI doesn't re-download deps between steps. Kept separate from `test` so a dev box
+# can run the full suite with one command.
+setup:
+	uv sync --extra dev
+
+# Ruff over the whole tree. Config lives in pyproject.toml (line-length=100, rules E/F/I/UP/B).
+# NOTE: main currently carries ~20 pre-existing lint errors unrelated to any single feature;
+# the CI workflow calls this step with `continue-on-error: true` while that debt is burned
+# down in a follow-up PR.
+lint:
+	uv run ruff check .
+
 test:
 	uv sync --extra dev
 	uv run python -m pytest tests/ -q

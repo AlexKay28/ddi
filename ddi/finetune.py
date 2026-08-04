@@ -412,8 +412,8 @@ def finetune(
             if not record["possible_answers"]:
                 if is_dist:
                     raise RuntimeError(
-                        f"finetune (DDP): record {record.get('id', '?')} has empty possible_answers "
-                        "post-prefilter — this should not happen; report as a bug."
+                        f"finetune (DDP): record {record.get('id', '?')} has empty "
+                        "possible_answers post-prefilter — should not happen; report as a bug."
                     )
                 if is_last_record and accum_since_step > 0:
                     _flush_optimizer_step(optimizer, warmup_steps, lr, global_step)
