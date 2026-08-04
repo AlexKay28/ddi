@@ -110,6 +110,84 @@ def test_finetune_rejects_empty_datasets(tmp_path: Path) -> None:
         )
 
 
+def test_prefilter_records_drops_empty_possible_answers() -> None:
+    records = [
+        {"id": "a", "possible_answers": ["x"]},
+        {"id": "b", "possible_answers": []},   # dropped
+        {"id": "c", "possible_answers": ["y", "z"]},
+        {"id": "d"},                            # dropped (missing key)
+    ]
+    kept = ddi_finetune._prefilter_records(records)
+    assert [r["id"] for r in kept] == ["a", "c"]
+
+
+def test_init_ddp_single_gpu_returns_zeros_even_under_torchrun_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # num_gpus=1 must ignore any leftover torchrun env — the single-device path
+    # stays unchanged (issue #123).
+    monkeypatch.setenv("WORLD_SIZE", "4")
+    monkeypatch.setenv("RANK", "2")
+    monkeypatch.setenv("LOCAL_RANK", "2")
+    assert ddi_finetune._init_ddp(1) == (0, 1, 0)
+
+
+def test_init_ddp_multi_gpu_without_torchrun_env_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Missing WORLD_SIZE/RANK/LOCAL_RANK → error with a torchrun hint.
+    for k in ("WORLD_SIZE", "RANK", "LOCAL_RANK"):
+        monkeypatch.delenv(k, raising=False)
+    # Fake CUDA availability so we hit the env-check branch, not the "no CUDA" branch.
+    import torch
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    with pytest.raises(RuntimeError, match="torchrun"):
+        ddi_finetune._init_ddp(2)
+
+
+def test_init_ddp_multi_gpu_without_cuda_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    import torch
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    with pytest.raises(RuntimeError, match="requires CUDA"):
+        ddi_finetune._init_ddp(2)
+
+
+def test_init_ddp_world_size_mismatch_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    import torch
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: True)
+    monkeypatch.setenv("WORLD_SIZE", "4")
+    monkeypatch.setenv("RANK", "0")
+    monkeypatch.setenv("LOCAL_RANK", "0")
+    # Guard against torch.cuda.set_device — no real device in the unit-test env.
+    monkeypatch.setattr(torch.cuda, "set_device", lambda idx: None)
+    with pytest.raises(RuntimeError, match="WORLD_SIZE=4"):
+        ddi_finetune._init_ddp(2)
+
+
+def test_finetune_rejects_num_gpus_zero(tmp_path: Path) -> None:
+    from ddi.provenance import Provenance
+
+    prov = Provenance(
+        git_sha="x", dirty=False, config_hash="x", seed=0,
+        model_revision="x", dataset_revision="x",
+        gpu_model="cpu", driver_version="x", cuda_version="x",
+        torch_version="x", timestamp_utc="x",
+    )
+    with pytest.raises(ValueError, match="num_gpus must be >= 1"):
+        ddi_finetune.finetune(
+            "irrelevant",
+            ["ds"],
+            tmp_path / "out",
+            seed=0,
+            num_gpus=0,
+            provenance=prov,
+            store_path=tmp_path / "runs.jsonl",
+        )
+
+
 # ---------------------------------------------------------------------------
 # Integration: real 2-step training on tiny random Llama.
 # ---------------------------------------------------------------------------

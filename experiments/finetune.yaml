@@ -24,6 +24,11 @@ warmup_steps: 100      # linear LR warmup then constant. Drop to ~20 for a smoke
 log_every: 50
 max_steps: null        # null = run all epochs to completion; set to e.g. 10 to cap
                          # the number of optimizer steps for a quick end-to-end run
+num_gpus: 1            # single-host data parallelism (issue #123). Default 1 keeps the
+                         # single-device path unchanged. >1 requires launching via
+                         # `torchrun --nproc_per_node=N` — `make finetune NUM_GPUS=N`
+                         # does this automatically. Teacher stays replicated + frozen on
+                         # every rank; student is DDP-wrapped.
 
 report:
   tables:

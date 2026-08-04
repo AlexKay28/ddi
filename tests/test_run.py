@@ -493,6 +493,82 @@ def test_finetune_dispatch_writes_expected_rows(
     assert rows and rows[0]["metric"] == "kl_loss" and rows[0]["value"] == 1.23
 
 
+def test_finetune_dispatch_default_num_gpus_is_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No `num_gpus:` in YAML → dispatcher passes num_gpus=1 (issue #123)."""
+    from ddi import finetune as ddi_finetune
+
+    seen: dict[str, object] = {}
+
+    def _fake_finetune(model_name, datasets, output_dir, **kwargs):  # noqa: ARG001
+        seen["num_gpus"] = kwargs.get("num_gpus")
+
+    monkeypatch.setattr(ddi_finetune, "finetune", _fake_finetune)
+    body = (
+        "kind: finetune\nseed: 0\nmodel: irrelevant\n"
+        "datasets: [ds]\n"
+        f"output_dir: {tmp_path / 'ckpt'}\n"
+    )
+    ddi_run.run(_write_yaml(tmp_path, body))
+    assert seen["num_gpus"] == 1
+
+
+def test_finetune_dispatch_yaml_num_gpus_forwarded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`num_gpus:` in YAML flows to ddi.finetune.finetune (issue #123)."""
+    from ddi import finetune as ddi_finetune
+
+    seen: dict[str, object] = {}
+
+    def _fake_finetune(model_name, datasets, output_dir, **kwargs):  # noqa: ARG001
+        seen["num_gpus"] = kwargs.get("num_gpus")
+
+    monkeypatch.setattr(ddi_finetune, "finetune", _fake_finetune)
+    body = (
+        "kind: finetune\nseed: 0\nmodel: irrelevant\n"
+        "datasets: [ds]\n"
+        f"output_dir: {tmp_path / 'ckpt'}\n"
+        "num_gpus: 4\n"
+    )
+    ddi_run.run(_write_yaml(tmp_path, body))
+    assert seen["num_gpus"] == 4
+
+
+def test_finetune_dispatch_cli_num_gpus_overrides_yaml(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`--num-gpus` CLI wins over YAML `num_gpus:` — matches `--model` / `--seed` shape."""
+    from ddi import finetune as ddi_finetune
+
+    seen: dict[str, object] = {}
+
+    def _fake_finetune(model_name, datasets, output_dir, **kwargs):  # noqa: ARG001
+        seen["num_gpus"] = kwargs.get("num_gpus")
+
+    monkeypatch.setattr(ddi_finetune, "finetune", _fake_finetune)
+    body = (
+        "kind: finetune\nseed: 0\nmodel: irrelevant\n"
+        "datasets: [ds]\n"
+        f"output_dir: {tmp_path / 'ckpt'}\n"
+        "num_gpus: 4\n"
+    )
+    ddi_run.run(_write_yaml(tmp_path, body), num_gpus_override=8)
+    assert seen["num_gpus"] == 8
+
+
+def test_finetune_dispatch_rejects_num_gpus_zero(tmp_path: Path) -> None:
+    body = (
+        "kind: finetune\nseed: 0\nmodel: irrelevant\n"
+        "datasets: [ds]\n"
+        f"output_dir: {tmp_path / 'ckpt'}\n"
+        "num_gpus: 0\n"
+    )
+    with pytest.raises(ValueError, match="'num_gpus' must be >= 1"):
+        ddi_run.run(_write_yaml(tmp_path, body))
+
+
 def test_finetune_dispatch_missing_datasets_raises(tmp_path: Path) -> None:
     body = (
         "kind: finetune\nseed: 0\nmodel: irrelevant\n"

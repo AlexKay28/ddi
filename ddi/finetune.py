@@ -26,6 +26,7 @@ picks up.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import sys
 from itertools import zip_longest
@@ -33,6 +34,7 @@ from pathlib import Path
 
 import bitsandbytes as bnb
 import torch
+import torch.distributed as dist
 
 from ddi import inference
 from ddi.data import load as load_dataset
@@ -179,6 +181,57 @@ def _flush_optimizer_step(
     return current_lr
 
 
+def _init_ddp(num_gpus: int) -> tuple[int, int, int]:
+    """Bring up NCCL and return ``(rank, world_size, local_rank)`` (issue #123).
+
+    When ``num_gpus == 1`` we stay single-device and return ``(0, 1, 0)`` even
+    if the process happens to be running under ``torchrun`` — the caller then
+    takes the original single-device path unchanged.
+
+    When ``num_gpus > 1`` we require the standard ``torchrun`` env vars
+    (``WORLD_SIZE``, ``RANK``, ``LOCAL_RANK``) and fail loudly with a hint if
+    they're missing, so a user who forgets to wrap the invocation gets a clear
+    error rather than a silent single-GPU run.
+    """
+    if num_gpus == 1:
+        return 0, 1, 0
+    if not torch.cuda.is_available():
+        raise RuntimeError(
+            f"finetune: num_gpus={num_gpus} requires CUDA, but torch.cuda.is_available() is False"
+        )
+    missing = [k for k in ("WORLD_SIZE", "RANK", "LOCAL_RANK") if k not in os.environ]
+    if missing:
+        raise RuntimeError(
+            f"finetune: num_gpus={num_gpus} requires launching under torchrun "
+            f"(missing env: {missing}). Try: "
+            f"`torchrun --nproc_per_node={num_gpus} --standalone -m ddi.run ...` "
+            f"or `make finetune NUM_GPUS={num_gpus} MODEL=...`."
+        )
+    world_size = int(os.environ["WORLD_SIZE"])
+    if world_size != num_gpus:
+        raise RuntimeError(
+            f"finetune: num_gpus={num_gpus} but WORLD_SIZE={world_size} — "
+            "torchrun --nproc_per_node must match num_gpus."
+        )
+    local_rank = int(os.environ["LOCAL_RANK"])
+    rank = int(os.environ["RANK"])
+    torch.cuda.set_device(local_rank)
+    if not dist.is_initialized():
+        dist.init_process_group(backend="nccl")
+    return rank, world_size, local_rank
+
+
+def _prefilter_records(records: list[dict]) -> list[dict]:
+    """Drop records that would be silently skipped inside the training loop.
+
+    Empty ``possible_answers`` records emit no gradient. Under DDP, ranks that
+    skip while others don't would desync the grad-accum counter and deadlock on
+    the next all-reduce. Filtering upfront keeps every rank iterating in lock
+    step. Cheap for single-GPU too — one pass over the list.
+    """
+    return [r for r in records if r.get("possible_answers")]
+
+
 def finetune(
     model_name: str,
     datasets: list[str],
@@ -195,6 +248,7 @@ def finetune(
     warmup_steps: int = 100,
     log_every: int = 50,
     max_steps: int | None = None,
+    num_gpus: int = 1,
     provenance: Provenance,
     store_path: Path,
 ) -> None:
@@ -218,11 +272,18 @@ def finetune(
         raise ValueError(f"warmup_steps must be >= 0, got {warmup_steps}")
     if max_steps is not None and max_steps < 1:
         raise ValueError(f"max_steps must be >= 1, got {max_steps}")
+    if num_gpus < 1:
+        raise ValueError(f"num_gpus must be >= 1, got {num_gpus}")
+
+    rank, world_size, local_rank = _init_ddp(num_gpus)
+    is_dist = world_size > 1
+    is_main = rank == 0
 
     output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+    if is_main:
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-    _log(f"loading teacher (frozen) + student from {model_name!r}")
+    _log(f"loading teacher (frozen) + student from {model_name!r} (rank={rank}/{world_size})")
     teacher, tokenizer = inference.load(model_name)
     teacher.eval()
     for p in teacher.parameters():
@@ -232,16 +293,27 @@ def finetune(
     student.train()
     _maybe_grad_checkpoint(student)
 
-    if torch.cuda.is_available():
+    if is_dist:
+        device = torch.device(f"cuda:{local_rank}")
+        teacher = teacher.to(device)
+        student = student.to(device)
+    elif torch.cuda.is_available():
         teacher = teacher.to("cuda")
         student = student.to("cuda")
+        device = student.device
+    else:
+        device = student.device
 
-    device = student.device
     dtype = student.dtype
 
     _log(f"mixing records from {len(datasets)} datasets (seed={seed}, cap={max_records})")
     all_records = _mix_records(datasets, seed, max_records)
     train_records, test_records = _holdout_split(all_records, held_out_frac)
+    # Filter records that would be silently skipped, so every DDP rank iterates
+    # the loop the same number of times and no one deadlocks on grad-sync
+    # (issue #123). Cheap enough to always run; matches the old behavior of
+    # skipping such records inside the loop.
+    train_records = _prefilter_records(train_records)
     _log(
         f"records: {len(train_records)} train / {len(test_records)} test "
         f"(held_out_frac={held_out_frac})"
@@ -249,31 +321,65 @@ def finetune(
     if not train_records:
         raise ValueError("finetune: no training records after holdout split")
 
+    if is_dist:
+        # Deterministic per-rank shard — strided so consecutive records go to
+        # different ranks (preserves the interleaved dataset mix on each rank).
+        # Truncate to a length divisible by world_size first, so every rank
+        # gets the same iteration count. If we didn't, ranks with the leftover
+        # tail records would call backward() more times than the others and
+        # deadlock at the next all-reduce (issue #123).
+        drop = len(train_records) % world_size
+        if drop:
+            train_records = train_records[:-drop]
+        train_records = train_records[rank::world_size]
+        if not train_records:
+            raise ValueError(
+                f"finetune: rank {rank} has no records after sharding "
+                f"(world_size={world_size}); reduce num_gpus or increase max_records"
+            )
+        _log(f"rank {rank}: {len(train_records)} records after sharding (dropped {drop} tail)")
+
     trainable_params = [p for p in student.parameters() if p.requires_grad]
     # 8-bit optimizer states on CUDA: full AdamW states in bf16 already push a 7B
     # teacher+student pair close to an 80GB GPU's limit (issue #120 follow-up).
     # bitsandbytes needs CUDA tensors, so CPU-only runs (e.g. unit tests) keep
     # plain torch.optim.AdamW.
-    if student.device.type == "cuda":
+    if device.type == "cuda":
         optimizer = bnb.optim.AdamW8bit(trainable_params, lr=lr, weight_decay=weight_decay)
     else:
         optimizer = torch.optim.AdamW(trainable_params, lr=lr, weight_decay=weight_decay)
+
+    # DDP wrap comes AFTER the optimizer sees the raw parameters. DDP doesn't
+    # replace parameter tensors (it registers hooks on them), so the optimizer's
+    # tensor references remain valid post-wrap.
+    if is_dist:
+        student = torch.nn.parallel.DistributedDataParallel(
+            student, device_ids=[local_rank]
+        )
+    # `student_module` is the unwrapped model — needed for save_pretrained and for
+    # compute_perplexity (which calls model(...) directly, not through DDP scatter).
+    student_module = student.module if is_dist else student
+
     run_prefix = f"finetune:{model_name}:ddi_qf:seed={seed}:{provenance.git_sha[:8]}"
 
     # ---- Baseline perplexities (epoch 0, before any update) ----
-    if test_records:
+    # Rank 0 only under DDP — the holdout eval is deterministic and lives at the
+    # store, not on any tensor, so replicating it across ranks would only
+    # duplicate rows. Other ranks wait at the barrier below so training resumes
+    # in lock step.
+    if test_records and is_main:
         from ddi.perplexity import compute_perplexity
 
         _log("computing baseline perplexities on holdout")
         pplx_student_pre = compute_perplexity(
-            student, tokenizer, test_records,
+            student_module, tokenizer, test_records,
             mask_variant="ddi_qf", layout="sequential",
         )
         pplx_teacher = compute_perplexity(
             teacher, tokenizer, test_records,
             mask_variant="full", layout="sequential",
         )
-        student.train()  # compute_perplexity flipped to eval; restore.
+        student_module.train()  # compute_perplexity flipped to eval; restore.
         epoch_run_id = f"{run_prefix}:epoch=0"
         append(epoch_run_id, "perplexity_student_ddi_qf_pre", pplx_student_pre,
                provenance, store=store_path)
@@ -283,6 +389,8 @@ def finetune(
             f"epoch 0 baseline: student_ddi_qf={pplx_student_pre:.3f} "
             f"teacher_full={pplx_teacher:.3f}"
         )
+    if is_dist:
+        dist.barrier()
 
     # ---- Training loop ----
     global_step = 0
@@ -297,7 +405,16 @@ def finetune(
         _log(f"epoch {epoch + 1}/{epochs}: {len(train_records)} records")
         for rec_i, record in enumerate(train_records):
             is_last_record = (rec_i + 1) == len(train_records)
+            # Under DDP every rank must call backward() the same number of times
+            # per iteration or the next all-reduce deadlocks. The pre-filter above
+            # already dropped empty possible_answers; here we raise on the rarer
+            # encode/answer_len failures instead of silently skipping (issue #123).
             if not record["possible_answers"]:
+                if is_dist:
+                    raise RuntimeError(
+                        f"finetune (DDP): record {record.get('id', '?')} has empty possible_answers "
+                        "post-prefilter — this should not happen; report as a bug."
+                    )
                 if is_last_record and accum_since_step > 0:
                     _flush_optimizer_step(optimizer, warmup_steps, lr, global_step)
                     global_step += 1
@@ -310,6 +427,10 @@ def finetune(
                     tokenizer, record
                 )
             except Exception as exc:
+                if is_dist:
+                    raise RuntimeError(
+                        f"finetune (DDP): encode failed for record {record.get('id', '?')}: {exc!r}"
+                    ) from exc
                 _log(f"skip record id={record.get('id', '?')}: encode failed: {exc!r}")
                 if is_last_record and accum_since_step > 0:
                     _flush_optimizer_step(optimizer, warmup_steps, lr, global_step)
@@ -319,6 +440,10 @@ def finetune(
                         stop_early = True
                 continue
             if answer_len == 0:
+                if is_dist:
+                    raise RuntimeError(
+                        f"finetune (DDP): record {record.get('id', '?')} has zero-length answer"
+                    )
                 if is_last_record and accum_since_step > 0:
                     _flush_optimizer_step(optimizer, warmup_steps, lr, global_step)
                     global_step += 1
@@ -375,7 +500,16 @@ def finetune(
                 log_p_student, p_teacher, reduction="batchmean"
             ) * (T_temp ** 2)
 
-            (loss / grad_accum_steps).backward()
+            # Under DDP, suppress gradient all-reduce on non-boundary micro-steps —
+            # only the backward that immediately precedes optimizer.step() should
+            # sync. Otherwise we'd pay world_size × grad_accum_steps all-reduces
+            # per optimizer step instead of one (issue #123).
+            will_step = (accum_since_step + 1) >= grad_accum_steps or is_last_record
+            sync_ctx = (
+                contextlib.nullcontext() if (will_step or not is_dist) else student.no_sync()
+            )
+            with sync_ctx:
+                (loss / grad_accum_steps).backward()
             accum_since_step += 1
 
             if accum_since_step >= grad_accum_steps or is_last_record:
@@ -385,7 +519,7 @@ def finetune(
                 global_step += 1
                 accum_since_step = 0
 
-                if global_step % log_every == 0:
+                if global_step % log_every == 0 and is_main:
                     loss_val = float(loss.detach().item())
                     step_rid = f"{run_prefix}:step={global_step}"
                     append(step_rid, "kl_loss", loss_val, provenance, store=store_path)
@@ -400,26 +534,32 @@ def finetune(
                     stop_early = True
                     break
 
-        # ---- End-of-epoch perplexities ----
-        if test_records:
+        # ---- End-of-epoch perplexities (rank 0 only under DDP) ----
+        if test_records and is_main:
             from ddi.perplexity import compute_perplexity
 
             _log(f"epoch {epoch + 1}: computing post-epoch perplexity")
             pplx_post = compute_perplexity(
-                student, tokenizer, test_records,
+                student_module, tokenizer, test_records,
                 mask_variant="ddi_qf", layout="sequential",
             )
-            student.train()
+            student_module.train()
             epoch_rid = f"{run_prefix}:epoch={epoch + 1}"
             append(epoch_rid, "perplexity_student_ddi_qf_post", pplx_post,
                    provenance, store=store_path)
             _log(f"epoch {epoch + 1} post: student_ddi_qf={pplx_post:.3f}")
+        if is_dist:
+            dist.barrier()
 
         if stop_early:
             break
 
-    # ---- Save the trained student as an HF-loadable directory ----
-    _log(f"saving checkpoint -> {output_dir}")
-    student.save_pretrained(output_dir)
-    tokenizer.save_pretrained(output_dir)
+    # ---- Save the trained student as an HF-loadable directory (rank 0 only) ----
+    if is_main:
+        _log(f"saving checkpoint -> {output_dir}")
+        student_module.save_pretrained(output_dir)
+        tokenizer.save_pretrained(output_dir)
+    if is_dist:
+        dist.barrier()
+        dist.destroy_process_group()
     _log("finetune: done")

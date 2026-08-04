@@ -1327,6 +1327,13 @@ def run_finetune(cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path)
     max_steps = cfg.get("max_steps")
     if max_steps is not None:
         max_steps = int(max_steps)
+    # Single-host data parallelism knob (issue #123). Default 1 preserves the
+    # original single-device behavior byte-for-byte; >1 requires the caller to
+    # launch under `torchrun --nproc_per_node=N` (the Makefile `finetune` target
+    # does this when `NUM_GPUS>1`).
+    num_gpus = int(cfg.get("num_gpus", 1))
+    if num_gpus < 1:
+        raise ValueError(f"finetune: 'num_gpus' must be >= 1, got {num_gpus}")
     store_path = _store_path_for(cfg)
 
     prov = capture(
@@ -1355,6 +1362,7 @@ def run_finetune(cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path)
             warmup_steps=warmup_steps,
             log_every=log_every,
             max_steps=max_steps,
+            num_gpus=num_gpus,
             provenance=prov,
             store_path=store_path,
         )
@@ -1383,6 +1391,7 @@ def run(
     seed_override: int | None = None,
     model_override: str | None = None,
     backends_override: list[str] | None = None,
+    num_gpus_override: int | None = None,
 ) -> None:
     """Load a YAML file and dispatch on `kind:`."""
     cfg, cfg_hash = load_yaml(yaml_path)
@@ -1405,6 +1414,10 @@ def run(
         # Only `kind: timing` actually consumes `backends:`; setting it on other kinds is a no-op
         # (the dispatcher ignores the field), which is fine for a uniform CLI shape.
         cfg["backends"] = backends_override
+
+    if num_gpus_override is not None:
+        # Only `kind: finetune` consumes `num_gpus:`; ignored elsewhere for a uniform CLI shape.
+        cfg["num_gpus"] = num_gpus_override
 
     if seed_override is not None:
         seed = seed_override
@@ -1454,12 +1467,22 @@ def main(argv: list[str] | None = None) -> int:
             "Only used by kind: timing; ignored for other kinds."
         ),
     )
+    parser.add_argument(
+        "--num-gpus",
+        type=int,
+        default=None,
+        help=(
+            "override `num_gpus:` from YAML (issue #123). Only used by kind: finetune; "
+            "ignored for other kinds. >1 requires launching under `torchrun --nproc_per_node=N`."
+        ),
+    )
     args = parser.parse_args(argv)
     run(
         args.yaml_path,
         seed_override=args.seed,
         model_override=args.model,
         backends_override=args.backends,
+        num_gpus_override=args.num_gpus,
     )
     return 0
 
