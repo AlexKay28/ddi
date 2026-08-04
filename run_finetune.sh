@@ -2,6 +2,11 @@ set -uo pipefail
 # don't use -e: we want one failed model to not kill the whole batch
 pip install --upgrade transformers
 
+# Single-host data parallelism (issue #123). Default 1 keeps the offline
+# container's single-device path unchanged; set NUM_GPUS=8 in the caller
+# environment on hosts with 8× GPUs to run each model's finetune under DDP.
+export NUM_GPUS="${NUM_GPUS:-1}"
+
 export YT_PROXY=watt
 export HF_HOME="${HF_HOME:-$HOME/hf_home}"
 # /mnt/models isn't writable here; use a real writable cache dir
@@ -54,7 +59,7 @@ for model in "${models[@]}"; do
   rm -rf "$FIXED_OUTPUT_DIR"
   rm -f "$FIXED_SUMMARY"
 
-  if ! make finetune MODEL="$model"; then
+  if ! make finetune MODEL="$model" NUM_GPUS="$NUM_GPUS"; then
     echo "!!! finetune failed for $model"
     continue
   fi

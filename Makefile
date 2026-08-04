@@ -1,6 +1,6 @@
 # DDI reproducibility Makefile — see experiments/SERVERLESS.md for the full flow.
 
-.PHONY: exp-% finetune hf-fetch yt-fetch yt-fetch-records publish-summary test list-experiments gpu-check help
+.PHONY: exp-% finetune hf-fetch yt-fetch yt-fetch-records publish-summary test lint setup list-experiments gpu-check help
 
 YT_PROXY ?= watt
 YT_MODELS_ROOT ?= //home/gena/alexkay28/tickets/ALIGNMENT-2445/models
@@ -14,9 +14,15 @@ YT_RECORDS_ROOT ?= //home/gena/alexkay28/tickets/ALIGNMENT-2445/data/records_cac
 #                        set 0 to trade the memory headroom back for speed.
 #   FT_CUDA_ALLOC_CONF   works around allocator fragmentation on the same tight-fit
 #                        GPUs; rarely needs overriding.
+#   NUM_GPUS             single-host data parallelism (issue #123). Default 1 = the
+#                        original single-device path. >1 launches training under
+#                        `torchrun --nproc_per_node=$(NUM_GPUS)` and passes the
+#                        value through as `--num-gpus` so the trainer knows to
+#                        expect the DDP env.
 FT_OFFLINE ?= 1
 FT_GRAD_CHECKPOINT ?= 1
 FT_CUDA_ALLOC_CONF ?= expandable_segments:True
+NUM_GPUS ?= 1
 
 # Python interpreter used by every target below except `test`. Default is the
 # system `python3` — matches the offline serverless container's setup where
@@ -32,14 +38,17 @@ PY ?= python3
 help:
 	@echo "usage:"
 	@echo "  make exp-<name> MODEL=<hf-id> [BACKENDS=sdpa,fa2]   # run experiments/<name>.yaml"
-	@echo "  make finetune MODEL=<hf-id>        # self-distillation train (issue #120) — writes"
+	@echo "  make finetune MODEL=<hf-id> [NUM_GPUS=N]  # self-distillation train (issue #120) — writes"
 	@echo "                                     # results/checkpoints/... + finetune_summary.json"
 	@echo "                                     # (offline + grad-checkpoint on by default; override"
 	@echo "                                     # via FT_OFFLINE/FT_GRAD_CHECKPOINT/FT_CUDA_ALLOC_CONF)"
+	@echo "                                     # NUM_GPUS=N>1 runs under torchrun for DDP (issue #123)"
 	@echo "  make hf-fetch MODEL=<hf-id>        # cache a HF model into HF_HOME (from HF Hub)"
 	@echo "  make yt-fetch MODEL=<hf-id>        # cache a HF model into HF_HOME (from YT, no HF access needed)"
 	@echo "  make yt-fetch-records              # restore results/splits/*_records.jsonl from YT (dataset cache)"
 	@echo "  make publish-summary SUMMARY=... ISSUE=<n>"
+	@echo "  make setup                         # uv sync --extra dev (CI install step)"
+	@echo "  make lint                          # ruff check . (CI lint step)"
 	@echo "  make test                          # run pytest"
 	@echo "  make list-experiments              # list all available exp-* targets"
 	@echo "  make gpu-check                     # confirm CUDA is visible"
@@ -56,16 +65,25 @@ exp-%:
 	$(PY) -m ddi.aggregate experiments/$*.yaml --out logs/$*_summary.json $(if $(MODEL),--model $(MODEL))
 
 # Self-distillation trainer (issue #120): teacher = base + full mask, student = base + ddi_qf.
-# Wraps `exp-finetune` so it's visible in `make help` — the actual work still goes through the
-# `exp-%` pattern rule (same YAML, same summary output, same MODEL= plumbing). Env vars set here
-# are the FT_* defaults above — override any of them on the command line, e.g.
-# `make finetune MODEL=... FT_GRAD_CHECKPOINT=0` to trade memory headroom back for speed.
+# Env vars set here are the FT_* defaults above — override any of them on the command line,
+# e.g. `make finetune MODEL=... FT_GRAD_CHECKPOINT=0` to trade memory headroom back for
+# speed. Unlike other kinds, `finetune` doesn't route through the `exp-%` pattern because
+# the run step may need `torchrun` (issue #123) while the aggregate step stays single-
+# process — swapping the launcher for one step only is what this rule owns. Summary file
+# name/path still match what the pattern rule would have produced.
+#
+# NUM_GPUS>1 launches the run step under `torchrun --nproc_per_node=$(NUM_GPUS) --standalone`
+# and passes `--num-gpus` so the trainer knows to expect the DDP env. NUM_GPUS=1 (default)
+# invokes plain `$(PY) -m ddi.run` — behavior byte-identical to the pre-#123 target.
+FT_LAUNCHER = $(if $(filter-out 1,$(NUM_GPUS)),torchrun --nproc_per_node=$(NUM_GPUS) --standalone,$(PY))
+
 finetune:
-	@test -n "$(MODEL)" || (echo "usage: make finetune MODEL=<hf-id>" && exit 2)
+	@test -n "$(MODEL)" || (echo "usage: make finetune MODEL=<hf-id> [NUM_GPUS=N]" && exit 2)
 	HF_HUB_OFFLINE=$(FT_OFFLINE) TRANSFORMERS_OFFLINE=$(FT_OFFLINE) \
 	DDI_GRAD_CHECKPOINT=$(FT_GRAD_CHECKPOINT) \
 	PYTORCH_CUDA_ALLOC_CONF=$(FT_CUDA_ALLOC_CONF) \
-	$(MAKE) exp-finetune MODEL=$(MODEL)
+	$(FT_LAUNCHER) -m ddi.run experiments/finetune.yaml --model $(MODEL) --num-gpus $(NUM_GPUS)
+	$(PY) -m ddi.aggregate experiments/finetune.yaml --out logs/finetune_summary.json --model $(MODEL)
 
 # Fetch a HF model once from the HF Hub (respects HF_HOME).
 hf-fetch:
@@ -124,6 +142,20 @@ publish-summary:
 # Note: `uv run pytest` picks up a system-installed pytest without torch — use
 # `python -m pytest` via the venv interpreter instead. Also ensure the [dev]
 # extra (pytest) is installed before invoking.
+
+# CI-facing install step; mirrors the `test` target's sync so `make setup && make lint`
+# in CI doesn't re-download deps between steps. Kept separate from `test` so a dev box
+# can run the full suite with one command.
+setup:
+	uv sync --extra dev
+
+# Ruff over the whole tree. Config lives in pyproject.toml (line-length=100, rules E/F/I/UP/B).
+# NOTE: main currently carries ~20 pre-existing lint errors unrelated to any single feature;
+# the CI workflow calls this step with `continue-on-error: true` while that debt is burned
+# down in a follow-up PR.
+lint:
+	uv run ruff check .
+
 test:
 	uv sync --extra dev
 	uv run python -m pytest tests/ -q
