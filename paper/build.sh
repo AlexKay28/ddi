@@ -20,6 +20,31 @@ cd "$(dirname "$0")"
 
 REPORT_CMD=(uv run python -m ddi.report_cli)
 
+# `ddi.report_cli` DOES NOT EXIST (VIBEQUEUE-16, verified 2026-08-08). `ddi/reports/` holds
+# only `_provenance.py`, and there is no `make paper` target either, though CHANGELOG says
+# there is.
+#
+# That matters more than a broken script, because of how this one fails. Both call sites
+# below redirect the renderer's stderr to /dev/null and fall through to `emit_*_stub` on a
+# non-zero exit — so a missing renderer is indistinguishable from "this sweep has no rows
+# yet". The script exits 0, the PDF compiles, and every number in it is a \todoreport stub.
+# Ground rule 3 ("every empirical number comes from the store; nothing types a number by
+# hand") is therefore NOT enforced by construction today; it is merely unviolated, because
+# nothing is generated at all.
+#
+# Checked here, loudly, rather than left to the silent-stub path: a build that produces a
+# paper full of stubs should say why in its first line, not its last page.
+if ! "${REPORT_CMD[@]}" --help >/dev/null 2>&1; then
+    echo "[paper] FATAL: the renderer '${REPORT_CMD[*]}' is not runnable."
+    echo "[paper]        ddi/report_cli.py does not exist — it was removed with ddi/runners/"
+    echo "[paper]        in #89 and never replaced. Every table and figure below would be"
+    echo "[paper]        silently stubbed, and the resulting PDF would advertise generated"
+    echo "[paper]        numbers it does not have."
+    echo "[paper]        Restore a renderer, or point REPORT_CMD at ddi.aggregate, before"
+    echo "[paper]        treating anything this script emits as a result."
+    exit 1
+fi
+
 # pandoc is required to convert the renderer's markdown output into .tex.
 # When it is missing we still emit \todoreport stubs so the paper compiles
 # (build.sh is useful on containers without pandoc; the operator is told

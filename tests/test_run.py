@@ -70,7 +70,7 @@ def test_run_seed_override_wins_over_yaml(tmp_path: Path, monkeypatch: pytest.Mo
     """--seed overrides YAML seed; runner dispatches with the CLI seed."""
     seen: dict[str, int] = {}
 
-    def _fake_quality(cfg, cfg_hash, seed, yaml_path):
+    def _fake_quality(cfg, cfg_hash, seed):
         seen["seed"] = seed
 
     monkeypatch.setitem(ddi_run._DISPATCH, "quality", _fake_quality)

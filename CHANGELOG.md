@@ -7,6 +7,20 @@ Numbers here are pointers, not sources of truth. Every experiment traces to a ro
 tables and figures regenerate from that store (ground rule 3). This file is the narrative layer
 on top — what was run, why, and what it told us.
 
+> **Ground rule 3 is not currently enforced, and two entries below overstate it.** The
+> 2026-07-27 entry says "Ground rule 3 enforced by construction: no hand-typed numbers in the
+> .tex sources" and that the root Makefile "gains `make paper`". Neither holds:
+> `paper/build.sh` invokes `ddi.report_cli`, which does not exist (`ddi/reports/` holds only
+> `_provenance.py`), and there is no `make paper` target in any Makefile. Worse, `build.sh`
+> redirected the renderer's stderr and fell through to its `\todoreport` stub path, so it
+> exited 0 and produced a paper whose every number was a stub. It now fails loudly instead
+> (VIBEQUEUE-16, 2026-08-08). Nothing in `paper/sections/` types a number by hand today — but
+> that is because nothing generates one either, which is a different claim.
+>
+> Also: `results/runs.jsonl` is gitignored, so the store this file calls the source of truth
+> does not travel with a checkout. The revision behind a published number lives in the
+> Nirvana instance comment; `make repro-pin INSTANCE=<id>` reads it.
+
 ---
 
 ## Entry format
@@ -27,11 +41,318 @@ without the sub-issue / SHA / runs fields.
 
 ---
 
-## Unreleased
+## Unreleased — VIBEQUEUE-2 harness review (R1–R10)
 
-Phase 0 in progress. No experiment entries until the three correctness gates
-([issue #4](https://github.com/AlexKay28/ddi/issues/4)) are green — per ground rule 6, no DDI
-number enters the store before that.
+Three critical defects broke the fine-tune parity measurement; all fixed.
+
+- **R2 (critical):** `ddi/inference.py::generate` now threads the DDI mask through
+  every decode step. Previously decode steps called `model(next_token, past_kv)`
+  with no `attention_mask`, so HF used full-causal and the `blind` variant leaked.
+  Prefill mask is bit-identical; `full`/`ddi_qf` results unchanged.
+- **R3 (critical):** New `ddi/prompt.py` — single source of truth for query-text
+  construction and segment encoding (`encode_segments`). The `_cache_restart_quality`
+  caller had drifted off `build_query_text`, silently losing `DOC_INSTRUCTION`
+  (em == 0.0000 in every cell) and `enable_thinking=False` (Qwen3 spent all 64
+  `max_new_tokens` inside ` ModelState`). All four encoding paths (eval loss,
+  generation, training, perplexity) now share one encoder.
+- **R6 (high):** New `ddi/parity.py` — closure/preservation/leakage metrics + the
+  admissibility gate (`Δ` from base seeds). A model that collapses under `full`
+  down to its own `ddi_qf` level satisfies parity and is worthless; only
+  preservation catches it.
+- **R4 (high):** `ddi/finetune.py` — quarter of training steps produced zero
+  gradient (records with < `min_docs` documents). Added `min_docs` prefilter.
+- **R5 (medium):** `ddi/finetune.py` — KL loss was `sum` not `mean`, making loss
+  scale depend on answer length. Fixed.
+- **R1 (critical):** Deleted `ddi/data/kilt_nq.py` — documents were titles, not
+  passages. Dataset removed entirely.
+- **R7 (medium):** `ddi/data/synthetic.py` — configurable size (was hardcoded 4
+  records).
+- **R8/R9/R10:** Plan changes — delta/parity test re-enabled; aggregate guards
+  against base/tuned cell collapse; doc-count axis dropped for kilt_nq.
+- **Infra:** Nirvana pipeline (`nirvana/graphs/`), `Makefile.exp` + `Makefile.nirvana`,
+  `ddi/runids.py` (run_id parsers), `ddi/diagnose_grads.py`, `nv-guard.sh`,
+  `requirements-dev.txt`.
+- **Tests:** 489 passed / 27 skipped / 0 failed. New regression tests:
+  `test_parity.py`, `test_decode_mask_per_step.py`, `test_inference_mask_alignment.py`,
+  `test_cache_vs_single_forward.py`, `test_prompt.py`, `test_runids.py`,
+  `test_graph_notes.py`, `fake_models.py`.
+
+See `REVIEW-VIBEQUEUE-2.md` for the full methodology and per-issue root-cause analysis.
+
+---
+
+## Pin history — `nirvana/common/constant.py::ARC_REFERENCE`
+
+Every graph exports Arcadia at one revision, `constant.ARC_REFERENCE`. Almost everything
+under `ddi/` and `experiments/` is job-side, so it reaches a run only through that value —
+a graph published against an older revision ships the old behaviour whatever the graph
+files say. What follows is what each bump fixed and what it cost to find out. **Newest
+first.** Read it before lowering the pin; the constant itself carries only the trap and
+the summary.
+
+- **`be94ea06ef`** — adds `ddi/diagnose_grads.py` and the graph that runs it. NOT tidiness:
+  the diagnostic block invokes `python3 -m ddi.diagnose_grads`, and that module does not
+  exist at any earlier revision, so an instance published against the previous pin dies on
+  `No module named ddi.diagnose_grads` after queueing for a GPU. Nothing job-side on the
+  training or eval path changed, so in-flight instances were unaffected.
+
+- **`acda80b6f5`** — adds the 500-record parity eval and the three-seed rows, and fixes
+  `ddi.parity._verdict` to read the SIGN of the preservation gap: it tested `abs(r)`, so a
+  finetune that IMPROVED `full` was reported as "PARITY BY REGRESSION: full degraded". That
+  module is offline analysis rather than job-side, so the bump was for tidiness — but a
+  published graph should never ship a parity checker that can report the opposite of what
+  happened.
+
+- **`d73e39c73d`** — clips gradients (`max_grad_norm`, default 1.0), skips a step whose
+  gradients are not finite rather than stepping on them, aborts after `max_skipped_steps`
+  (default 20) such steps, and refuses to `save_pretrained` a model holding non-finite
+  weights. Pin at or above this revision for any training row.
+
+  The cost of not having it, measured: on 2026-08-07 the Qwen2.5-7B row-2 finetune diverged
+  between step 1 and step 50, trained on NaN for the remaining ~3,230 steps, saved the
+  checkpoint, uploaded 15 GB of NaN weights to YT, evaluated them, and posted a table of
+  zeros to VIBEQUEUE-2 — reporting success at every layer. Nirvana was green, the failure
+  guard stayed silent, and only a human reading `loss = nan` in the table caught it. Eight
+  GPU-hours for a result that had to be deleted. Qwen3.5-4B on the identical revision was
+  healthy throughout, so this is model-specific divergence, not a regression — which is
+  exactly why it needs a guard rather than a fix.
+
+- **`0ca69996b1`** — caps the holdout perplexity at `holdout_eval_records` (500 in
+  `finetune.yaml`). Job-side: the cap is read from the config by `ddi.run`, and both the
+  config and `ddi/` only reach a job through the pin. It matters more than a tuning knob
+  because of what it interacts with — the module pin (`constant.LARGE_GPU_MODULE`). Those
+  perplexities run on rank 0 alone while seven ranks wait, and every YT restart repays them
+  in full, so uncapped they turn each restart into a 15-40 minute tax on an 8-GPU
+  allocation.
+
+- **`72cbcf7f69`** — adds `trainable_layers` to the finetune config: freeze every decoder
+  layer but the top N. It is the only reason a 27B row can exist at all — a full 27B
+  finetune needs ~222 GB per rank against a 141 GB card, and no number of GPUs divides it
+  because DDP replicates every term on every rank. The arithmetic lives with the code, in
+  `ddi/finetune.py::_freeze_trunk`.
+
+  This is job-side code, and at that revision `--set` merged unknown keys into the config
+  without validating them (`cfg[key] = value`), so a 27B graph published below it did NOT
+  fail on the unknown override — it silently ignored it, attempted the full finetune, and
+  OOMed after taking the GPU slot. (`--set` has been validated per kind since VIBEQUEUE-16;
+  see `ddi/run.py::_validate_set_keys`. The pin still matters for the feature itself.) The
+  same commit makes gradient checkpointing non-reentrant, without which a frozen trunk
+  rebuilds no autograd graph and trains nothing while still reporting a falling loss.
+
+- **`4867c1f572`** — makes `ddi.finetune` record the FIRST and LAST optimizer step, not only
+  every `log_every`-th. `log_every` defaults to 50, so row 8 — 57 records, ~7 steps per rank
+  — wrote no `kl_loss` rows at all and finished an 8-GPU job with an empty loss curve and no
+  error saying why. Also single-sources the eval dataset list through
+  `constant.EVAL_DATASETS`, after four graph notes spent a day advertising a `kilt_nq`
+  column that no run produced.
+
+- **`671bb3499d`** — passes `enable_thinking=False` to chat templates that understand it
+  (review R13). Every Qwen3.x checkpoint mirrored under `YT_MODELS_ROOT` opens a `<think>`
+  block in its generation prompt, and `max_new_tokens` is 64 — so the model reasoned through
+  its whole budget and never emitted a bare answer span. That is the entire explanation for
+  `em == 0.0000` on the 4B and the 27B while Qwen2.5-7B (no thinking template) scored
+  em 0.5700 on identical records. Anything published below this revision measures a model
+  that cannot answer.
+
+- **`91f63399f1`** — first revision that does NOT ship `results/runs.jsonl`. That file was
+  tracked, so a 55,186-row metrics store travelled to every job in the checkout, and
+  `ddi.aggregate.load_rows` filters only by MODEL — not by dataset, mask, config hash or
+  recency. Every historical row for a model was therefore averaged into its reported table.
+  Qwen2.5-7B carried 41,304 such rows across 12 datasets, so rows 22/23 reported months-old
+  broken-harness numbers complete with a `ddi_strict` mask and `kilt_nq` columns that the
+  config cannot produce. Qwen3.5-4B and Qwen3.6-27B carried zero, which is the only reason
+  rows 19/20/24/25 are readable. Pin at or above this revision so a job starts with an empty
+  store and reports what it actually measured.
+
+- **`13d5630a4f`** — fixes the decode attention mask. The R2 rewrite sliced one big
+  allow-matrix per step, handing cuBLAS a bf16 tensor whose base pointer was not 16-byte
+  aligned; every run died at the first decode step with `CUBLAS_STATUS_EXECUTION_FAILED` and
+  then a sticky `misaligned address`, on `full` as well as the DDI variants. Nine runs were
+  lost to it on 2026-08-06.
+
+- **`d1e2f6662c`** — drops `kilt_nq` from `quality.yaml` and `finetune.yaml`. That is
+  job-side config, and without it EVERY row that uses the default dataset list aborts at the
+  third dataset, because the `kilt_nq` loader raises rather than fabricating title-only
+  documents (review R1). Six runs were stopped and relaunched on this revision for exactly
+  that reason.
+
+- **`e65d32d274`** — branch tip at the time; differs from `ee0dcdc06d` only in the pin value
+  and a comment in `ddi_rows.py` — no job-side code at all. Set so a fresh publish exports
+  exactly the tip rather than a revision two commits behind it. The rows 19/20 instances
+  started on 2026-08-06 stayed pinned at `ee0dcdc06d` and were deliberately *not* restarted
+  for this bump: `make exp-quality` runs out of `ddi/`, which is byte-identical across the
+  two, so restarting would have cost an hour of GPU to change nothing. Re-pin freely; only
+  restart running work when the diff touches `ddi/`.
+
+- **`ee0dcdc06d`** — carries the VIBEQUEUE-2 harness review fixes, and is the reason every
+  graph running on 2026-08-06 was stopped rather than left to finish: the decode path no
+  longer lets `blind` read the documents (R2), the prompt names the passages and asks for a
+  bare span instead of posing a bare question (R3), `kilt_nq` raises instead of fabricating
+  title-only documents (R1), the KL is a mean rather than a length-weighted sum (R5),
+  single-document records are dropped before they contribute exactly zero gradient (R4), and
+  `ddi.delta` reads the run_ids the harness actually writes instead of a prefix nothing has
+  ever produced. Anything published below this value measures what the ticket has already
+  declared superseded; do not lower it to reproduce an old number — use the documented env
+  knobs (`DDI_PROMPT_INSTRUCTION`, `DDI_KILT_TITLE_PLACEHOLDER`), which exist for that.
+
+- **`819bd015f9`** — first revision where `ddi.run` leaves the process with `os._exit`
+  instead of running interpreter shutdown, so the NCCL/UCX teardown segfault can no longer
+  poison torchrun's exit code — and where a failed cell actually exits non-zero instead of
+  reporting success. That is how a complete 4h18m 8-GPU run was discarded on 2026-08-06.
+
+- **`ae72d6b3d6`** — first revision whose Makefile single-quotes each `SETS=` entry. Without
+  it `--set datasets=[kilt_nq]` reaches the shell as an unquoted glob, so VIBEQUEUE-2 row 5
+  depends on this pin rather than merely preferring it. **`28ce939d16`** is its descendant
+  that adds rows 8-11; those rows put `datasets=` on the *training* config, which reaches
+  the same Makefile expansion, so they inherit that requirement.
+
+- Before that, `ddi_qwen` and `ddi_grid` each carried their own hash (`83b2840a` and
+  `50a6c3b5`) — both predating the DDP barrier timeout fix in `2b2a8a891a`, so publishing
+  either would have deadlocked every GPU cell on the epoch-0 holdout perplexities. That is
+  why there is one pin and not one per graph.
+
+---
+
+## 2026-08-08 — **Starlark aggregator and cached-baseline path deleted** (VIBEQUEUE-16 P1)
+
+The graph builder had two report backends and two eval-source modes. After the six legacy
+entry points were deleted earlier the same day, exactly one combination was still reachable:
+`aggregator="python"` with `with_baseline=False`. Nothing in the tree passed either argument
+— all 38 publishable entry points took the defaults — so `_starlark`, `compare_starlark` /
+`COMPARE_STARLARK`, `grid_starlark` / `GRID_STARLARK`, `baseline_eval_script`,
+`YT_BASELINES_ROOT` and the baseline block were unreachable code kept alive only by their own
+mutual references. 376 lines deleted across `scripts.py`, `ddi_pipeline.py` and
+`constant.py`, 40 lines of comment and docstring added in their place — net −336.
+
+`json_process` and every operation in `operations/external.py` survived the deletion: each
+was checked individually rather than assumed dead by association. `constant.SEEDS` likewise —
+it still feeds `_PROTECTED_SUFFIXES` in the checkpoint guard.
+
+The **validation guards** that went with them encoded real operational knowledge, so the
+reasoning is preserved here before the code goes.
+
+### The baseline cache key does not cover `--set` or the environment
+
+The cached-baseline block existed because the base model's quality is a constant:
+re-deriving it on every graph spends a GPU job to learn something already known. It keyed
+its YT entry on `<safe-model>__quality__<sha of experiments/quality.yaml>` — model identity
+plus a hash of the eval config as committed.
+
+That key is complete only for a row that runs the eval config **as committed**. It knows
+nothing about `eval_sets` (the `--set` overrides, e.g. `max_records=500`) or `eval_env`
+(e.g. `DDI_HOTPOT_N_PARAGRAPHS`), both of which change what the eval measures without
+touching `quality.yaml`. So an eval-only row that set either would:
+
+1. **read** a cache entry describing a *different* eval and report it as its own baseline
+   column — a 100-record number silently standing in for a 500-record one; and worse,
+2. on a miss, **write** its own numbers back under a key that does not describe them,
+   poisoning the baseline for every later graph that shares the model and config hash.
+
+`build_ddi_pipeline` therefore refused `with_baseline=True` in eval-only mode outright,
+rather than letting a stale hit be compared against a fresh eval. The prescribed
+alternative was to list the base model in `eval_models` and pay for the GPU job — which is
+what every surviving row does, and why they are readable: `ddi_parity_eval_500` and the
+`ddi_tuned_gap_*` sweep score base and tuned **in one graph, on one split**, so the
+subtraction between the columns is paired rather than two runs that happen to share a label.
+
+**The rule this leaves behind, now that no caching layer enforces it:** a cache key must
+cover every input that can change the number, not just the ones that are convenient to
+hash. Any future baseline cache must include the `--set` overrides and the environment in
+its key, or refuse to serve rows that use them.
+
+Two smaller guards went with it, recorded for the same reason:
+
+- The starlark aggregator compiled the ticket into its own source text, so it could not
+  accept a graph *option* for `ticket` — only a plain string. The python aggregator reads
+  the ticket at run time via `${global["ticket"]}`, which is why every entry point can
+  expose `ticket` as a Nirvana option. That property survives; only the backend that
+  lacked it is gone.
+- The starlark comparison hardcoded a base-vs-finetuned pair read as `input[0]`/`input[1]`,
+  so it could never render eval-only mode's N columns, and it required `with_baseline=True`
+  because it read the baseline as `input[0]`. The python report walks the payload instead
+  of indexing into it, so one seed and N models render through the same code.
+
+`json_process` itself is **not** gone: `_collect` still uses a one-line `return input`
+Starlark to gather more than one eval payload, because the `Make DataFrame` block accepts a
+single connection on `inp`. Only the *reporting* Starlark was deleted.
+
+---
+
+## 2026-08-08 — **`kilt_nq` and `nq` loaders deleted** (VIBEQUEUE-16 P4)
+
+`ddi/data/kilt_nq.py` and `ddi/data/nq.py` are gone, with their registrations, their
+config references and their tests. Neither could produce a usable measurement, and both
+were still wired into `experiments/cache_restart.yaml` — one aborting its cell, the other
+burning record-passes on a column the aggregator then dropped.
+
+The loaders' post-mortems are the valuable part, so they are copied here verbatim in
+substance before the code goes. Both datasets stay in
+`ddi.aggregate._QUALITY_DROPPED_DATASETS`, which is what keeps a store still holding their
+rows from resurrecting them as columns.
+
+### `kilt_nq` — its documents were Wikipedia titles, not passages (review R1)
+
+`ddi/data/kilt_nq.py::_passage_text` fell back to a `"[<title>]"` placeholder when a KILT
+provenance entry carried no `text`, with a comment saying this was "so downstream code can
+still count passages while a follow-up wires a real wiki lookup". The follow-up never
+landed, and `facebook/kilt_tasks` provenance entries carry **no** inline `text` at all —
+the passage bodies live in the separate KILT knowledge source (`facebook/kilt_wikipedia`)
+and have to be joined in by `wikipedia_id` / `paragraph_id`. So every `kilt_nq` "document"
+the harness ever saw was a bare Wikipedia title of 6–61 characters: `[Malware]`,
+`[South Asia]`, `[2017 Wimbledon Championships – Women's Singles]`.
+
+Why that voids the dataset rather than merely weakening it: with no passage text, `full`
+and `blind` see the same information. The `full − blind` headroom — the thing the whole DDI
+question is measured against — collapses, and the measured DDI gap is pinned near zero for
+reasons that have nothing to do with the mask. It also defeated `_normalize`'s
+"drop entries with no extractable text" filter, since `_passage_text` never returned empty
+for a row that had a title. `kilt_nq` was a closed-book dataset wearing a retrieval
+dataset's clothes, and every number ever reported in a `kilt_nq` column is void.
+
+Three guards were added in response and are recorded here because they encode what "fixed"
+had to mean:
+
+- `_check_passage_coverage` raised when fewer than 50% of a split's records carried any
+  passage text — a hard stop with a pointer to the missing knowledge-source join, rather
+  than a dataset's worth of confident zeroes.
+- `_is_placeholder_doc` recognised a fabricated document by its signature (a string that
+  starts with `[` and ends with `]`; a genuine passage body does not). Needed because a
+  *fresh* load yielded empty `info_contexts` for a textless row while every
+  **already-written cache** held the non-empty placeholders instead — an emptiness-only
+  check would have waved those straight through.
+- The coverage check therefore ran on the **cached** path too, not just the fresh load.
+  Every existing `kilt_nq` cache — local and the YT mirror — was written by the pre-review
+  loader. Guarding only `_load_hf_split` would have left every current user reading
+  fabricated documents.
+
+Consequences that were paid before the guards existed: six graph runs were stopped and
+relaunched once the loader started raising (`nirvana/common/constant.py`, `d1e2f6662c`);
+four graph notes spent a day advertising a `kilt_nq` column no run produced (`4867c1f572`);
+rows 22/23 published tables carrying a `kilt_nq` column built from 41,304 stale
+broken-harness rows (`91f63399f1`); and graph row 5 (`DDI_KILT_N_PASSAGES=2`) was
+defined-but-unlaunchable, because the `kilt_nq_n2` cache it was built for was derived by
+truncating `kilt_nq_n5` and so held exactly those placeholders.
+
+`DDI_KILT_TITLE_PLACEHOLDER=1` used to restore the old behaviour for reproducing
+historical store rows. It goes with the loader. The `kilt_nq_n*` caches are still on YT if
+a real passage-body join ever arrives; restoring the dataset means doing that join first,
+then removing `kilt_nq` from `_QUALITY_DROPPED_DATASETS`.
+
+### `nq` — measured nothing by construction
+
+`ddi/data/nq.py` loaded NQ Open (`google-research-datasets/nq_open`), a question–answer
+dataset with **no retrieved passages**, so `info_contexts` was always `[]`. Its module
+docstring said as much and promised "a retrieval step (Phase 2.1) must run before this
+loader is useful for actual DDI eval; it exists now so Phase 1.4's `full` baseline can run
+against a real dataset." Phase 1.4 is long gone; the retrieval step never arrived.
+
+With zero documents there is no block structure to mask, so `build_mask` collapses every
+DDI variant to plain causal and the runners log `coerced variant ... -> 'full'` on every
+record. The aggregator then dropped the rows again on the way out. A `kind: quality` or
+`restart_quality` cell naming `nq` therefore spent ~100 record-passes of generation to
+produce three arms of the same number, and then reported none of them. It was dropped from
+`quality.yaml` in #105 for exactly this reason and survived in `cache_restart.yaml` only
+because no test covered that file.
 
 ---
 

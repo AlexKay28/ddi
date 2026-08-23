@@ -66,8 +66,16 @@ def test_hop_type_is_multi() -> None:
 
 @pytest.mark.skipif(not _INTEGRATION, reason=_INTEGRATION_REASON)
 def test_info_contexts_length() -> None:
-    for rec in load("hotpot_qa", "val", seed=0):
-        assert len(rec["info_contexts"]) == 10
+    # `distractor` pads each question to 10 paragraphs (2 gold + 8 distractors) — but a
+    # small upstream tail ships fewer, and one such record is enough to fail an
+    # ==10-for-every-record assertion. Measured on val/seed0: 3668 of 3702 have exactly
+    # 10, the remainder spread over 2..9. Assert the invariants instead: never more than
+    # the distractor cap, never fewer than the two gold docs multi-hop requires, and 10
+    # still overwhelmingly the norm.
+    counts = [len(rec["info_contexts"]) for rec in load("hotpot_qa", "val", seed=0)]
+    assert counts
+    assert all(2 <= n <= 10 for n in counts), f"out of range: {sorted(set(counts))}"
+    assert sum(n == 10 for n in counts) / len(counts) > 0.95
 
 
 @pytest.mark.skipif(not _INTEGRATION, reason=_INTEGRATION_REASON)
@@ -102,3 +110,104 @@ def test_second_call_hits_cache_not_hf(monkeypatch: pytest.MonkeyPatch) -> None:
 
     got = list(load("hotpot_qa", "val", seed=0))
     assert got == fake
+
+
+# --- DDI_HOTPOT_N_PARAGRAPHS: the document-count axis ---------------------------------
+#
+# These are pure functions over lists, so unlike the rest of this file they need neither
+# HuggingFace nor a GPU. They had no coverage at all until 2026-08-06, while rows 20/23/25
+# — nine GPU runs across three model sizes — read their output as *the* document-count
+# axis. A wrong selection here does not crash; it returns a plausible number, which is the
+# failure mode this ticket exists to eliminate.
+
+
+def _set_n(monkeypatch, value):
+    if value is None:
+        monkeypatch.delenv("DDI_HOTPOT_N_PARAGRAPHS", raising=False)
+    else:
+        monkeypatch.setenv("DDI_HOTPOT_N_PARAGRAPHS", str(value))
+
+
+def test_n_paragraphs_unset_means_all(monkeypatch) -> None:
+    _set_n(monkeypatch, None)
+    assert hotpot_qa.n_paragraphs() is None
+
+
+def test_n_paragraphs_parses_and_validates(monkeypatch) -> None:
+    _set_n(monkeypatch, 5)
+    assert hotpot_qa.n_paragraphs() == 5
+
+    _set_n(monkeypatch, "not-a-number")
+    with pytest.raises(ValueError, match="must be an integer"):
+        hotpot_qa.n_paragraphs()
+
+    # Below 2 the DDI mask family collapses to plain `full` (ddi/masks.py), so the record
+    # would measure nothing at all. Failing loudly beats silently running a no-op sweep.
+    _set_n(monkeypatch, 1)
+    with pytest.raises(ValueError, match="must be >= 2"):
+        hotpot_qa.n_paragraphs()
+
+
+def test_select_keeps_everything_when_unset_or_under_limit(monkeypatch) -> None:
+    ctx = ["a", "b", "c"]
+    titles = ["A", "B", "C"]
+
+    _set_n(monkeypatch, None)
+    assert hotpot_qa._select_paragraphs(ctx, titles, ["A"]) == [0, 1, 2]
+
+    _set_n(monkeypatch, 10)
+    assert hotpot_qa._select_paragraphs(ctx, titles, ["A"]) == [0, 1, 2]
+
+
+def test_select_keeps_every_supporting_paragraph(monkeypatch) -> None:
+    """Gold must survive truncation, or the record silently becomes unanswerable.
+
+    That is the confound this axis exists to avoid: an unanswerable record looks exactly
+    like a document-count effect while actually being an answerability effect.
+    """
+    ctx = [f"p{i}" for i in range(10)]
+    titles = [f"T{i}" for i in range(10)]
+    supporting = ["T3", "T7"]
+
+    _set_n(monkeypatch, 5)
+    keep = hotpot_qa._select_paragraphs(ctx, titles, supporting)
+
+    assert len(keep) == 5
+    assert 3 in keep and 7 in keep
+    assert keep == sorted(keep), "original relative order must be preserved"
+
+
+def test_select_at_two_is_gold_only(monkeypatch) -> None:
+    """At the bottom of the sweep every kept paragraph is gold, by construction.
+
+    Worth pinning because it changes what the sweep measures: the gold:distractor ratio
+    moves from 2:0 at n=2 to 2:8 at n=10, so the curve is 'fewer distractors', not merely
+    'fewer documents'. For multi-hop that also makes n=2 the *most* stringent test of the
+    mask -- both documents are needed and neither may see the other.
+    """
+    ctx = [f"p{i}" for i in range(10)]
+    titles = [f"T{i}" for i in range(10)]
+
+    _set_n(monkeypatch, 2)
+    assert hotpot_qa._select_paragraphs(ctx, titles, ["T4", "T6"]) == [4, 6]
+
+
+def test_select_truncates_gold_only_when_gold_exceeds_limit(monkeypatch) -> None:
+    ctx = [f"p{i}" for i in range(6)]
+    titles = [f"T{i}" for i in range(6)]
+
+    _set_n(monkeypatch, 2)
+    keep = hotpot_qa._select_paragraphs(ctx, titles, ["T0", "T1", "T2", "T3"])
+    assert len(keep) == 2
+    assert set(keep).issubset({0, 1, 2, 3}), "distractors must not displace gold"
+
+
+def test_select_tolerates_duplicate_supporting_titles(monkeypatch) -> None:
+    """HotpotQA lists a supporting title once per sentence, so repeats are normal."""
+    ctx = [f"p{i}" for i in range(8)]
+    titles = [f"T{i}" for i in range(8)]
+
+    _set_n(monkeypatch, 4)
+    keep = hotpot_qa._select_paragraphs(ctx, titles, ["T2", "T2", "T2", "T5", "T5"])
+    assert len(keep) == 4
+    assert 2 in keep and 5 in keep

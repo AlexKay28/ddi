@@ -1,0 +1,270 @@
+# DDI on Nirvana — administering the GPU runs: publish, pin, monitor.
+#
+# The GPU half of this repo. `nirvana/graphs/*.py` declares one vh3 entry point per grid
+# row; publishing one creates a NEW instance inside the shared workflow
+# `ALIGNMENT-2445 | [DDI] Serverless Inference`, which you then start from the Nirvana UI.
+#
+# This file administers *workflows*. It never runs the science — that is Makefile.exp, and
+# it is also what the jobs themselves invoke once a graph has delivered their code
+# (`make yt-fetch`, `make finetune`, `make exp-quality`). The two share no variables.
+#
+# There are exactly two ways to get this wrong, and both are load-bearing here:
+#
+#   1. `publish -n` is `--dry-run`, NOT `--name`. Several module docstrings in this repo
+#      show `./bin/bin publish -n junk.alexkay28...` on the line that is supposed to be
+#      the real publish; copying it validates the graph, prints "All graphs seem OK" and
+#      publishes nothing at all. That is why the flag never appears in a target name here:
+#      `nv-check` validates, `nv-publish` publishes, and neither takes a flag that flips
+#      it into the other.
+#   2. `publish` pins the new instance to the graph's DEFAULT `arc_reference` — the value
+#      of `constant.ARC_REFERENCE` as committed — not to your working copy and not to
+#      whatever the last run used. `nv-publish` therefore prints the pin, and `nv-pin`
+#      exists so you can check it (and what it is missing) in one command beforehand.
+#      The sharp edge USED to be that `ddi.run` merged `--set` overrides without validating
+#      the key, so a graph passing a knob the pinned revision predates ran the old behaviour
+#      silently. `ddi.run` now validates each key against what the config's `kind:` reads
+#      and raises otherwise — but only against the revision executing it, which is the
+#      PINNED one, not your checkout. So a graph that adds an override still has to be
+#      judged against the pin: below it the job fails loudly instead of lying, and
+#      `--set-unchecked` (the deliberate bypass) is back to lying by design. Check `nv-pin`
+#      before publishing anything that adds an override.
+#
+# Starting, stopping and restarting an instance is NOT scriptable from here: vh3's CLI
+# publishes graphs and has no run-control command. Use the URL `nv-publish` prints.
+#
+# Included by the root Makefile; also usable directly as `make -f Makefile.nirvana <target>`.
+
+.PHONY: nv-build nv-list nv-check nv-publish nv-pin nv-status nv-watch \
+        nv-require-graph nv-guard nv-comment repro-pin help-nirvana
+
+# `nirvana/` is a separate `ya make` project whose graphs run this repo's code on GPUs.
+# Every value below is derived, not restated, so nothing here can go stale independently
+# of the source it describes.
+NV_DIR ?= nirvana
+NV_BIN ?= ./bin/bin
+
+# Re-entry point for recursive calls (`nv-require-graph` prints the list via $(MAKE)).
+# Resolves to the root Makefile when included and to this file when run with `-f`, so both
+# entry paths work without either knowing about the other.
+NV_SELF = $(firstword $(MAKEFILE_LIST))
+
+# Every publishable entry point, as `<module>.<func>` — a function carrying the
+# `@vh3.decorator.graph` decorator. Derived from the source so a new row in
+# `nirvana/graphs/*.py` appears in `make nv-list` with no Makefile edit, the same
+# contract `exp-%` gives a new YAML. Helper functions (`_gap_row`, `build_ddi_pipeline`)
+# are not decorated and so are correctly absent.
+# (`[^A-Za-z0-9_].*` rather than the obvious `\(.*` to cut the argument list: an unbalanced
+# `(` inside a `$(shell ...)` is a make parse error, not an awk one.)
+NV_GRAPHS = $(shell awk '/^@vh3\.decorator\.graph/ {g=1} g && /^def / {n=$$2; sub(/[^A-Za-z0-9_].*$$/, "", n); m=FILENAME; sub(/.*\//, "", m); sub(/\.py$$/, "", m); print m "." n; g=0}' $(NV_DIR)/graphs/*.py)
+
+# Arcadia package the graphs are imported as, e.g. `junk.alexkay28.ddi.nirvana.graphs`.
+# Read out of the PEERDIR the build itself uses, so moving this project in Arcadia moves
+# the target with it (a wrong prefix is otherwise a confusing "graph not found" from a
+# `publish` that never looked at your file).
+NV_PKG = $(shell awk '/nirvana\/graphs$$/ {gsub(/[ \t]/, "", $$0); gsub(/\//, ".", $$0); print; exit}' $(NV_DIR)/bin/ya.make)
+
+# GRAPH=<short function name> -> the module(s) declaring it -> the fully-qualified path
+# `publish` wants. Short name in, long name out: nobody should have to type or remember
+# which of the four graph modules a row lives in.
+NV_MODULES = $(patsubst %.$(GRAPH),%,$(filter %.$(GRAPH),$(NV_GRAPHS)))
+NV_FQN = $(NV_PKG).$(firstword $(NV_MODULES)).$(GRAPH)
+
+# Extra flags for the REAL publish only. `--set-main` (what the module docstrings use)
+# additionally points the graph's "main" version at what you just published; the new
+# instance URL is printed either way, so it is opt-in rather than default.
+NV_PUBLISH_FLAGS ?=
+
+# The revision every published instance ships to its jobs, read from its single source of
+# truth. See that constant's comment block for why it is load-bearing.
+NV_ARC_REF = $(shell sed -n 's/^ARC_REFERENCE = "\(.*\)"/\1/p' $(NV_DIR)/common/constant.py)
+NV_ARC_TIP = $(shell arc rev-parse HEAD 2>/dev/null)
+NV_ARC_BRANCH = $(shell arc info 2>/dev/null | sed -n 's/^branch: //p')
+
+# Monitoring. Every graph here publishes into one shared workflow named
+# `ALIGNMENT-2445 | [DDI] Serverless Inference`, so one name filter covers the project.
+# NVT_ARGS is a pass-through: `make nv-status NVT_ARGS=--json` for machine-readable output
+# (`--json` wins over `-1`).
+NVT ?= $(HOME)/arcadia/junk/alexkay28/tools/nvt/nvt
+NV_FILTER ?= %DDI%
+NVT_ARGS ?=
+
+# What a job actually executes, and therefore what a pin/tip gap has to be judged against.
+# NOT just `ddi/`: a job's block runs `make yt-fetch` / `make finetune` / `make exp-quality`
+# from the exported tree, so the Makefiles are job-side too, and `ddi.run` reads its config
+# out of `experiments/*.yaml` at run time. Everything under `nirvana/` is the opposite —
+# graph-side, baked into the block's run_command when you publish — so a change there
+# reaches a run by republishing, never through the pin.
+NV_JOB_PATHS ?= ddi/ experiments/ Makefile Makefile.exp
+
+help-nirvana:
+	@echo "nirvana (Makefile.nirvana) — GPU runs:"
+	@echo "  make nv-list                       # every publishable graph entry point"
+	@echo "  make nv-pin                        # arc_reference the next publish would ship, vs the branch tip"
+	@echo "  make nv-check GRAPH=<name>         # build + DRY-RUN publish: validates, publishes NOTHING"
+	@echo "  make nv-publish GRAPH=<name>       # build + REAL publish; prints the new instance URL"
+	@echo "                                     # stamps the instance comment; [NOTE=... NV_PUBLISH_FLAGS=--set-main]"
+	@echo "  make nv-comment INSTANCE=<id> GRAPH=<name> [NOTE=...]"
+	@echo "                                     # re-stamp an existing instance (e.g. mark it SUPERSEDED)"
+	@echo "  make repro-pin INSTANCE=<uuid>     # which revision a published run executed, and the"
+	@echo "                                     # arc checkout that reproduces it (reads the comment)"
+	@echo "  make nv-status                     # what this project has running now [NVT_ARGS=--json]"
+	@echo "  make nv-watch                      # the same, live (curses TUI; humans only)"
+	@echo "  make nv-guard                      # for a SCHEDULER: exit 0 quiet / 1 new failure / 2 could not look"
+	@echo "                                     # stateful — it consumes the alert. To look, use nv-status"
+
+nv-build:
+	cd $(NV_DIR) && ya make -r
+
+# Derived from the decorators, so it cannot drift from the source. `(module)` is shown
+# only because `publish` needs it — you never have to type it, GRAPH= takes the short name.
+nv-list:
+	@echo "publishable graphs — pass one as GRAPH= to nv-check / nv-publish:"
+	@for g in $(NV_GRAPHS); do echo "$$g"; done | \
+	    awk -F. '{ printf "  %-36s (%s)\n", $$2, $$1 }' | sort
+	@echo ""
+	@echo "package $(NV_PKG).<module>.<name>; all publish into one workflow,"
+	@echo "ALIGNMENT-2445 | [DDI] Serverless Inference"
+
+# Shared guard for the GRAPH=-taking targets. First prerequisite everywhere, so a typo
+# costs a message instead of a build. Resolution is by short name across every graph
+# module, hence the ambiguity arm: two modules could declare the same function name.
+nv-require-graph:
+	@test -n "$(GRAPH)" || (echo "usage: make $(MAKECMDGOALS) GRAPH=<entry-point>" && \
+	    echo "" && $(MAKE) --no-print-directory -f $(NV_SELF) nv-list && exit 2)
+	@test -n "$(NV_MODULES)" || (echo "no such graph: $(GRAPH)" && \
+	    echo "" && $(MAKE) --no-print-directory -f $(NV_SELF) nv-list && exit 2)
+	@test $(words $(NV_MODULES)) -eq 1 || \
+	    (echo "ambiguous graph $(GRAPH): declared in $(NV_MODULES)" && \
+	     echo "disambiguate by renaming one of them; publish takes a single module path" && exit 2)
+
+# Validation only. Builds the vh3 binary and runs `publish --dry-run`, which resolves the
+# graph, builds its resources and checks it end to end without creating anything in
+# Nirvana. Safe to run against a workflow with live GPU work in it.
+nv-check: nv-require-graph nv-build
+	@echo "DRY RUN (validate only, publishes nothing): $(NV_FQN)"
+	cd $(NV_DIR) && $(NV_BIN) publish --dry-run $(NV_FQN)
+
+# The real thing. Runs the dry run first (it is ~2s and turns a broken graph into a
+# validation error instead of a published-but-wrong instance), then publishes, stamps the
+# instance with its identity comment, and prints the URL.
+#
+# The comment matters more here than it would elsewhere: every row publishes into ONE
+# workflow, so all instances share a name and are otherwise told apart only by uuid. See
+# nv-comment.py. NOTE= adds a trailing field for a row whose recipe differs from its
+# siblings (`NOTE='frozen trunk: top 8/64 layers, NOT a full finetune'`).
+#
+# `--print-ref url` puts the instance URL on the last line of stdout, which is where the
+# instance id comes from. Stamping is deliberately non-fatal: a failed comment must never
+# turn a successful publish into a failed target, because the instance already exists by
+# then and the caller needs its URL.
+NOTE ?=
+
+nv-publish: nv-check
+	@echo ""
+	@echo "REAL PUBLISH: $(NV_FQN)"
+	@echo "  new instance in workflow ALIGNMENT-2445 | [DDI] Serverless Inference"
+	@echo "  pinned to arc_reference $(NV_ARC_REF) (constant.ARC_REFERENCE, NOT your working copy)"
+	@echo "  it will NOT start on its own — open the URL below and start it"
+	@out="$$(cd $(NV_DIR) && $(NV_BIN) publish --print-ref url $(NV_PUBLISH_FLAGS) $(NV_FQN))"; \
+	rc=$$?; echo "$$out"; test $$rc -eq 0 || exit $$rc; \
+	url="$$(echo "$$out" | grep -o 'https://nirvana[^ ]*' | tail -1)"; \
+	inst="$$(echo "$$url" | sed -n 's#.*/\([0-9a-f-]\{36\}\)/graph#\1#p')"; \
+	if test -n "$$inst"; then \
+	    ./nv-comment.py --instance "$$inst" --graph "$(GRAPH)" \
+	        --arc-ref "$(NV_ARC_REF)" $(if $(NOTE),--note "$(NOTE)") \
+	    || echo "WARN: publish succeeded but the identity comment could not be set"; \
+	else \
+	    echo "WARN: could not parse an instance id out of the publish output; comment not set"; \
+	fi
+
+# Re-stamp an EXISTING instance's identity comment — `nv-publish` already does this for
+# anything it creates, so this is for instances published before it did, and for marking an
+# instance superseded after you replace it (NOTE='SUPERSEDED by <id> (why)'). The model is
+# read back out of the instance, so the comment cannot disagree with what it runs.
+nv-comment:
+	@test -n "$(INSTANCE)" || (echo "usage: make nv-comment INSTANCE=<id> GRAPH=<entry-point> [NOTE=...]" && exit 2)
+	@test -n "$(GRAPH)" || (echo "usage: make nv-comment INSTANCE=<id> GRAPH=<entry-point> [NOTE=...]" && exit 2)
+	@./nv-comment.py --instance "$(INSTANCE)" --graph "$(GRAPH)" \
+	    --arc-ref "$(NV_ARC_REF)" $(if $(NOTE),--note "$(NOTE)")
+
+# The inverse of nv-pin: nv-pin says what the NEXT publish would ship, repro-pin says what
+# an EXISTING instance already shipped — i.e. how to get back to the code behind a number
+# somebody published.
+#
+# It has to go to Nirvana for that, and this is the part worth stating plainly: the
+# revision is NOT in the summary JSON. `ddi.aggregate` stamps every summary with `git_sha`,
+# and on a Nirvana job that field reads the literal `not-a-git-repo` — the job runs from an
+# `arc export`, a plain directory tree with no VCS metadata for `ddi/provenance.py` to
+# read. The instance comment written at publish time is the only record, which is why
+# `nv-publish` stamps it and why losing it loses the provenance.
+#
+# The format lives in nv-comment.py (one parser for the line it writes, so the two halves
+# cannot drift); this target is a wrapper that supplies the usage message.
+repro-pin:
+	@test -n "$(INSTANCE)" || (echo "usage: make repro-pin INSTANCE=<workflow-instance-id>" && \
+	    echo "" && \
+	    echo "the id is the uuid in an instance URL:" && \
+	    echo "  https://nirvana.yandex-team.ru/flow/<definition>/<INSTANCE>/graph" && \
+	    echo "run 'make nv-status' to list this project's instances." && exit 2)
+	@./nv-comment.py --instance "$(INSTANCE)" --read
+
+# What a publish would ship, and what it would leave behind. The job-side paths are called
+# out on their own (see NV_JOB_PATHS): a pin/tip difference that does not touch them changes
+# nothing about how a run behaves, and is not a reason to restart running work.
+nv-pin:
+	@echo "pinned arc_reference : $(NV_ARC_REF)"
+	@echo "                       ($(NV_DIR)/common/constant.py — what the next publish ships)"
+	@if test -z "$(NV_ARC_TIP)"; then \
+	    echo "branch tip           : unavailable (no arc repo here)"; \
+	else \
+	    echo "branch tip           : $(NV_ARC_TIP) ($(NV_ARC_BRANCH))"; \
+	    if test "$(NV_ARC_REF)" = "$(NV_ARC_TIP)"; then \
+	        echo ""; echo "in sync — a publish ships exactly the branch tip."; \
+	    else \
+	        echo ""; echo "commits on the branch that the pin does NOT include:"; \
+	        log="$$(arc log --oneline $(NV_ARC_REF)..HEAD 2>/dev/null)"; \
+	        if test -n "$$log"; then echo "$$log" | sed 's/^/  /'; \
+	        else echo "  (none, or the pin is not an ancestor of HEAD)"; fi; \
+	        echo ""; echo "job-side code ($(NV_JOB_PATHS)) between the pin and the tip:"; \
+	        d="$$(arc diff --stat $(NV_ARC_REF) HEAD -- $(NV_JOB_PATHS) 2>/dev/null)"; \
+	        if test -n "$$d"; then echo "$$d" | sed 's/^/  /'; \
+	            echo "  -> a run on the pin executes DIFFERENT job code than your checkout."; \
+	        else \
+	            echo "  (identical — the gap is graph-side only (nirvana/), so running work"; \
+	            echo "   does not need restarting for it)"; \
+	        fi; \
+	    fi; \
+	fi
+
+# Read-only look at this project's running graphs. Deliberately NOT `nvt --check`: that
+# mode is stateful and reports each problem once, so a "just look" run silently consumes
+# the alert a guard was supposed to fire on. `-1` (and NVT_ARGS=--json) only read.
+#
+# Expect crit rows reading "Nx its longest recent success" on the 8-GPU finetunes: the
+# baseline is per workflow, this one hosts ~1h evals and ~4.5h finetunes together, and the
+# ratio is meaningless across the two. Read the elapsed time against what that row costs.
+nv-status:
+	@test -x $(NVT) || (echo "nvt not found at $(NVT) — override with NVT=<path>" && exit 2)
+	@$(NVT) -1 -f '$(NV_FILTER)' $(NVT_ARGS)
+
+# Convenience wrapper only. THE SCHEDULER SHOULD CALL ./nv-guard.sh DIRECTLY.
+#
+# The guard's whole contract is its exit code — 0 nothing new / 1 new failure / 2 could not
+# look — and that contract cannot survive `make`: make collapses every recipe failure to
+# its own exit 2, so a target exiting 1 makes `make` exit 2 and "new failure" becomes
+# indistinguishable from "the API is down". Verified here, not assumed. The logic therefore
+# lives in ./nv-guard.sh, and this target exists so `make nv-guard` does the expected thing
+# interactively. Read its stdout, not make's status.
+#
+# `nvt --check` is STATEFUL AND CONSUMES THE ALERT — see the script's header. To look
+# without consuming, use `nv-status`.
+NV_GUARD_ARGS ?=
+
+nv-guard:
+	@NVT='$(NVT)' NV_FILTER='$(NV_FILTER)' ./nv-guard.sh $(NV_GUARD_ARGS)
+
+# Same data, live. This is a curses TUI that takes over the terminal until `q` — run it
+# from a terminal, never from a script or an agent.
+nv-watch:
+	@test -x $(NVT) || (echo "nvt not found at $(NVT) — override with NVT=<path>" && exit 2)
+	@$(NVT) -f '$(NV_FILTER)'

@@ -9,15 +9,12 @@ Cache entries are keyed by `sha256(model_id, dtype, doc_text)[:16]`. Including m
 prevents cross-model / cross-precision collisions (RoPE-encoded KVs from Qwen bf16 must not be
 handed back on a Llama fp16 query).
 
-Storage: one file per key under a caller-supplied directory, each a `torch.save`-serialised
-dict `{"k": [layer_tensors...], "v": [layer_tensors...], "meta": {...}}`. Writes are atomic
-(`.tmp` + `os.replace`) so a concurrent reader never sees a partially-written file; readers
-that observe a truncated payload raise loudly rather than silently missing (a torn file is a
-bug, not a cache miss).
+Storage layout and the atomic-write contract are stated where they are implemented, on
+`DocCache` and `DocCache.put`.
 
-The runner in `ddi/runners/phase4_cache_correctness.py` uses this alongside `compute_doc_kv`
-to check the acceptance criterion for Phase 4.2: a cache hit yields KV blocks identical to the
-cold compute within bf16 tolerance.
+The Phase 4.2 acceptance criterion — a cache hit yields KV blocks identical to the cold
+compute within bf16 tolerance — is checked by the `kind: cache task: correctness` cell in
+`ddi/run.py`, which drives this module alongside `compute_doc_kv`.
 """
 
 from __future__ import annotations
@@ -63,7 +60,11 @@ def compute_key(model_id: str, dtype: torch.dtype, doc_text: str) -> str:
 
 
 class DocCache:
-    """Directory-of-files KV cache. One `<key>.pt` per document; atomic writes via `.tmp`."""
+    """Directory-of-files KV cache: one `<key>.pt` per document under a caller-supplied
+    directory, each a `torch.save`-serialised dict
+    `{"k": [layer_tensors...], "v": [layer_tensors...], "meta": {...}}`. Writes are atomic
+    (`.tmp` + `os.replace`); see `put`.
+    """
 
     def __init__(self, cache_dir: Path):
         self.cache_dir = Path(cache_dir)
@@ -85,7 +86,8 @@ class DocCache:
         # WHY weights_only=False: we serialise our own dict (tensors + str meta), not
         # untrusted third-party checkpoints. weights_only=True refuses arbitrary dicts.
         blob: dict[str, Any] = torch.load(path, map_location="cpu", weights_only=False)
-        # Fail loudly on structural damage — see module docstring; a torn file is a bug.
+        # Fail loudly on structural damage: a torn file is a bug, not a cache miss, so a
+        # truncated payload must raise rather than degrade into a silent recompute.
         if not isinstance(blob, dict) or "k" not in blob or "v" not in blob or "meta" not in blob:
             raise ValueError(f"cache file {path} is malformed: missing k/v/meta keys")
         meta = blob["meta"]

@@ -5,7 +5,9 @@
 # (tracking: #75) — same 108-cell shape either way.
 #
 # 3 masks x 6 Ns x 3 Ls x 2 backends = 108 cells. One table per timing metric,
-# split into blocks by (L, backend) so each block is a clean rows=mask, cols=N grid.
+# split into blocks by (L, backend) so each block is a clean mask x N grid. That split is
+# the JSON body's own shape -- `{model: {L: {backend: {mask: {N: value}}}}}` -- not a knob:
+# the tables below used to carry `split_by: [L, backend]`, which no code read.
 #
 # fa2 cells may fail on machines without flash-attn (blocked by #70); the runner
 # annotates rather than aborting.
@@ -20,37 +22,24 @@ backends: [sdpa, fa2]
 masks: [full, ddi_qf, blind]
 n_repeats: 5
 warmup: 3
-metrics: [ttft, tpot, sparsity, analytical, realized, realization]
+
+# NO top-level `metrics:` here, deliberately. `run_timing` does not read one -- every
+# timing cell unconditionally writes ftt_median_ms / tpot_median_ms / mask_sparsity /
+# analytical_speedup, and which of those a table renders is `report.tables[].metric`
+# below. The list that used to sit here named six metrics (including the two DERIVED
+# ones, which have no store rows at all) and selected none of them.
 
 report:
   tables:
     - kind: timing
-      rows: mask
-      cols: N
       metric: ttft
-      split_by: [L, backend]
     - kind: timing
-      rows: mask
-      cols: N
       metric: tpot
-      split_by: [L, backend]
     - kind: timing
-      rows: mask
-      cols: N
       metric: sparsity
-      split_by: [L, backend]
     - kind: timing
-      rows: mask
-      cols: N
       metric: analytical
-      split_by: [L, backend]
     - kind: timing
-      rows: mask
-      cols: N
       metric: realized
-      split_by: [L, backend]
     - kind: timing
-      rows: mask
-      cols: N
       metric: realization
-      split_by: [L, backend]

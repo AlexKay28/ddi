@@ -20,9 +20,10 @@ Ns: [3, 9, 25]
 Ls: [512]
 n_queries_per_doc: 5
 
+# The emitted body is `{model: {mode: {L: {N: value}}}}` -- fixed per kind. The `rows:
+# mode` / `cols: N` pair that used to sit here was read by nothing and was also wrong
+# (it omitted the L axis entirely).
 report:
   tables:
     - kind: correctness
-      rows: mode
-      cols: N
       metric: max_abs_logit_diff

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -50,8 +49,25 @@ def test_register_and_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_list_datasets_includes_registered_loaders() -> None:
     names = list_datasets()
     assert "synthetic_qa" in names
-    assert "nq" in names
+    assert "hotpot_qa" in names
+    assert "musique" in names
     assert names == sorted(names)
+
+
+def test_deleted_loaders_are_not_registered() -> None:
+    """`nq` and `kilt_nq` must not come back without the work that makes them measure.
+
+    `nq` yields no documents at all, so every DDI mask variant coerces to `full` and the
+    cell measures nothing by construction. `kilt_nq`'s documents were Wikipedia titles
+    rather than passage bodies (review R1), which pins the `full - blind` headroom near
+    zero for reasons unrelated to the mask. Both were deleted in VIBEQUEUE-16; the
+    post-mortems are in CHANGELOG.md under 2026-08-08. Re-registering either one under the
+    same name would silently make old, void store rows collectable again — see
+    `ddi.aggregate._QUALITY_DROPPED_DATASETS`, which is the other half of this guard.
+    """
+    names = list_datasets()
+    assert "nq" not in names
+    assert "kilt_nq" not in names
 
 
 # ---------------------------------------------------------------------------
@@ -214,25 +230,6 @@ def test_synthetic_manifest_independent_per_seed(manifest_root: Path) -> None:
     assert (manifest_root / "synthetic_qa__seed2.json").exists()
 
 
-# ---------------------------------------------------------------------------
-# NQ integration — gated so unit runs stay offline
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.skipif(
-    os.environ.get("DDI_INTEGRATION") != "1",
-    reason="NQ loader hits HuggingFace; opt in with DDI_INTEGRATION=1",
-)
-def test_nq_load_first_record() -> None:
-    stream = load("nq", "val", seed=0)
-    rec = next(iter(stream))
-
-    assert isinstance(rec["id"], str) and rec["id"]
-    assert rec["info_contexts"] == []
-    assert len(rec["dialog"]) == 2
-    assert rec["dialog"][0]["role"] == "user"
-    assert rec["dialog"][1]["role"] == "assistant"
-    assert isinstance(rec["possible_answers"], list) and rec["possible_answers"]
-    assert rec["hop_type"] == "single"
-    assert rec["gold_position"] is None
-    assert isinstance(rec["meta"], dict)
+# The NQ integration test that used to live here went with the `nq` loader in
+# VIBEQUEUE-16. Its central assertion was `rec["info_contexts"] == []`, which is the whole
+# reason the dataset was deleted: it asserted that the loader delivered no documents.

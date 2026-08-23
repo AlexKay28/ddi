@@ -6,6 +6,7 @@ A real dataset that runs without network: tests and smoke runs stay hermetic. De
 
 from __future__ import annotations
 
+import os
 import random
 from collections.abc import Iterator
 
@@ -13,11 +14,43 @@ from ddi.data.loaders import Split, register_loader
 from ddi.data.manifest import validate_or_write
 from ddi.data.splits import hash_split, split_ids
 
-_N_RECORDS = 100
 _VAL_FRAC = 0.20
 _TEST_FRAC = 0.20
-_DOCS_PER_RECORD = 3
+
+# Env-overridable so the document-count axis (VIBEQUEUE-2 rows 14-15) needs no code
+# change, and so the val split can be made large enough to measure anything: at the
+# hardcoded 100 records, `val_frac=0.20` yields **20 val records**, which is what
+# `max_records: 500` was actually evaluating on this dataset. A metric computed over
+# 20 records moves in steps of 0.05 and cannot resolve a parity claim
+# (VIBEQUEUE-2 review, issue R7).
+_ENV_N_RECORDS = "DDI_SYNTHETIC_N_RECORDS"
+_ENV_DOCS_PER_RECORD = "DDI_SYNTHETIC_DOCS_PER_RECORD"
+_DEFAULT_N_RECORDS = 100
+_DEFAULT_DOCS_PER_RECORD = 3
 _DOC_WORDS = 12
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer, got {raw!r}") from exc
+    if value < 1:
+        raise ValueError(f"{name} must be >= 1, got {value}")
+    return value
+
+
+def n_records() -> int:
+    """Total generated records (train+val+test), default 100."""
+    return _env_int(_ENV_N_RECORDS, _DEFAULT_N_RECORDS)
+
+
+def docs_per_record() -> int:
+    """Documents per record, default 3. Raising this is the controlled document-load axis."""
+    return _env_int(_ENV_DOCS_PER_RECORD, _DEFAULT_DOCS_PER_RECORD)
 _VOCAB = (
     "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november "
     "oscar papa quebec romeo sierra tango uniform victor whiskey xray yankee zulu"
@@ -33,10 +66,11 @@ def _make_record(record_idx: int, seed: int) -> dict:
     rng = _record_rng(seed, record_idx)
     answer_prefix = f"answer_{record_idx:04d}_"
     answer = f"{answer_prefix}{rng.randint(0, 9999):04d}"
-    gold_doc_idx = rng.randrange(_DOCS_PER_RECORD)
+    n_docs = docs_per_record()
+    gold_doc_idx = rng.randrange(n_docs)
 
     docs: list[str] = []
-    for d in range(_DOCS_PER_RECORD):
+    for d in range(n_docs):
         words = [rng.choice(_VOCAB) for _ in range(_DOC_WORDS)]
         if d == gold_doc_idx:
             insert_pos = rng.randrange(len(words) + 1)
@@ -65,12 +99,18 @@ def _make_record(record_idx: int, seed: int) -> dict:
         "possible_answers": [answer],
         "hop_type": "single",
         "gold_position": None,
-        "meta": {"gold_doc_idx": gold_doc_idx, "answer_prefix": answer_prefix},
+        # `self_instructed` tells ddi.prompt not to wrap the question again — the
+        # question above already names the passages and demands a bare token.
+        "meta": {
+            "gold_doc_idx": gold_doc_idx,
+            "answer_prefix": answer_prefix,
+            "self_instructed": True,
+        },
     }
 
 
 def _all_records(seed: int) -> list[dict]:
-    return [_make_record(i, seed) for i in range(_N_RECORDS)]
+    return [_make_record(i, seed) for i in range(n_records())]
 
 
 @register_loader("synthetic_qa")

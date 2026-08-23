@@ -29,10 +29,10 @@ from __future__ import annotations
 import contextlib
 import os
 import sys
+from datetime import timedelta
 from itertools import zip_longest
 from pathlib import Path
 
-import bitsandbytes as bnb
 import torch
 import torch.distributed as dist
 
@@ -40,6 +40,7 @@ from ddi import inference
 from ddi.data import load as load_dataset
 from ddi.masks import build_mask, to_additive
 from ddi.positions import build_positions
+from ddi.prompt import encode_record
 from ddi.provenance import Provenance
 from ddi.store import append
 
@@ -94,32 +95,13 @@ def _holdout_split(records: list[dict], held_out_frac: float) -> tuple[list[dict
 def _encode_record(tokenizer, record: dict) -> tuple[torch.Tensor, list[int], int, int]:
     """Return (input_ids [1,T], doc_lengths, query_len, answer_len) for one record.
 
-    The chat template is applied to the ``(role, content)`` list up to (but not
-    including) the assistant answer; the raw answer text is appended after.
-    Matches ``ddi/run.py::_quality_cell``'s tokenization exactly.
+    Thin alias for `ddi.prompt.encode_record`, kept because `ddi/diagnose_grads.py`
+    imports this name. The training path deliberately owns no tokenisation of its own:
+    it has to match the eval and perplexity paths token for token, and the way that
+    guarantee was previously stated — a docstring claiming to match
+    ``ddi/run.py::_quality_cell`` "exactly" — is not a guarantee anyone can check.
     """
-    doc_texts = list(record["info_contexts"])
-    user_dialog = record["dialog"][:-1]
-    answer_text = record["dialog"][-1]["content"]
-
-    query_text = tokenizer.apply_chat_template(
-        user_dialog, tokenize=False, add_generation_prompt=True
-    )
-    doc_id_tensors = [
-        tokenizer(d, return_tensors="pt", add_special_tokens=False).input_ids
-        for d in doc_texts
-    ]
-    doc_lengths = [int(t.shape[-1]) for t in doc_id_tensors]
-    query_ids = tokenizer(
-        query_text, return_tensors="pt", add_special_tokens=False
-    ).input_ids
-    answer_ids = tokenizer(
-        answer_text, return_tensors="pt", add_special_tokens=False
-    ).input_ids
-    query_len = int(query_ids.shape[-1])
-    answer_len = int(answer_ids.shape[-1])
-    full_ids = torch.cat(doc_id_tensors + [query_ids, answer_ids], dim=-1)
-    return full_ids, doc_lengths, query_len, answer_len
+    return encode_record(tokenizer, record)
 
 
 def _build_additive(
@@ -152,8 +134,100 @@ def _maybe_grad_checkpoint(model) -> None:
     if os.environ.get("DDI_GRAD_CHECKPOINT") != "1":
         return
     if hasattr(model, "gradient_checkpointing_enable"):
-        model.gradient_checkpointing_enable()
-        _log("gradient checkpointing enabled on student (DDI_GRAD_CHECKPOINT=1)")
+        # `use_reentrant=False` is not a style preference, it is required as soon as any
+        # part of the model is frozen. Under the reentrant implementation a checkpointed
+        # segment only rebuilds its autograd graph if one of its *inputs* requires grad.
+        # With a frozen trunk the hidden state arriving at the first trainable layer does
+        # not, so every trainable layer under checkpointing would recompute with no graph
+        # and receive no gradient — training would run to completion, log a falling loss
+        # from the frozen teacher/student KL, and save a checkpoint identical to the base
+        # model. The non-reentrant implementation tracks the parameters themselves.
+        model.gradient_checkpointing_enable(
+            gradient_checkpointing_kwargs={"use_reentrant": False}
+        )
+        _log("gradient checkpointing enabled on student (DDI_GRAD_CHECKPOINT=1, non-reentrant)")
+
+
+def _decoder_layers(model) -> tuple[str, torch.nn.ModuleList]:
+    """Locate the decoder's per-layer ``ModuleList``, whatever the architecture calls it.
+
+    Qwen2 puts it at ``model.layers``; the ``qwen3_5`` checkpoints nest it one level
+    deeper. Rather than hardcode either, look for a ``ModuleList`` whose attribute path
+    ends in ``layers`` and that holds more than one module.
+
+    There is usually more than one such list, which is the whole reason this picks rather
+    than takes the first: Qwen3.6-27B-Instruct is multimodal and its vision tower has a
+    ``layers`` list too. Freezing "all but the top 8" of a 27-layer vision encoder while
+    leaving 64 text layers frozen would train the wrong half of the model and still report
+    a falling loss. The decoder stack is the one holding the most parameters by a wide
+    margin, so pick on that rather than on traversal order, which is an implementation
+    detail of whichever transformers version the job happens to have.
+    """
+    candidates = [
+        (name, mod)
+        for name, mod in model.named_modules()
+        if isinstance(mod, torch.nn.ModuleList) and name.split(".")[-1] == "layers" and len(mod) > 1
+    ]
+    if not candidates:
+        raise ValueError(
+            "finetune: could not find the decoder layer list on this model; "
+            "trainable_layers only works on a standard stacked decoder"
+        )
+    name, layers = max(candidates, key=lambda kv: sum(p.numel() for p in kv[1].parameters()))
+    if len(candidates) > 1:
+        _log(
+            "found %d layer stacks (%s); training in %s, the largest"
+            % (len(candidates), ", ".join(n for n, _ in candidates), name)
+        )
+    return name, layers
+
+
+def _freeze_trunk(model, trainable_layers: int) -> int:
+    """Freeze everything but the top ``trainable_layers`` decoder layers. Returns the count.
+
+    This is what makes a 27B student trainable on a 141 GB card. The per-rank cost of a
+    full finetune here is about 8 bytes per parameter — teacher (bf16) + student (bf16) +
+    gradients (bf16) + AdamW8bit moments — and DDP replicates all of it on every rank, so
+    adding GPUs does not reduce it. Freezing the trunk removes the gradient and optimizer
+    terms for everything below the cut, which is the only half of that budget that is
+    actually optional: the two model replicas have to be resident.
+
+    The final norm rides along with the top layers. It sits after the stack, is a single
+    ``hidden_size`` vector, and leaving it frozen while retuning the layers feeding it is
+    the kind of mismatch that costs quality for no memory saving.
+
+    Embeddings and ``lm_head`` stay frozen deliberately. On these vocabularies they are the
+    largest single tensors in the model, and the KL objective already supervises the logits
+    they produce through the layers below.
+    """
+    name, layers = _decoder_layers(model)
+    total = len(layers)
+    if not 1 <= trainable_layers <= total:
+        raise ValueError(
+            f"trainable_layers must be between 1 and {total} for this model, "
+            f"got {trainable_layers}"
+        )
+
+    for p in model.parameters():
+        p.requires_grad_(False)
+    for layer in layers[total - trainable_layers:]:
+        for p in layer.parameters():
+            p.requires_grad_(True)
+
+    # The stack's sibling `norm` — `model.norm` next to `model.layers`.
+    prefix = name.rsplit(".", 1)[0] if "." in name else ""
+    for param_name, p in model.named_parameters():
+        head = param_name.rsplit(".", 1)[0]
+        if head in (f"{prefix}.norm" if prefix else "norm",):
+            p.requires_grad_(True)
+
+    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    frozen = sum(p.numel() for p in model.parameters() if not p.requires_grad)
+    _log(
+        f"frozen trunk: training top {trainable_layers}/{total} layers of {name} "
+        f"({trainable / 1e9:.2f}B trainable, {frozen / 1e9:.2f}B frozen)"
+    )
+    return trainable
 
 
 def _linear_warmup_lr(step: int, warmup_steps: int, base_lr: float) -> float:
@@ -168,17 +242,61 @@ def _flush_optimizer_step(
     warmup_steps: int,
     base_lr: float,
     step_before: int,
-) -> float:
-    """Compute LR for the current step, apply to every param group, step, zero grads.
+    params: list[torch.nn.Parameter],
+    max_grad_norm: float = 1.0,
+) -> tuple[float, bool]:
+    """Clip, step (if the gradients are finite), zero grads.
 
-    Returned LR is what was applied on THIS step. Callers use it for logging.
+    Returns ``(lr_applied, stepped)``. ``stepped`` is False when the step was SKIPPED
+    because its gradients were not finite.
+
+    Both guards exist because of Qwen2.5-7B on 2026-08-07: without them one gradient spike
+    took the weights to NaN between step 1 and step 50, and the run then trained on NaN for
+    another ~3,230 steps, saved the checkpoint, uploaded it to YT, evaluated it, and posted a
+    table of zeros to the ticket. Every layer reported success. Nothing in eight GPU-hours
+    noticed, because nothing was looking.
+
+    Clipping bounds the spike; the finite check makes a spike that still overflows cost one
+    skipped step instead of the whole run. `clip_grad_norm_` returns the PRE-clip norm, which
+    is the value to test — a norm of inf/NaN means the gradients are already poison and
+    stepping on them is what destroys the weights.
     """
+    # `params` is required, and empty is an error rather than a silent pass-through. An
+    # `if params:` that quietly does nothing would disable BOTH guards — no clipping and no
+    # finite check — for a caller that forgot to pass them, which is precisely the
+    # silent-success shape these guards exist to remove.
+    if not params:
+        raise ValueError(
+            "_flush_optimizer_step: `params` is empty; clipping and the non-finite check "
+            "would both be skipped. Pass the trainable parameters."
+        )
+
     current_lr = _linear_warmup_lr(step_before, warmup_steps, base_lr)
     for group in optimizer.param_groups:
         group["lr"] = current_lr
-    optimizer.step()
+
+    grad_norm = torch.nn.utils.clip_grad_norm_(params, max_grad_norm)
+    stepped = bool(torch.isfinite(grad_norm))
+
+    if stepped:
+        optimizer.step()
     optimizer.zero_grad(set_to_none=True)
-    return current_lr
+    return current_lr, stepped
+
+
+def _assert_finite_weights(model, where: str) -> None:
+    """Raise if any parameter is non-finite. The last gate before a checkpoint is written.
+
+    A NaN checkpoint is worse than a failed run: it is indistinguishable from a good one
+    until someone reads the eval numbers, and by then the weights are on YT under a name that
+    claims to be a result. Fail here instead, loudly, while the cause is still on screen.
+    """
+    bad = [name for name, p in model.named_parameters() if not torch.isfinite(p).all()]
+    if bad:
+        raise RuntimeError(
+            f"{where}: {len(bad)} parameter tensor(s) are not finite "
+            f"(first: {bad[0]}). Training diverged; refusing to save a NaN checkpoint."
+        )
 
 
 def _init_ddp(num_gpus: int) -> tuple[int, int, int]:
@@ -217,19 +335,52 @@ def _init_ddp(num_gpus: int) -> tuple[int, int, int]:
     rank = int(os.environ["RANK"])
     torch.cuda.set_device(local_rank)
     if not dist.is_initialized():
-        dist.init_process_group(backend="nccl")
+        # Three sections run on rank 0 alone while every other rank waits in
+        # dist.barrier(): the epoch-0 baseline perplexities, the end-of-epoch
+        # perplexity, and save_pretrained. Each is far longer than NCCL's
+        # 10-minute default watchdog, which aborts the whole job mid-barrier
+        # (ALLREDUCE SeqNum=31 ... ran for 600022 milliseconds before timing
+        # out). The barrier must outlast the longest single-rank section, so
+        # size the timeout for that rather than for a collective.
+        timeout_min = int(os.environ.get("DDI_DIST_TIMEOUT_MIN", "240"))
+        dist.init_process_group(
+            backend="nccl", timeout=timedelta(minutes=timeout_min)
+        )
     return rank, world_size, local_rank
 
 
-def _prefilter_records(records: list[dict]) -> list[dict]:
-    """Drop records that would be silently skipped inside the training loop.
+def _prefilter_records(records: list[dict], min_docs: int = 2) -> list[dict]:
+    """Drop records that cannot produce a gradient.
 
-    Empty ``possible_answers`` records emit no gradient. Under DDP, ranks that
-    skip while others don't would desync the grad-accum counter and deadlock on
-    the next all-reduce. Filtering upfront keeps every rank iterating in lock
-    step. Cheap for single-GPU too — one pass over the list.
+    Two classes:
+
+    * Empty ``possible_answers`` — no answer span, so no loss. Under DDP, ranks that
+      skip while others don't would desync the grad-accum counter and deadlock on
+      the next all-reduce. Filtering upfront keeps every rank iterating in lock step.
+
+    * Fewer than ``min_docs`` documents — ``ddi.masks.build_mask`` collapses the whole
+      ``ddi_qf``/``ddi_strict``/``ddi_bridge_k`` family to plain ``full`` when there is
+      at most one document (masks.py:79-80), because there is nothing to isolate. The
+      student and teacher masks are then *identical*, so the KL is exactly zero and the
+      record contributes nothing but a forward pass on two 4B models. This is not a
+      corner case: the kilt_nq train split is 100% such records (76,945 single-doc plus
+      10,427 with no documents at all), so a four-dataset mix was burning roughly a
+      quarter of its steps on guaranteed-zero gradients (VIBEQUEUE-2 review, issue R4).
+
+    ``min_docs=1`` restores the old behaviour for a caller who wants it.
     """
-    return [r for r in records if r.get("possible_answers")]
+    kept = [
+        r
+        for r in records
+        if r.get("possible_answers") and len(r.get("info_contexts") or []) >= min_docs
+    ]
+    dropped = len(records) - len(kept)
+    if dropped:
+        _log(
+            f"prefilter: dropped {dropped}/{len(records)} records "
+            f"(no answer, or fewer than min_docs={min_docs} documents → zero KL)"
+        )
+    return kept
 
 
 def finetune(
@@ -249,6 +400,11 @@ def finetune(
     log_every: int = 50,
     max_steps: int | None = None,
     num_gpus: int = 1,
+    min_docs: int = 2,
+    trainable_layers: int | None = None,
+    holdout_eval_records: int | None = None,
+    max_grad_norm: float = 1.0,
+    max_skipped_steps: int = 20,
     provenance: Provenance,
     store_path: Path,
 ) -> None:
@@ -274,6 +430,16 @@ def finetune(
         raise ValueError(f"max_steps must be >= 1, got {max_steps}")
     if num_gpus < 1:
         raise ValueError(f"num_gpus must be >= 1, got {num_gpus}")
+    if trainable_layers is not None and trainable_layers < 1:
+        raise ValueError(f"trainable_layers must be >= 1, got {trainable_layers}")
+    if max_grad_norm <= 0:
+        raise ValueError(f"max_grad_norm must be > 0, got {max_grad_norm}")
+    if max_skipped_steps < 0:
+        raise ValueError(f"max_skipped_steps must be >= 0, got {max_skipped_steps}")
+    if holdout_eval_records is not None and holdout_eval_records < 1:
+        raise ValueError(
+            f"holdout_eval_records must be >= 1, got {holdout_eval_records}"
+        )
 
     rank, world_size, local_rank = _init_ddp(num_gpus)
     is_dist = world_size > 1
@@ -291,6 +457,12 @@ def finetune(
 
     student, _ = inference.load(model_name)
     student.train()
+    # Freeze BEFORE the optimizer is built and before the DDP wrap: the optimizer is
+    # constructed from `requires_grad` params, and DDP registers its reducer hooks only on
+    # params that require grad. Freezing afterwards would leave the optimizer holding
+    # tensors it must not step and DDP all-reducing gradients that no longer exist.
+    if trainable_layers is not None:
+        _freeze_trunk(student, trainable_layers)
     _maybe_grad_checkpoint(student)
 
     if is_dist:
@@ -309,11 +481,24 @@ def finetune(
     _log(f"mixing records from {len(datasets)} datasets (seed={seed}, cap={max_records})")
     all_records = _mix_records(datasets, seed, max_records)
     train_records, test_records = _holdout_split(all_records, held_out_frac)
+    # The holdout perplexities run on RANK 0 ONLY, twice (student + teacher), while the
+    # other seven ranks wait at a barrier. At `held_out_frac=0.05` over the full mix that
+    # is ~5.5k records x 2 forward passes on one GPU — 15-40 min of an 8-GPU allocation
+    # doing single-GPU work, and it is re-paid in full every time the job is restarted.
+    # Capping it costs precision on a diagnostic (the headline numbers come from the eval
+    # block, not from here) and buys back most of a restart's cost.
+    pplx_records = test_records
+    if holdout_eval_records is not None and len(test_records) > holdout_eval_records:
+        pplx_records = test_records[:holdout_eval_records]
+        _log(
+            f"holdout perplexity capped to {len(pplx_records)}/{len(test_records)} records "
+            f"(holdout_eval_records={holdout_eval_records})"
+        )
     # Filter records that would be silently skipped, so every DDP rank iterates
     # the loop the same number of times and no one deadlocks on grad-sync
     # (issue #123). Cheap enough to always run; matches the old behavior of
     # skipping such records inside the loop.
-    train_records = _prefilter_records(train_records)
+    train_records = _prefilter_records(train_records, min_docs=min_docs)
     _log(
         f"records: {len(train_records)} train / {len(test_records)} test "
         f"(held_out_frac={held_out_frac})"
@@ -345,6 +530,12 @@ def finetune(
     # bitsandbytes needs CUDA tensors, so CPU-only runs (e.g. unit tests) keep
     # plain torch.optim.AdamW.
     if device.type == "cuda":
+        # Imported here, not at module scope: bitsandbytes is a CUDA-oriented package and is
+        # now an optional dependency (the `train` extra). A top-level import made the whole
+        # trainer module unimportable on any CPU-only host, which is what made
+        # tests/test_finetune.py fail at collection time.
+        import bitsandbytes as bnb
+
         optimizer = bnb.optim.AdamW8bit(trainable_params, lr=lr, weight_decay=weight_decay)
     else:
         optimizer = torch.optim.AdamW(trainable_params, lr=lr, weight_decay=weight_decay)
@@ -372,11 +563,11 @@ def finetune(
 
         _log("computing baseline perplexities on holdout")
         pplx_student_pre = compute_perplexity(
-            student_module, tokenizer, test_records,
+            student_module, tokenizer, pplx_records,
             mask_variant="ddi_qf", layout="sequential",
         )
         pplx_teacher = compute_perplexity(
-            teacher, tokenizer, test_records,
+            teacher, tokenizer, pplx_records,
             mask_variant="full", layout="sequential",
         )
         student_module.train()  # compute_perplexity flipped to eval; restore.
@@ -394,6 +585,9 @@ def finetune(
 
     # ---- Training loop ----
     global_step = 0
+    # Steps dropped because their gradients were not finite. A handful is survivable;
+    # a stream of them means the run is diverging and must not produce a checkpoint.
+    skipped_steps = 0
     # Count backward() calls, not enumerate index — skipped records (empty answer,
     # encode failure) must NOT count toward the grad-accum boundary, otherwise a
     # run of consecutive skips can fire optimizer.step() with stale gradients.
@@ -416,7 +610,10 @@ def finetune(
                         "possible_answers post-prefilter — should not happen; report as a bug."
                     )
                 if is_last_record and accum_since_step > 0:
-                    _flush_optimizer_step(optimizer, warmup_steps, lr, global_step)
+                    _flush_optimizer_step(
+                        optimizer, warmup_steps, lr, global_step,
+                        params=trainable_params, max_grad_norm=max_grad_norm,
+                    )
                     global_step += 1
                     accum_since_step = 0
                     if max_steps is not None and global_step >= max_steps:
@@ -433,7 +630,10 @@ def finetune(
                     ) from exc
                 _log(f"skip record id={record.get('id', '?')}: encode failed: {exc!r}")
                 if is_last_record and accum_since_step > 0:
-                    _flush_optimizer_step(optimizer, warmup_steps, lr, global_step)
+                    _flush_optimizer_step(
+                        optimizer, warmup_steps, lr, global_step,
+                        params=trainable_params, max_grad_norm=max_grad_norm,
+                    )
                     global_step += 1
                     accum_since_step = 0
                     if max_steps is not None and global_step >= max_steps:
@@ -445,7 +645,10 @@ def finetune(
                         f"finetune (DDP): record {record.get('id', '?')} has zero-length answer"
                     )
                 if is_last_record and accum_since_step > 0:
-                    _flush_optimizer_step(optimizer, warmup_steps, lr, global_step)
+                    _flush_optimizer_step(
+                        optimizer, warmup_steps, lr, global_step,
+                        params=trainable_params, max_grad_norm=max_grad_norm,
+                    )
                     global_step += 1
                     accum_since_step = 0
                     if max_steps is not None and global_step >= max_steps:
@@ -495,9 +698,17 @@ def finetune(
             T_temp = kl_temperature
             log_p_student = torch.nn.functional.log_softmax(student_ans / T_temp, dim=-1)
             p_teacher = torch.nn.functional.softmax(teacher_ans / T_temp, dim=-1)
-            # Mean over answer tokens; KL^2 scale so LR is temperature-independent.
+            # Mean over answer tokens; T^2 scale so LR is temperature-independent.
+            #
+            # The [1, L, V] logits are flattened to [L, V] first. `batchmean` divides by
+            # `input.shape[0]`, which on the unflattened tensor is the batch dim (always 1
+            # here) — so the loss was the *sum* over the L answer positions, not the mean,
+            # and the gradient scaled with answer length. Records with long answers
+            # therefore dominated every accumulation window (VIBEQUEUE-2 review, issue R5).
             loss = torch.nn.functional.kl_div(
-                log_p_student, p_teacher, reduction="batchmean"
+                log_p_student.reshape(-1, log_p_student.shape[-1]),
+                p_teacher.reshape(-1, p_teacher.shape[-1]),
+                reduction="batchmean",
             ) * (T_temp ** 2)
 
             # Under DDP, suppress gradient all-reduce on non-boundary micro-steps —
@@ -513,13 +724,47 @@ def finetune(
             accum_since_step += 1
 
             if accum_since_step >= grad_accum_steps or is_last_record:
-                current_lr = _flush_optimizer_step(
-                    optimizer, warmup_steps, lr, global_step
+                current_lr, stepped = _flush_optimizer_step(
+                    optimizer, warmup_steps, lr, global_step,
+                    params=trainable_params, max_grad_norm=max_grad_norm,
                 )
                 global_step += 1
                 accum_since_step = 0
+                if not stepped:
+                    skipped_steps += 1
+                    _log(
+                        f"step {global_step}: non-finite gradients, step SKIPPED "
+                        f"({skipped_steps}/{max_skipped_steps} allowed)"
+                    )
+                    if skipped_steps > max_skipped_steps:
+                        raise RuntimeError(
+                            f"finetune: {skipped_steps} non-finite gradient steps "
+                            f"exceeded max_skipped_steps={max_skipped_steps}; "
+                            "training is diverging, aborting instead of saving "
+                            "a checkpoint that cannot be trusted"
+                        )
 
-                if global_step % log_every == 0 and is_main:
+                # Always record the FIRST and LAST optimizer step of each epoch, not only
+                # every `log_every`-th.
+                #
+                # `log_every` defaults to 50, so a short run recorded *nothing at all*:
+                # VIBEQUEUE-2 row 8 trains on synthetic_qa alone, which yields 57 records
+                # and ~7 optimizer steps per rank, so `global_step % 50` was never 0 and
+                # the store received zero `kl_loss` rows. `ddi.aggregate._collect_finetune_loss`
+                # then reported `backing_rows: 0, data: {}` — a finished 8-GPU job with no
+                # loss curve to inspect, and no error anywhere to say why.
+                #
+                # The last step matters on long runs too: final loss is the number most
+                # likely to be read, and it lands on a multiple of `log_every` only by luck.
+                # Cost is bounded — at most two extra rows per epoch.
+                hit_max_steps = max_steps is not None and global_step >= max_steps
+                should_log = (
+                    global_step == 1
+                    or is_last_record
+                    or hit_max_steps
+                    or global_step % log_every == 0
+                )
+                if should_log and is_main:
                     loss_val = float(loss.detach().item())
                     step_rid = f"{run_prefix}:step={global_step}"
                     append(step_rid, "kl_loss", loss_val, provenance, store=store_path)
@@ -540,7 +785,7 @@ def finetune(
 
             _log(f"epoch {epoch + 1}: computing post-epoch perplexity")
             pplx_post = compute_perplexity(
-                student_module, tokenizer, test_records,
+                student_module, tokenizer, pplx_records,
                 mask_variant="ddi_qf", layout="sequential",
             )
             student_module.train()
@@ -557,6 +802,7 @@ def finetune(
     # ---- Save the trained student as an HF-loadable directory (rank 0 only) ----
     if is_main:
         _log(f"saving checkpoint -> {output_dir}")
+        _assert_finite_weights(student_module, "before saving checkpoint")
         student_module.save_pretrained(output_dir)
         tokenizer.save_pretrained(output_dir)
     if is_dist:

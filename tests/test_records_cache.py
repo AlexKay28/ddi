@@ -47,9 +47,9 @@ def test_write_then_read_roundtrips(cache_root: Path) -> None:
 def test_write_creates_parent_directory(cache_root: Path) -> None:
     # cache_root does not exist yet; writing should mkdir it.
     assert not cache_root.exists()
-    records_cache.write_split("nq", 7, "train", [{"id": "x"}])
+    records_cache.write_split("some_ds", 7, "train", [{"id": "x"}])
     assert cache_root.is_dir()
-    assert records_cache.records_path("nq", 7, "train").is_file()
+    assert records_cache.records_path("some_ds", 7, "train").is_file()
 
 
 def test_has_cached_false_when_missing(cache_root: Path) -> None:
@@ -57,55 +57,55 @@ def test_has_cached_false_when_missing(cache_root: Path) -> None:
 
 
 def test_has_cached_false_when_only_some_splits_present(cache_root: Path) -> None:
-    records_cache.write_split("nq", 0, "train", [{"id": "a"}])
-    records_cache.write_split("nq", 0, "val", [{"id": "b"}])
+    records_cache.write_split("some_ds", 0, "train", [{"id": "a"}])
+    records_cache.write_split("some_ds", 0, "val", [{"id": "b"}])
     # `test` still missing.
-    assert records_cache.has_cached("nq", 0, ("train", "val", "test")) is False
+    assert records_cache.has_cached("some_ds", 0, ("train", "val", "test")) is False
 
 
 def test_has_cached_true_when_all_present(cache_root: Path) -> None:
     for s in ("train", "val", "test"):
-        records_cache.write_split("nq", 0, s, [{"id": s}])
-    assert records_cache.has_cached("nq", 0, ("train", "val", "test")) is True
+        records_cache.write_split("some_ds", 0, s, [{"id": s}])
+    assert records_cache.has_cached("some_ds", 0, ("train", "val", "test")) is True
 
 
 def test_has_cached_false_on_empty_file(cache_root: Path) -> None:
     # Simulates a crashed writer that opened the file but died before writing:
     # if we trust an empty file, downstream yields zero records forever.
     for s in ("train", "val"):
-        records_cache.write_split("nq", 0, s, [{"id": s}])
-    empty = records_cache.records_path("nq", 0, "test")
+        records_cache.write_split("some_ds", 0, s, [{"id": s}])
+    empty = records_cache.records_path("some_ds", 0, "test")
     empty.parent.mkdir(parents=True, exist_ok=True)
     empty.write_bytes(b"")
     assert empty.is_file() and empty.stat().st_size == 0
-    assert records_cache.has_cached("nq", 0, ("train", "val", "test")) is False
+    assert records_cache.has_cached("some_ds", 0, ("train", "val", "test")) is False
 
 
 def test_read_split_tolerates_blank_lines(cache_root: Path) -> None:
-    path = records_cache.records_path("nq", 0, "val")
+    path = records_cache.records_path("some_ds", 0, "val")
     path.parent.mkdir(parents=True, exist_ok=True)
     # Blank lines are common at the end of hand-edited files; they must not
     # surface as an empty-dict record downstream.
     path.write_text('{"id": "a"}\n\n{"id": "b"}\n', encoding="utf-8")
 
-    got = list(records_cache.read_split("nq", 0, "val"))
+    got = list(records_cache.read_split("some_ds", 0, "val"))
     assert got == [{"id": "a"}, {"id": "b"}]
 
 
 def test_write_overwrites_previous_contents(cache_root: Path) -> None:
-    records_cache.write_split("nq", 0, "val", [{"id": "old"}])
-    records_cache.write_split("nq", 0, "val", [{"id": "new1"}, {"id": "new2"}])
+    records_cache.write_split("some_ds", 0, "val", [{"id": "old"}])
+    records_cache.write_split("some_ds", 0, "val", [{"id": "new1"}, {"id": "new2"}])
 
-    got = list(records_cache.read_split("nq", 0, "val"))
+    got = list(records_cache.read_split("some_ds", 0, "val"))
     assert got == [{"id": "new1"}, {"id": "new2"}]
 
 
 def test_seed_and_split_partition_disk_layout(cache_root: Path) -> None:
     # Different seeds and different splits must not collide.
-    records_cache.write_split("nq", 0, "val", [{"id": "s0-val"}])
-    records_cache.write_split("nq", 1, "val", [{"id": "s1-val"}])
-    records_cache.write_split("nq", 0, "test", [{"id": "s0-test"}])
+    records_cache.write_split("some_ds", 0, "val", [{"id": "s0-val"}])
+    records_cache.write_split("some_ds", 1, "val", [{"id": "s1-val"}])
+    records_cache.write_split("some_ds", 0, "test", [{"id": "s0-test"}])
 
-    assert list(records_cache.read_split("nq", 0, "val")) == [{"id": "s0-val"}]
-    assert list(records_cache.read_split("nq", 1, "val")) == [{"id": "s1-val"}]
-    assert list(records_cache.read_split("nq", 0, "test")) == [{"id": "s0-test"}]
+    assert list(records_cache.read_split("some_ds", 0, "val")) == [{"id": "s0-val"}]
+    assert list(records_cache.read_split("some_ds", 1, "val")) == [{"id": "s1-val"}]
+    assert list(records_cache.read_split("some_ds", 0, "test")) == [{"id": "s0-test"}]

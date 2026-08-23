@@ -1,8 +1,15 @@
 """GPU discovery and setup.
 
-Called once at CLI startup (via `ddi.cli.main`) so every runner benefits without needing to
-duplicate the check. Also usable directly as `ddi.gpu.require_cuda()` in code paths that must
-have a GPU (e.g. Phase 3 FA2 timings).
+Called once at startup by `ddi.run.run` (via `_configure_gpu`) so every dispatcher benefits
+without needing to duplicate the check. Also usable directly as `ddi.gpu.require_cuda()` in
+code paths that must have a GPU (e.g. Phase 3 FA2 timings).
+
+This docstring used to name `ddi.cli.main` as the caller. That was true when it was written
+and had silently stopped being true: `ddi/cli.py` imported the deleted `ddi/runners/`
+package, so it could not even be imported, while `pyproject.toml` had moved `ddi-run` to
+`ddi.run:main`. Nothing called `configure()` at all — meaning TF32 was never enabled under
+the timing sweeps that cite it, and `require_gpu` was never enforced. `ddi/cli.py` is now
+deleted; keep this line pointing at whatever actually calls in.
 """
 
 from __future__ import annotations

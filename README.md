@@ -64,10 +64,10 @@ All five variants share one parameterised boolean allow-matrix builder in `ddi/m
 `ddi_bridge_k` sweeps the bridge width between the strict/qf endpoints (not exercised by the
 preprint's C1/C3/C4 experiments — see the scope note below). `blind` is the
 retrieval-measurement control: if a model scores well while seeing no documents, the metric is
-not measuring retrieval. In practice this check flagged `kilt_nq` on both instruct models
-(blind stays within ~10-25 % of `full` across F1/presence/loss) — parametric-memory answers
-dominate on NQ, so `kilt_nq` is treated as informational rather than evidential. See
-[#72's DDI conclusions](https://github.com/AlexKay28/ddi/issues/72#issuecomment-5115470772).
+not measuring retrieval. That control is what removed `kilt_nq` from the grid — `blind` stayed
+within ~10-25 % of `full` across F1/presence/loss on both instruct models, i.e. parametric
+memory was answering NQ questions without the passages. Its loader has since been deleted for a
+separate reason (see §2).
 
 ---
 
@@ -85,15 +85,32 @@ inference / mask code but are not part of the preprint's measurement grid.
 
 ### Datasets
 
-The C1 quality grid runs on four productive datasets plus a null column:
+**Three**, and only three. `ddi.data.list_datasets()` returns exactly
+`['hotpot_qa', 'musique', 'synthetic_qa']`, and that is what `quality.yaml`,
+`cache_restart.yaml` and `finetune.yaml` name (single-sourced graph-side as
+`nirvana/common/constant.EVAL_DATASETS`).
 
-| purpose | dataset |
-|---|---|
-| Parity detection (single-hop retrieval Q&A) | `hotpot_qa`, `musique`, `kilt_nq` |
-| Synthetic single-hop signal (headroom, low variance) | `synthetic_qa` (in-house generator) |
-| Null column (no docs — all masks collapse to full) | `nq` |
+| dataset | shape | what it is for |
+|---|---|---|
+| `hotpot_qa` | 10 passages/query (2 gold + 8 distractors), multi-hop | the workhorse — enough distractors that document isolation can plausibly cost something |
+| `musique` | 20 paragraphs/query, 2–4 hops, author-verified compositionality | the densest context, and the one where cross-document composition should hurt most |
+| `synthetic_qa` | 3 generated docs/record, answer string planted in one | tiny, saturated, hermetic. **Needs no network** — the only loader that does not, which is what `make smoke` runs on |
 
-C3 (timing) and C4 (cache) grids use synthetic tokens — no dataset axis.
+Two datasets were **deleted**, not merely dropped from a list, and both loaders are gone:
+
+- `kilt_nq` — its `info_contexts` were Wikipedia *titles*, not passage bodies (harness review
+  R1). The documents did not contain the answers, so the whole DDI comparison on that column
+  was between three ways of attending to nothing. Restoring it needs the KILT
+  knowledge-source join first.
+- `nq` — NQ Open ships no passages at all, so `info_contexts` was always empty, every DDI
+  variant coerced to `full` (the runner logs `coerced variant ... -> 'full'`), and the
+  aggregator dropped the rows again on the way out. It was a null column in the strict sense
+  of measuring nothing.
+
+Loading either now raises `KeyError: unknown dataset`. Any older config, cache file or
+summary naming them predates this and is not reproducible.
+
+C3 (timing) and C4 cache correctness/throughput use synthetic tokens — no dataset axis.
 
 Multi-hop failure-envelope datasets (MoNaCo / 2WikiMultiHop / `ddi_stress` families) and PCW
 baseline comparisons are **future work** — dropped from preprint scope in
@@ -101,8 +118,8 @@ baseline comparisons are **future work** — dropped from preprint scope in
 
 ### Paper claims
 
-The preprint asserts three claims. C5 (failure envelope), C6 (distractor robustness), and
-the fine-tuning path are out of scope per [#82](https://github.com/AlexKay28/ddi/issues/82).
+The preprint asserts three claims. C5 (failure envelope) and C6 (distractor robustness)
+remain out of scope per [#82](https://github.com/AlexKay28/ddi/issues/82).
 
 | claim | what | evidence |
 |---|---|---|
@@ -110,39 +127,188 @@ the fine-tuning path are out of scope per [#82](https://github.com/AlexKay28/ddi
 | **C3** | Speed: analytical ≠ realized — the gap is the story | measured on both instruct models; realization ratio 0.05–0.4 on `sdpa` |
 | **C4** | Per-document KV cache reuse under restart layout preserves quality and improves throughput | measured on Qwen; restart-vs-sequential parity within `Δ` |
 
+### Fine-tuning is in scope, and is the current campaign
+
+[#82](https://github.com/AlexKay28/ddi/issues/82) put the fine-tuning path out of preprint
+scope, and this README said so long after that stopped being true. It is now the bulk of the
+work: `experiments/finetune.yaml` (`kind: finetune`) trains a student under `ddi_qf` against a
+teacher under `full` by KL on answer-position logits, and of the 38 publishable Nirvana entry
+points in `nirvana/graphs/` (`make nv-list`) the majority are finetune-and-evaluate rows of
+that campaign. `make finetune MODEL=<hf-id> [NUM_GPUS=N]` is its entry point — a separate
+target from `exp-%` because the training step may need `torchrun` while the aggregate step
+stays single-process.
+
+Whether it belongs in the preprint is a scoping decision that has not been revisited. That it
+is what the repo is currently doing is not in question.
+
 ---
 
-## 3. Reproducing the numbers
+## 3. Running it
 
-Every experiment on `main` is one YAML file in [`experiments/`](experiments/) plus one
-`Makefile` line. From a fresh clone:
+### Where the code is
+
+**Arcadia, branch `users/alexkay28/alignment-2445-ddi`, at `junk/alexkay28/ddi`.** Every
+number this repo has published was produced from that branch. `github.com/AlexKay28/ddi` is
+a mirror at most: the issue links throughout this README are a real historical trail and are
+worth reading, but you cannot `git clone` your way to a reproduction, and the CI workflow
+under `.github/` has never gated anything that ran on a GPU here.
 
 ```bash
-# 1. Install (deterministic — resolved from uv.lock).
-git clone https://github.com/AlexKay28/ddi.git
-cd ddi
-uv sync
-
-# 2. Fetch model weights once, cached to a persistent HF_HOME.
-#    No direct HF Hub access? Use `make yt-fetch` instead — same MODEL/HF_HOME contract.
-HF_HOME=/mnt/models make hf-fetch MODEL=Qwen/Qwen2.5-7B-Instruct
-
-# 3. Run an experiment offline; the runner writes a Markdown summary
-#    with a provenance footer. No YAML names a model — pass it via MODEL=.
-HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_HOME=/mnt/models \
-  make exp-c1 MODEL=Qwen/Qwen2.5-7B-Instruct
-
-# 4. Publish the summary as a comment on its tracking issue.
-make publish-summary SUMMARY=logs/c1_summary.md ISSUE=74
+arc checkout users/alexkay28/alignment-2445-ddi
+cd $(arc root)/junk/alexkay28/ddi
 ```
 
-New experiment = new YAML in `experiments/`. `make exp-<name>` picks it up via a
-pattern rule — no `Makefile` edit needed. See:
+### What each entry point needs
 
-- [`experiments/README.md`](experiments/README.md) — index of every YAML with a
-  one-line description and the GitHub issue tracking it.
-- [`experiments/SERVERLESS.md`](experiments/SERVERLESS.md) — one-page operator
-  recipe (container base, HF prefetch, offline mode, one-experiment-per-GPU rule).
+Read this before picking a command. "needs" means *will not work without*.
+
+| entry point | GPU | HF Hub | YT | Nirvana | network |
+|---|---|---|---|---|---|
+| `make setup` | – | – | – | – | PyPI (or `uv`, if installed) |
+| `make test` | – | – | – | – | – |
+| `make lint` | – | – | – | – | – |
+| **`make smoke`** | – | – | – | – | – |
+| `make yt-fetch MODEL=… HF_HOME=…` | – | – | **yes** | – | yes |
+| `make yt-fetch-records` | – | – | **yes** | – | yes |
+| `make hf-fetch MODEL=…` | – | **yes** | – | – | yes |
+| `make exp-<name> MODEL=…` | **yes** | – (weights must already be in `HF_HOME`) | – | – | – |
+| `make finetune MODEL=…` | **yes** (8 for the real rows) | – (same) | – | – | – |
+| `make delta MODEL=… DATASET=… METRIC=…` | – | – | – | – | – |
+| `make nv-list` / `make nv-pin` | – | – | – | – | `nv-pin` reads `arc` locally |
+| `make nv-check GRAPH=…` / `nv-publish` | – | – | – | **yes** | yes |
+| `make repro-pin INSTANCE=…` | – | – | – | **yes** (read-only) | yes |
+| `make nv-status` / `nv-guard` | – | – | – | **yes** (read-only) | yes |
+
+Two consequences worth stating plainly, because the old version of this section did not:
+
+- **`make exp-<name>` requires a GPU and refuses to fall back.** `ddi.run`'s CLI honours
+  `require_gpu:`, which defaults to true, so a sweep cannot quietly run on CPU and emit rows
+  indistinguishable from GPU rows. There is exactly one config that opts out —
+  `experiments/smoke.yaml`.
+- **`hf-fetch` does not work on the hosts this project runs on.** None of them have HF Hub
+  access; that is why `yt-fetch` exists and why every job sets `HF_HUB_OFFLINE=1`. Use
+  `hf-fetch` only from a networked machine when *adding* a model to the YT mirror.
+
+### Steps
+
+**1. Install.** `uv` is not required and is not present on most of these hosts.
+
+```bash
+make setup      # uv sync --extra dev if uv is on PATH, else pip install -r requirements-dev.txt
+```
+
+`requirements-dev.txt` deliberately omits `torch` (the CUDA pin is host-specific — see that
+file's header) and pins `transformers==5.14.1`, which is what the GPU jobs actually ran, not
+what `uv.lock` resolves. Install a torch wheel for your machine separately; a CPU-only one is
+enough for steps 2 and 3.
+
+**2. Check the code imports and the units pass.**
+
+```bash
+make test       # 441 passed, 27 skipped, 2 failed as of 2026-08-08
+```
+
+The two failures are `tests/test_provenance.py` and are environmental: they shell out to
+`git`, and an Arcadia checkout has no `.git`. Everything else must pass.
+
+**3. Run the pipeline end to end, on CPU, in ten seconds.**
+
+```bash
+make smoke
+```
+
+This is the check `make test` cannot be: it drives `ddi.run` → `ddi.store` → `ddi.aggregate`
+under all three masks, through a real `LlamaForCausalLM` forward pass and a real greedy
+decode, and writes `logs/smoke_summary.json`. It needs **no GPU, no HF Hub, no YT and no
+network** — it builds its own 2-layer random model and a byte-level tokenizer locally, from a
+config, downloading nothing. See `experiments/smoke.yaml` and the `smoke` block in
+`Makefile.exp` for why it is built rather than fetched.
+
+Be precise about what it does and does not prove. Its *numbers are meaningless* — random
+weights, so em/f1/presence are ~0 by construction and you cannot read a quality signal out of
+it. What it proves is that the whole path **executes**: real tokenization through the chat
+template, real masked forward passes, a real greedy decode under each variant, real rows in
+the store, and a summary the aggregator can build. That is not a low bar here. The unit suite
+skips every test that needs `transformers` on a host without it (see `tests/fake_models.py`),
+which is the gap two mask bugs shipped through, and the decode crash that lost nine GPU runs
+on 2026-08-06 was a tensor-alignment fault no unit test could see.
+
+To catch a *quality* regression — the class the "prompt never mentioned the documents" bug
+belonged to, where `em` was 0 in every cell of every sweep — point the same YAML at a real
+model on a GPU: `python -m ddi.run experiments/smoke.yaml --model <hf-id>`. It is a
+three-minute version of step 4.
+
+**4. Get the weights, then run a real experiment.** Needs a GPU from here on.
+
+```bash
+HF_HOME=/mnt/models make yt-fetch MODEL=Qwen/Qwen2.5-7B-Instruct
+make yt-fetch-records          # dataset record cache; loaders never touch the Hub on a hit
+
+HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_HOME=/mnt/models \
+  make exp-quality MODEL=Qwen/Qwen2.5-7B-Instruct
+```
+
+The target is `exp-quality`, after `experiments/quality.yaml` — `make exp-<name>` is a
+pattern rule over `experiments/<name>.yaml`, so `make list-experiments` is the authoritative
+list of what you can pass. It writes rows to `results/runs.jsonl` and a **JSON** summary to
+`logs/quality_summary.json` (not Markdown). No YAML names a model; `MODEL=` supplies it, and
+also scopes the summary to that model.
+
+For the GPU-host recipe — container base, offline flags, one-experiment-per-GPU — see
+[`experiments/SERVERLESS.md`](experiments/SERVERLESS.md). For what each YAML measures, see
+[`experiments/README.md`](experiments/README.md).
+
+**5. Run one on the GPU fleet.** `nirvana/graphs/*.py` declares one entry point per grid row;
+publishing one creates an instance you then start from the Nirvana UI.
+
+```bash
+make nv-list                       # every publishable entry point
+make nv-pin                        # the revision the next publish would ship, vs the branch tip
+make nv-check GRAPH=<name>         # dry run: validates, publishes nothing
+make nv-publish GRAPH=<name>       # the real thing; prints the instance URL
+```
+
+`publish -n` is `--dry-run`, **not** `--name` — which is why no target here takes a flag that
+flips one into the other. Read the header of `Makefile.nirvana` before using it.
+
+**6. Re-run exactly what produced a published number.**
+
+Start from the number's Nirvana instance, not from the summary file:
+
+```bash
+make repro-pin INSTANCE=<workflow-instance-uuid>
+```
+
+It prints the instance's identity stamp and the `arc checkout <sha>` that reproduces the code
+it ran, e.g.
+
+```
+graph    : ddi_diagnose_7b_backends
+model    : Qwen/Qwen2.5-7B-Instruct
+arc-ref  : be94ea06ef
+date     : 2026-08-08
+ticket   : VIBEQUEUE-2
+
+reproduce the code this instance ran:
+  arc checkout be94ea06ef
+```
+
+**The revision is not in the summary JSON.** `ddi.aggregate` stamps every summary with a
+`git_sha` field, and for every Nirvana run that field reads the literal string
+`not-a-git-repo`: the job executes from an `arc export`, a plain directory tree with no VCS
+metadata for `ddi/provenance.py` to read. The only surviving record is the **instance
+comment**, written at publish time by `nv-comment.py` out of
+`nirvana/common/constant.ARC_REFERENCE`, in the format
+`<graph> | <model> | <arc-ref> | <date> | <ticket> | <note>`. `make repro-pin` reads it back.
+
+That also means an instance published *without* `make nv-publish` has no revision recorded
+anywhere — `repro-pin` says so and exits non-zero rather than guessing. `publish` writes a
+comment of its own whose Arcadia link points at `rev=-1`, which does not resolve.
+
+Then, from that revision, re-run the row's own command. Each graph block shells out to plain
+`make` inside the exported tree (`make yt-fetch MODEL=…`, `make finetune MODEL=…`,
+`make exp-quality MODEL=…` — see `nirvana/graphs/scripts.py`), so step 4 above *is* the
+reproduction, with `MODEL=` and any `--set` overrides taken from the stamp and the graph.
 
 ---
 

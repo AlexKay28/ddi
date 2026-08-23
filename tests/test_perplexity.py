@@ -14,6 +14,7 @@ import pytest
 import torch
 
 from ddi.perplexity import compute_perplexity  # noqa: I001
+from ddi.prompt import build_query_text
 
 # ---------------------------------------------------------------------------
 # Minimal fakes: tokenizer + model that behave like the ones _quality_cell sees.
@@ -110,7 +111,11 @@ def _expected_perplexity(model: _FakeModel, tok: _FakeTokenizer, records: list[d
     total_tokens = 0
     for record in records:
         docs = record["info_contexts"]
-        query = " ".join(m["content"] for m in record["dialog"][:-1])
+        # Go through the shared builder rather than re-deriving the prompt: the query
+        # block now carries the answer-format instruction (ddi.prompt), and an oracle
+        # that rebuilt the old bare-question text would be testing a prompt the
+        # harness no longer produces.
+        query = build_query_text(tok, record)
         answer = record["dialog"][-1]["content"]
 
         doc_ids = [tok(d).input_ids for d in docs]

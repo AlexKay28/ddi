@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 
 import pytest
+import torch
 
 from ddi import finetune as ddi_finetune
 
@@ -110,15 +111,40 @@ def test_finetune_rejects_empty_datasets(tmp_path: Path) -> None:
         )
 
 
+def _rec(rid: str, answers=("x",), n_docs: int = 2) -> dict:
+    return {
+        "id": rid,
+        "possible_answers": list(answers),
+        "info_contexts": [f"doc {i}" for i in range(n_docs)],
+    }
+
+
 def test_prefilter_records_drops_empty_possible_answers() -> None:
     records = [
-        {"id": "a", "possible_answers": ["x"]},
-        {"id": "b", "possible_answers": []},   # dropped
-        {"id": "c", "possible_answers": ["y", "z"]},
-        {"id": "d"},                            # dropped (missing key)
+        _rec("a"),
+        _rec("b", answers=()),          # dropped: no answer span -> no loss
+        _rec("c", answers=("y", "z")),
+        {"id": "d", "info_contexts": ["doc 0", "doc 1"]},  # dropped (missing key)
     ]
     kept = ddi_finetune._prefilter_records(records)
     assert [r["id"] for r in kept] == ["a", "c"]
+
+
+def test_prefilter_records_drops_zero_gradient_single_doc_records() -> None:
+    """`build_mask` collapses ddi_qf -> full at <=1 doc, so student == teacher, KL == 0.
+
+    Those records cost two 4B forward passes and contribute exactly nothing. The
+    kilt_nq train split is 100% of them (VIBEQUEUE-2 review, issue R4).
+    """
+    records = [_rec("two", n_docs=2), _rec("one", n_docs=1), _rec("none", n_docs=0)]
+    kept = ddi_finetune._prefilter_records(records)
+    assert [r["id"] for r in kept] == ["two"]
+
+
+def test_prefilter_records_min_docs_one_restores_old_behaviour() -> None:
+    records = [_rec("two", n_docs=2), _rec("one", n_docs=1), _rec("none", n_docs=0)]
+    kept = ddi_finetune._prefilter_records(records, min_docs=1)
+    assert [r["id"] for r in kept] == ["two", "one"]
 
 
 def test_init_ddp_single_gpu_returns_zeros_even_under_torchrun_env(
@@ -186,6 +212,123 @@ def test_finetune_rejects_num_gpus_zero(tmp_path: Path) -> None:
             provenance=prov,
             store_path=tmp_path / "runs.jsonl",
         )
+
+
+# ---------------------------------------------------------------------------
+# Frozen trunk (`trainable_layers`) — what makes the 27B fit on a 141 GB card.
+# ---------------------------------------------------------------------------
+
+
+def _stub_decoder(n_layers: int, width: int) -> torch.nn.Module:
+    """A module shaped like a decoder: `model.layers` of `width`-sized linears + a norm."""
+    inner = torch.nn.Module()
+    inner.layers = torch.nn.ModuleList(
+        torch.nn.Linear(width, width) for _ in range(n_layers)
+    )
+    inner.norm = torch.nn.LayerNorm(width)
+    outer = torch.nn.Module()
+    outer.model = inner
+    outer.lm_head = torch.nn.Linear(width, 7)
+    return outer
+
+
+def test_freeze_trunk_trains_only_the_top_layers() -> None:
+    model = _stub_decoder(6, 8)
+    ddi_finetune._freeze_trunk(model, 2)
+
+    trainable = {n for n, p in model.named_parameters() if p.requires_grad}
+    # top two layers (4, 5) + the stack's sibling norm; nothing below, no lm_head
+    assert {n for n in trainable if "layers." in n} == {
+        "model.layers.4.weight", "model.layers.4.bias",
+        "model.layers.5.weight", "model.layers.5.bias",
+    }
+    assert "model.norm.weight" in trainable
+    assert not any(n.startswith("lm_head") for n in trainable)
+
+
+def test_freeze_trunk_rejects_more_layers_than_the_model_has() -> None:
+    model = _stub_decoder(4, 8)
+    with pytest.raises(ValueError, match="between 1 and 4"):
+        ddi_finetune._freeze_trunk(model, 5)
+
+
+def test_decoder_layers_picks_the_biggest_stack_not_the_first() -> None:
+    """Qwen3.6-27B is multimodal: its vision tower has a `layers` list too.
+
+    Traversal order is a transformers implementation detail, so picking the first match
+    could train the vision encoder and leave all 64 text layers frozen — a run that would
+    report a falling loss and save what is effectively the base model.
+    """
+    model = torch.nn.Module()
+    vision = torch.nn.Module()
+    vision.layers = torch.nn.ModuleList(torch.nn.Linear(4, 4) for _ in range(3))
+    text = torch.nn.Module()
+    text.layers = torch.nn.ModuleList(torch.nn.Linear(64, 64) for _ in range(5))
+    # registered vision-first, so `named_modules` yields it first
+    model.vision_tower = vision
+    model.language_model = text
+
+    name, layers = ddi_finetune._decoder_layers(model)
+    assert name == "language_model.layers"
+    assert len(layers) == 5
+
+
+# ---------------------------------------------------------------------------
+# Divergence guards. Without these a single gradient spike takes the weights to
+# NaN, training continues for thousands of steps, and the run saves and uploads a
+# checkpoint that scores zero everywhere while reporting success (2026-08-07, 7B).
+# ---------------------------------------------------------------------------
+
+
+def _one_param_optimizer(value: float, grad: float):
+    p = torch.nn.Parameter(torch.tensor([value]))
+    p.grad = torch.tensor([grad])
+    return p, torch.optim.SGD([p], lr=0.1)
+
+
+def test_flush_step_skips_when_gradients_are_not_finite() -> None:
+    p, opt = _one_param_optimizer(1.0, float("nan"))
+    before = p.detach().clone()
+    _lr, stepped = ddi_finetune._flush_optimizer_step(
+        opt, warmup_steps=0, base_lr=1e-3, step_before=0, params=[p], max_grad_norm=1.0
+    )
+    assert stepped is False
+    # the whole point: a poisoned gradient must not reach the weights
+    assert torch.equal(p.detach(), before)
+    assert torch.isfinite(p).all()
+
+
+def test_flush_step_takes_a_normal_step() -> None:
+    p, opt = _one_param_optimizer(1.0, 0.5)
+    _lr, stepped = ddi_finetune._flush_optimizer_step(
+        opt, warmup_steps=0, base_lr=1e-3, step_before=0, params=[p], max_grad_norm=1.0
+    )
+    assert stepped is True
+    assert not torch.equal(p.detach(), torch.tensor([1.0]))
+    assert torch.isfinite(p).all()
+
+
+def test_flush_step_clips_large_gradients() -> None:
+    """A big-but-finite gradient is clipped, not skipped."""
+    p, opt = _one_param_optimizer(0.0, 1000.0)
+    _lr, stepped = ddi_finetune._flush_optimizer_step(
+        opt, warmup_steps=0, base_lr=1e-3, step_before=0, params=[p], max_grad_norm=1.0
+    )
+    assert stepped is True
+    # clipped to norm 1.0, so SGD(lr=0.1) moves it by at most 0.1
+    assert abs(float(p.detach())) <= 0.1 + 1e-6
+
+
+def test_assert_finite_weights_raises_on_nan() -> None:
+    m = torch.nn.Linear(3, 3)
+    with torch.no_grad():
+        m.weight[0, 0] = float("nan")
+    with pytest.raises(RuntimeError, match="not finite"):
+        ddi_finetune._assert_finite_weights(m, "test")
+
+
+def test_assert_finite_weights_passes_on_a_healthy_model() -> None:
+    ddi_finetune._assert_finite_weights(torch.nn.Linear(3, 3), "test")
 
 
 # ---------------------------------------------------------------------------

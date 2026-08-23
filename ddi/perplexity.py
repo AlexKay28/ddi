@@ -22,6 +22,7 @@ import torch
 from ddi.masks import build_mask, to_additive
 from ddi.metrics import make_answer_labels
 from ddi.positions import build_positions
+from ddi.prompt import encode_record
 
 
 def compute_perplexity(
@@ -59,8 +60,6 @@ def compute_perplexity(
             if not record["possible_answers"]:
                 continue
             doc_texts = list(record["info_contexts"])
-            user_dialog = record["dialog"][:-1]
-            answer_text = record["dialog"][-1]["content"]
 
             variant_here = mask_variant
             kwargs_here = kwargs
@@ -68,29 +67,10 @@ def compute_perplexity(
                 variant_here = "full"
                 kwargs_here = {}
 
-            query_text = tokenizer.apply_chat_template(
-                user_dialog, tokenize=False, add_generation_prompt=True
-            )
-
-            doc_id_tensors = [
-                tokenizer(d, return_tensors="pt", add_special_tokens=False).input_ids
-                for d in doc_texts
-            ]
-            doc_lengths = [int(t.shape[-1]) for t in doc_id_tensors]
-            query_ids = tokenizer(
-                query_text, return_tensors="pt", add_special_tokens=False
-            ).input_ids
-            query_len = int(query_ids.shape[-1])
-            answer_ids = tokenizer(
-                answer_text, return_tensors="pt", add_special_tokens=False
-            ).input_ids
-            answer_len = int(answer_ids.shape[-1])
+            full_ids, doc_lengths, query_len, answer_len = encode_record(tokenizer, record)
             if answer_len == 0:
                 continue
-
-            full_ids = torch.cat(
-                doc_id_tensors + [query_ids, answer_ids], dim=-1
-            ).to(model.device)
+            full_ids = full_ids.to(model.device)
             labels = make_answer_labels(
                 full_ids,
                 full_ids.shape[-1] - answer_len,

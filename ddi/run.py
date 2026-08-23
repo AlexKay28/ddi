@@ -16,15 +16,20 @@ Design:
   - Per-cell isolation: one bad cell (a dataset that fails to download, a
     mask variant HF doesn't like on this shape) logs to stderr and the loop
     continues to the next cell.  A sweep of 30 cells must not die on cell 3.
-  - Provenance stamped per row via `ddi.provenance.capture`; the YAML source
-    path is folded into the run_id so every row is traceable back to its
-    source file, not just to a config hash.
+  - Provenance stamped per row via `ddi.provenance.capture`.  A row is traceable
+    back to its config through `config_hash` — a SHA256 over the YAML *bytes*
+    (`load_yaml`), which is stronger than the source path: two copies of the same
+    sweep at different paths join, and an edited YAML at the same path does not.
+    The path itself never reaches the store; it appears only in the startup log
+    line and in `--set` validation errors.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import json
+import os
 import random
 import sys
 import time
@@ -45,6 +50,7 @@ from ddi.metrics import (
     make_answer_labels,
     token_f1,
 )
+from ddi.prompt import build_query_text, encode_segments
 from ddi.provenance import capture
 from ddi.store import DEFAULT_STORE, append
 from ddi.timing import append_timing, measure_decode, measure_prefill
@@ -95,7 +101,10 @@ def _require(cfg: dict[str, Any], key: str, ctx: str) -> Any:
 
 
 def _seed_all(seed: int) -> None:
-    """Seed `random`, `numpy`, `torch` (+ CUDA if available). Mirrors ddi.cli.set_seed."""
+    """Seed `random`, `numpy`, `torch` (+ CUDA if available).
+
+    Was "mirrors ddi.cli.set_seed"; `ddi/cli.py` is deleted, so this is the only seeder.
+    """
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -115,7 +124,17 @@ def _log(msg: str) -> None:
 
 
 def _log_cell_failure(cell_desc: str, exc: BaseException) -> None:
-    """Log a per-cell failure to stderr without aborting the outer sweep loop."""
+    """Log a per-cell failure to stderr without aborting the outer sweep loop.
+
+    Counting lives here, not in `_CellTracker.fail`, because this is the one function
+    every failure path already goes through. When the count lived only in the tracker,
+    the three `kind: cache` tasks — which log failures directly and never build a
+    tracker — were outside the guard: a cache run whose every cell raised printed
+    tracebacks, wrote no rows and still exited 0. A guard over four of seven failure
+    sites is worse than none, because it reads as covering all of them. Anything that
+    reports a cell failure at all is now counted, including cells added later.
+    """
+    _CellTracker.failed_total += 1
     print(f"[ddi.run] cell FAILED: {cell_desc}: {exc!r}", file=sys.stderr, flush=True)
     traceback.print_exc(file=sys.stderr)
 
@@ -128,6 +147,19 @@ class _CellTracker:
       - `  → OK (T.Ts)` or `  → FAILED` when it ends.
       - `done — P passed, F failed in T.Ts total` on `.summary(kind)`.
     """
+
+    # Process-wide count of failed cells, across every dispatcher.
+    #
+    # Cells are deliberately isolated — one bad cell must not abort the rest — but the
+    # isolation was quietly turning into indifference: each dispatcher counted its failures
+    # and printed them, then `run()` returned None and `main()` returned 0. A run in which
+    # every single cell raised still exited 0 and reported success to its caller, so a
+    # Nirvana finetune block would go green with no checkpoint written and the eval
+    # downstream would score a stale model. Counting keeps per-cell isolation while
+    # letting `main()` fail the process. The counter is incremented by
+    # `_log_cell_failure`, not by `fail()` below, so the dispatchers that report a
+    # failure without owning a tracker are covered too — see that function.
+    failed_total = 0
 
     def __init__(self, kind: str, total: int) -> None:
         self.kind = kind
@@ -148,6 +180,9 @@ class _CellTracker:
         _log(f"    → OK ({time.perf_counter() - t:.1f}s)")
 
     def fail(self, t: float) -> None:
+        # Per-tracker bookkeeping only. `failed_total` is owned by `_log_cell_failure`,
+        # which every caller of this method invokes first; counting in both would double
+        # the number `main()` prints.
         self.failed += 1
         _log(f"    → FAILED ({time.perf_counter() - t:.1f}s)")
 
@@ -204,7 +239,6 @@ def _quality_cell(
     max_records: int | None,
     max_new_tokens: int,
     metrics: list[str],
-    yaml_path: Path,
     cfg_hash: str,
     store_path: Path,
 ) -> None:
@@ -253,32 +287,23 @@ def _quality_cell(
             bridge_k_here = None
             coerced_full += 1
 
-        user_dialog = record["dialog"][:-1]
         answer_text = record["dialog"][-1]["content"]
 
-        query_text = tokenizer.apply_chat_template(
-            user_dialog, tokenize=False, add_generation_prompt=True
-        )
+        # Single source of truth for prompt text (ddi.prompt) — eval, perplexity and
+        # training must see a byte-identical query or a prompt mismatch shows up as a
+        # quality regression that has nothing to do with the mask.
+        query_text = build_query_text(tokenizer, record)
 
         # Loss computation needs the answer tokens concatenated in and a masked labels
         # tensor — that's the phase2_train_free contract.  Use build_mask/to_additive
-        # directly here (rather than inference.encode) so we can splice the answer in.
+        # directly here (rather than inference.encode) so we can splice the answer in;
+        # the tokenisation itself goes through the same `ddi.prompt` encoder that
+        # inference.encode, the trainer and the perplexity path use.
         if want_loss:
-            doc_id_tensors = [
-                tokenizer(d, return_tensors="pt", add_special_tokens=False).input_ids
-                for d in doc_texts
-            ]
-            doc_lengths = [int(t.shape[-1]) for t in doc_id_tensors]
-            query_ids = tokenizer(
-                query_text, return_tensors="pt", add_special_tokens=False
-            ).input_ids
-            answer_ids = tokenizer(
-                answer_text, return_tensors="pt", add_special_tokens=False
-            ).input_ids
-            answer_len = int(answer_ids.shape[-1])
-            full_ids = torch.cat(doc_id_tensors + [query_ids, answer_ids], dim=-1).to(
-                model.device
+            full_ids, doc_lengths, query_len, answer_len = encode_segments(
+                tokenizer, doc_texts, query_text, answer_text
             )
+            full_ids = full_ids.to(model.device)
             labels = make_answer_labels(
                 full_ids,
                 full_ids.shape[-1] - answer_len,
@@ -286,7 +311,7 @@ def _quality_cell(
             ).to(model.device)
             allow = build_mask(
                 doc_lengths,
-                query_len=int(query_ids.shape[-1]),
+                query_len=query_len,
                 answer_len=answer_len,
                 variant=variant_here,  # type: ignore[arg-type]
                 **_mask_kwargs(variant_here, bridge_k_here),
@@ -349,7 +374,7 @@ def _quality_cell(
         )
 
 
-def run_quality(cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path) -> None:
+def run_quality(cfg: dict[str, Any], cfg_hash: str, seed: int) -> None:
     """Dispatch a `kind: quality` YAML across the (dataset x mask) grid."""
     model_name = _require(cfg, "model", "quality")
     datasets = _require(cfg, "datasets", "quality")
@@ -395,7 +420,6 @@ def run_quality(cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path) 
                     max_records=max_records,
                     max_new_tokens=max_new_tokens,
                     metrics=metrics,
-                    yaml_path=yaml_path,
                     cfg_hash=cfg_hash,
                     store_path=store_path,
                 )
@@ -501,6 +525,14 @@ def _timing_cell(
     sparsity = _sparsity(allow)
     append(run_id, "mask_sparsity", sparsity, prov, store=store_path)
 
+    # Two independent measurements, deliberately not one. `measure_decode` runs a prefill of its
+    # own each iteration — the decode loop needs a warm KV cache — but times only the decode steps,
+    # so `tpot` is time-per-output-token and not `(FTT + n*TPOT) / n`. Do not "save a prefill" by
+    # deriving one of these from the other: the prefill term is where mask sparsity pays off, so
+    # folding it into `tpot` credits decode with a prefill speedup (see measure_decode's docstring).
+    #
+    # The four rows `append_timing` writes per metric — `{ftt,tpot}_{median_ms,iqr_low_ms,
+    # iqr_high_ms,repeats_ms}` — are parsed by name in `ddi.aggregate`; keep the metric strings.
     ftt = measure_prefill(model, prefill_ids, additive, n_repeats=n_repeats, warmup=warmup)
     append_timing(store=store_path, run_id=run_id, metric="ftt", timing=ftt, provenance=prov)
 
@@ -519,7 +551,7 @@ def _timing_cell(
     append(run_id, "backend_used", backend, prov, store=store_path)
 
 
-def run_timing(cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path) -> None:
+def run_timing(cfg: dict[str, Any], cfg_hash: str, seed: int) -> None:
     """Dispatch a `kind: timing` YAML across the (mask x N x L x backend) grid."""
     model_name = _require(cfg, "model", "timing")
     Ns = _require(cfg, "Ns", "timing")
@@ -601,7 +633,7 @@ def _cache_correctness(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path
     n_queries_per_doc = int(cfg.get("n_queries_per_doc", 5))
     Q = int(cfg.get("Q", 64))
     answer_len = int(cfg.get("answer_len", 16))
-    _atol_check = float(cfg.get("atol_check", 1e-4))  # informational, not enforced.
+    atol_check = float(cfg.get("atol_check", 1e-4))
     cache_dir = Path(cfg.get("cache_dir", "cache/doc_kv"))
 
     if not isinstance(modes, list) or not modes:
@@ -702,6 +734,15 @@ def _cache_correctness(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path
                 doc_cache.put(entry)
         return _ddi_recompute_logits(doc_ids_list, query_ids)
 
+    # `atol_check` is a `--set`-able config key (see `_SET_KEYS`), so it has to do
+    # something. It stays advisory rather than raising: the store row carries the real
+    # `max_abs_logit_diff` and a numerical tolerance is a judgement call that belongs to
+    # whoever reads the sweep — but a silently-ignored tolerance is a knob that documents
+    # a guarantee nobody checks, and this is the cell whose whole job is proving the
+    # cached path reproduces the uncached one.
+    over_tolerance = 0
+    compared = 0
+
     for L in Ls:
         for N in Ns:
             # Synthesise per-shape docs + queries. Fresh generator per (L, N) so a
@@ -758,6 +799,11 @@ def _cache_correctness(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path
                         else:  # unreachable — validated above.
                             raise AssertionError(f"unreachable mode {mode!r}")
 
+                        if mode != "full_causal":
+                            compared += 1
+                            if diff > atol_check:
+                                over_tolerance += 1
+
                         run_id = (
                             f"phase4_cache:{model_name}:{mode}:N={N_int}:L={L_int}:"
                             f"seed={seed}:{prov.git_sha[:8]}:q{query_i}"
@@ -771,6 +817,15 @@ def _cache_correctness(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path
                         )
                     except Exception as exc:
                         _log_cell_failure(cell_desc, exc)
+
+    if over_tolerance:
+        _log(
+            f"cache/correctness: {over_tolerance}/{compared} non-baseline row(s) exceeded "
+            f"atol_check={atol_check:g} — the cached/recomputed path does NOT reproduce "
+            f"full_causal at that tolerance"
+        )
+    elif compared:
+        _log(f"cache/correctness: all {compared} row(s) within atol_check={atol_check:g}")
 
 
 # ---------------------------------------------------------------------------
@@ -1054,8 +1109,7 @@ def _cache_throughput(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path:
             # Independent doc-index stream per mode so warmup / measured requests
             # are directly comparable between modes even if the RNG has advanced.
             mode_rng = np.random.default_rng(seed)
-            index_stream: list[list[int]] = []
-            index_stream = _sample_doc_indices(
+            index_stream: list[list[int]] = _sample_doc_indices(
                 mode_rng,
                 n_requests + warmup_requests,
                 docs_per_request,
@@ -1119,7 +1173,7 @@ def _cache_throughput(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path:
 
 
 def _cache_restart_quality(
-    cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path, store_path: Path
+    cfg: dict[str, Any], cfg_hash: str, seed: int, store_path: Path
 ) -> None:
     """Preserves phase4_restart: run_id prefix and per-record loss/em/f1/presence rows."""
     from ddi.positions import build_positions
@@ -1180,29 +1234,20 @@ def _cache_restart_quality(
                             bridge_k_here = None
                             coerced_full += 1
 
-                        user_dialog = record["dialog"][:-1]
                         answer_text = record["dialog"][-1]["content"]
-                        query_text = tokenizer.apply_chat_template(
-                            user_dialog, tokenize=False, add_generation_prompt=True
+                        # Same single source of truth for prompt text as `_quality_cell`.
+                        # This was the one caller in the repo still templating the dialog
+                        # inline, which silently dropped both of the things `ddi.prompt`
+                        # exists to add: `DOC_INSTRUCTION` (without it `em` is 0.0000 in
+                        # every cell) and `enable_thinking=False` (without it a Qwen3
+                        # template burns all 64 max_new_tokens inside `<think>`). Both
+                        # failures look like a restart-layout effect from the rows alone.
+                        query_text = build_query_text(tokenizer, record)
+
+                        full_ids, doc_lengths, query_len, answer_len = encode_segments(
+                            tokenizer, doc_texts, query_text, answer_text
                         )
-
-                        doc_id_tensors = [
-                            tokenizer(d, return_tensors="pt", add_special_tokens=False).input_ids
-                            for d in doc_texts
-                        ]
-                        doc_lengths = [int(t.shape[-1]) for t in doc_id_tensors]
-                        query_ids = tokenizer(
-                            query_text, return_tensors="pt", add_special_tokens=False
-                        ).input_ids
-                        query_len = int(query_ids.shape[-1])
-                        answer_ids = tokenizer(
-                            answer_text, return_tensors="pt", add_special_tokens=False
-                        ).input_ids
-                        answer_len = int(answer_ids.shape[-1])
-
-                        full_ids = torch.cat(
-                            doc_id_tensors + [query_ids, answer_ids], dim=-1
-                        ).to(model.device)
+                        full_ids = full_ids.to(model.device)
                         labels = make_answer_labels(
                             full_ids,
                             full_ids.shape[-1] - answer_len,
@@ -1274,7 +1319,7 @@ def _cache_restart_quality(
                     _log_cell_failure(cell_desc, exc)
 
 
-def run_cache(cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path) -> None:
+def run_cache(cfg: dict[str, Any], cfg_hash: str, seed: int) -> None:
     """Dispatch a `kind: cache` YAML on `task: correctness | throughput | restart_quality`."""
     task = _require(cfg, "task", "cache")
     store_path = _store_path_for(cfg)
@@ -1286,7 +1331,7 @@ def run_cache(cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path) ->
     elif task == "throughput":
         _cache_throughput(cfg, cfg_hash, seed, store_path)
     elif task == "restart_quality":
-        _cache_restart_quality(cfg, cfg_hash, seed, yaml_path, store_path)
+        _cache_restart_quality(cfg, cfg_hash, seed, store_path)
     else:
         raise ValueError(
             f"cache: unknown task {task!r}; expected correctness | throughput | restart_quality"
@@ -1299,7 +1344,7 @@ def run_cache(cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path) ->
 # ---------------------------------------------------------------------------
 
 
-def run_finetune(cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path) -> None:
+def run_finetune(cfg: dict[str, Any], cfg_hash: str, seed: int) -> None:
     """Dispatch a `kind: finetune` YAML: teacher=full, student=ddi_qf, KL loss.
 
     Wraps `ddi.finetune.finetune` in a `_CellTracker` so the progress log shape
@@ -1334,6 +1379,39 @@ def run_finetune(cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path)
     num_gpus = int(cfg.get("num_gpus", 1))
     if num_gpus < 1:
         raise ValueError(f"finetune: 'num_gpus' must be >= 1, got {num_gpus}")
+    # Records with <2 documents produce an identical student/teacher mask and hence a
+    # zero KL — see `ddi.finetune._prefilter_records`. Default 2 skips them.
+    min_docs = int(cfg.get("min_docs", 2))
+    if min_docs < 1:
+        raise ValueError(f"finetune: 'min_docs' must be >= 1, got {min_docs}")
+    # Freeze all but the top N decoder layers. `null` (the default) trains the whole
+    # student, which is what every cell up to the 7B does. It exists for the 27B, whose
+    # full-finetune footprint is ~8 bytes/param per rank — teacher + student + grads +
+    # AdamW8bit, all replicated by DDP — i.e. ~222 GB against a 141 GB card. Freezing the
+    # trunk drops the grad and optimizer terms and brings it to ~112 GB.
+    trainable_layers = cfg.get("trainable_layers")
+    if trainable_layers is not None:
+        trainable_layers = int(trainable_layers)
+        if trainable_layers < 1:
+            raise ValueError(
+                f"finetune: 'trainable_layers' must be >= 1, got {trainable_layers}"
+            )
+    # Cap on how many holdout records the epoch perplexities score. They run on rank 0
+    # only while every other rank waits at a barrier, so on an 8-GPU cell this is
+    # single-GPU work blocking the whole allocation — and it is repaid in full after any
+    # restart. `null` scores the entire holdout, which is the pre-cap behaviour.
+    holdout_eval_records = cfg.get("holdout_eval_records")
+    if holdout_eval_records is not None:
+        holdout_eval_records = int(holdout_eval_records)
+        if holdout_eval_records < 1:
+            raise ValueError(
+                f"finetune: 'holdout_eval_records' must be >= 1, got {holdout_eval_records}"
+            )
+    # Gradient clipping and the divergence budget. Defaults are deliberate, not tuning:
+    # without them one gradient spike took Qwen2.5-7B to NaN and the run still reported
+    # success after 8 GPU-hours (2026-08-07).
+    max_grad_norm = float(cfg.get("max_grad_norm", 1.0))
+    max_skipped_steps = int(cfg.get("max_skipped_steps", 20))
     store_path = _store_path_for(cfg)
 
     prov = capture(
@@ -1363,6 +1441,11 @@ def run_finetune(cfg: dict[str, Any], cfg_hash: str, seed: int, yaml_path: Path)
             log_every=log_every,
             max_steps=max_steps,
             num_gpus=num_gpus,
+            min_docs=min_docs,
+            trainable_layers=trainable_layers,
+            holdout_eval_records=holdout_eval_records,
+            max_grad_norm=max_grad_norm,
+            max_skipped_steps=max_skipped_steps,
             provenance=prov,
             store_path=store_path,
         )
@@ -1386,14 +1469,148 @@ _DISPATCH = {
 }
 
 
+# ---------------------------------------------------------------------------
+# What `--set` is allowed to override, per kind.
+#
+# Every dispatcher reads its optional keys through `cfg.get(...)`, so an unknown key
+# merged into the config is not an error — it is folded into cfg_hash (which makes the
+# store row look distinct) and then ignored. That failure mode is not theoretical and
+# it is not cheap: `nirvana/common/constant.py` records a 27B graph pinned to a revision
+# that predated `trainable_layers`. The `--set trainable_layers=` it passed was accepted,
+# ignored, and the job attempted a full finetune and OOMed after taking an 8-GPU slot.
+# Nothing anywhere reported an error.
+#
+# The sets below are what the dispatchers actually read, enumerated from the `_require`
+# / `cfg.get` calls in each `run_*` and `_*_cell`. Adding a config key means adding it
+# here, or `--set` will refuse it — which is the intended coupling: a knob the job-side
+# code cannot read must not look like it was applied.
+# ---------------------------------------------------------------------------
+
+# Read by `run()` itself or by `_store_path_for`, so they are valid for every kind.
+# `report` and `metrics` are read from the same YAML by `ddi.aggregate` and the report
+# renderers rather than by any dispatcher here; they are accepted so retargeting a
+# report block from the command line is not rejected as a typo.
+_SET_KEYS_COMMON = frozenset(
+    {"model", "seed", "output_store", "require_gpu", "report", "metrics"}
+)
+
+_SET_KEYS: dict[str, frozenset[str]] = {
+    "quality": _SET_KEYS_COMMON
+    | {"datasets", "masks", "max_records", "max_new_tokens", "checkpoint"},
+    "timing": _SET_KEYS_COMMON
+    | {
+        "Ns",
+        "Ls",
+        "backends",
+        "masks",
+        "Q",
+        "n_repeats",
+        "warmup",
+        "n_new_tokens",
+        "checkpoint",
+    },
+    # Union over the three `task:` values, because `task` is itself overridable and the
+    # sub-dispatch happens inside `run_cache`, after these are merged.
+    "cache": _SET_KEYS_COMMON
+    | {
+        "task",
+        "checkpoint",
+        # correctness
+        "modes",
+        "Ns",
+        "Ls",
+        "n_queries_per_doc",
+        "Q",
+        "answer_len",
+        "atol_check",
+        "cache_dir",
+        # throughput
+        "layout",
+        "n_requests",
+        "warmup_requests",
+        "reuse_distribution",
+        "zipf_a",
+        "top_docs",
+        "docs_per_request",
+        "doc_token_len",
+        "query_token_len",
+        "n_new_tokens",
+        # restart_quality
+        "datasets",
+        "masks",
+        "layouts",
+        "max_records",
+        "max_new_tokens",
+    },
+    "finetune": _SET_KEYS_COMMON
+    | {
+        "datasets",
+        "output_dir",
+        "max_records",
+        "held_out_frac",
+        "epochs",
+        "lr",
+        "weight_decay",
+        "kl_temperature",
+        "grad_accum_steps",
+        "warmup_steps",
+        "log_every",
+        "max_steps",
+        "num_gpus",
+        "min_docs",
+        "trainable_layers",
+        "holdout_eval_records",
+        "max_grad_norm",
+        "max_skipped_steps",
+    },
+}
+
+
+def _validate_set_keys(kind: str, keys: list[str], yaml_path: Path) -> None:
+    """Reject a `--set` key this kind's dispatcher will never read.
+
+    Use `--set-unchecked` for the case this cannot know about: a key that job-side code
+    at a *different* revision reads. That is an explicit request to merge blind, which is
+    the whole point — the default must not be blind.
+    """
+    allowed = _SET_KEYS[kind]
+    for key in keys:
+        if key in allowed:
+            continue
+        if key == "kind":
+            # Special-cased because it is not merely unread, it is unreadable: `run()`
+            # binds `kind` from the YAML above, before overrides are applied, so the
+            # dispatch is already chosen. `--set kind=` has never re-dispatched anything;
+            # it only perturbed cfg_hash.
+            raise ValueError(
+                "--set kind=...: 'kind' cannot be overridden — it selects the dispatcher "
+                "and is read before --set is applied, so the override has never taken "
+                "effect; it only perturbed cfg_hash. Point the CLI at a different YAML."
+            )
+        raise ValueError(
+            f"--set {key}=...: kind {kind!r} ({yaml_path}) has no config key {key!r}, "
+            "so the override would be merged into the config, folded into the config hash "
+            "and then never read — the run would look distinct and behave identically. "
+            f"Valid keys for kind={kind!r}: {', '.join(sorted(allowed))}. "
+            f"If job-side code at another revision does read {key!r}, pass it as "
+            f"--set-unchecked {key}=... ."
+        )
+
+
 def run(
     yaml_path: Path,
     seed_override: int | None = None,
     model_override: str | None = None,
     backends_override: list[str] | None = None,
     num_gpus_override: int | None = None,
+    set_overrides: list[tuple[str, Any]] | None = None,
+    unchecked_overrides: list[tuple[str, Any]] | None = None,
+    enforce_require_gpu: bool = False,
 ) -> None:
-    """Load a YAML file and dispatch on `kind:`."""
+    """Load a YAML file and dispatch on `kind:`.
+
+    `enforce_require_gpu` is set by `main()` and only by `main()` — see `_configure_gpu`.
+    """
     cfg, cfg_hash = load_yaml(yaml_path)
     kind = cfg.get("kind")
     if not kind:
@@ -1419,6 +1636,34 @@ def run(
         # Only `kind: finetune` consumes `num_gpus:`; ignored elsewhere for a uniform CLI shape.
         cfg["num_gpus"] = num_gpus_override
 
+    if set_overrides:
+        _validate_set_keys(kind, [key for key, _ in set_overrides], yaml_path)
+
+    # `--set` and `--set-unchecked` differ only in whether the key was checked above;
+    # both merge and both must reach cfg_hash, so they share one list from here on. With
+    # no `--set-unchecked` the digest is byte-identical to the pre-check behaviour, which
+    # keeps every already-published run joinable to its rows.
+    all_overrides = list(set_overrides or []) + list(unchecked_overrides or [])
+    if all_overrides:
+        # Generic per-key override, so a grid cell can vary `lr`, `kl_temperature`,
+        # `epochs`, `max_records` or `output_dir` without a YAML per cell. Applied last,
+        # so it wins over the typed flags above.
+        for key, value in all_overrides:
+            cfg[key] = value
+        # cfg_hash is the join key between results/runs.jsonl and the exact config that
+        # produced them. Two cells differing only by --set would otherwise share a hash
+        # and be indistinguishable in the store, so fold the overrides into it.
+        digest = json.dumps(sorted((k, v) for k, v in all_overrides), sort_keys=True, default=str)
+        cfg_hash = hashlib.sha256((cfg_hash + digest).encode()).hexdigest()[:16]
+        _log(f"applied {len(all_overrides)} --set override(s); cfg_hash -> {cfg_hash[:8]}")
+        if unchecked_overrides:
+            _log(
+                "  "
+                + str(len(unchecked_overrides))
+                + " of them via --set-unchecked (key not validated against this kind): "
+                + ", ".join(sorted(key for key, _ in unchecked_overrides))
+            )
+
     if seed_override is not None:
         seed = seed_override
     elif "seed" in cfg:
@@ -1428,9 +1673,68 @@ def run(
             f"YAML at {yaml_path}: 'seed' must be set in the YAML or overridden with --seed"
         )
 
+    _configure_gpu(cfg, enforce_require_gpu=enforce_require_gpu)
     _seed_all(seed)
     _log(f"loading YAML {yaml_path} (kind={kind}, seed={seed}, cfg_hash={cfg_hash[:8]})")
-    _DISPATCH[kind](cfg, cfg_hash, seed, yaml_path)
+    _DISPATCH[kind](cfg, cfg_hash, seed)
+
+
+def _configure_gpu(cfg: dict[str, Any], *, enforce_require_gpu: bool) -> None:
+    """Print the device summary, enable TF32, and (from the CLI) refuse to run blind on CPU.
+
+    `ddi.gpu` was written to be called once at startup and, until this call existed, never
+    was. Its only caller was `ddi.cli.main`, which had been unimportable since the
+    `ddi/runners/` package it imports was deleted, while `pyproject.toml` pointed
+    `ddi-run` at `ddi.run:main` instead. Two things were silently lost: TF32 /
+    `set_float32_matmul_precision("high")` was never enabled, so every published
+    `kind: timing` number was measured under different kernel selection than `ddi/gpu.py`
+    documents; and `require_gpu` was never honoured, so a sweep could run to completion on
+    CPU and write rows indistinguishable from GPU rows.
+
+    `configure()` is unconditional — it is what makes the timing numbers mean what the
+    module says they mean, and no caller should have to remember it. The CPU gate is not,
+    because `run()` is also called directly (in-process, against stub models) by callers
+    that legitimately have no GPU; `main()` turns it on, so every `ddi-run` / `python -m
+    ddi.run` invocation is gated. Both happen after `--set` is merged, so
+    `--set require_gpu=false` works, and before seeding and any model load.
+    """
+    from ddi import gpu  # local import so the module stays importable without a GPU stack
+
+    gpu.configure()
+    # Default: every experiment run REQUIRES CUDA — silently running a real DDI sweep on
+    # CPU would burn hours and produce meaningless numbers. Opt out with
+    # `require_gpu: false` in the config for smoke tests and dry-runs.
+    if enforce_require_gpu and cfg.get("require_gpu", True):
+        gpu.require_cuda()
+
+
+def _parse_set(value: str) -> tuple[str, Any]:
+    """Parse `key=value`; the value is YAML-scalar-parsed so types survive.
+
+    `lr=2e-5` becomes a float, `epochs=2` an int, `max_records=null` None, and anything
+    unquoted that is not a YAML scalar stays a string. That matters because the config
+    readers call `float()` / `int()` on these and a stray string would fail late, inside
+    the trainer, rather than here.
+    """
+    key, sep, raw = value.partition("=")
+    key = key.strip()
+    if not sep or not key:
+        raise argparse.ArgumentTypeError(f"--set expected 'key=value', got {value!r}")
+    parsed = yaml.safe_load(raw)
+    if isinstance(parsed, str):
+        # YAML 1.1 does not accept `2e-5` as a float (it wants `2.0e-5`), so the most
+        # natural way to write a learning rate comes back as a string. Recover it here
+        # rather than letting it reach the trainer, where only keys that happen to be
+        # wrapped in float() would survive.
+        try:
+            return key, int(parsed)
+        except ValueError:
+            pass
+        try:
+            return key, float(parsed)
+        except ValueError:
+            pass
+    return key, parsed
 
 
 def _parse_backends(value: str) -> list[str]:
@@ -1476,6 +1780,34 @@ def main(argv: list[str] | None = None) -> int:
             "ignored for other kinds. >1 requires launching under `torchrun --nproc_per_node=N`."
         ),
     )
+    parser.add_argument(
+        "--set",
+        type=_parse_set,
+        action="append",
+        dest="set_overrides",
+        metavar="KEY=VALUE",
+        default=None,
+        help=(
+            "override a top-level YAML key this kind reads, repeatable: "
+            "--set lr=2e-5 --set output_dir=results/checkpoints/foo. "
+            "Applied after --model/--backends/--num-gpus and folded into the config hash. "
+            "A key the kind's dispatcher does not read is rejected (see --set-unchecked)."
+        ),
+    )
+    parser.add_argument(
+        "--set-unchecked",
+        type=_parse_set,
+        action="append",
+        dest="unchecked_overrides",
+        metavar="KEY=VALUE",
+        default=None,
+        help=(
+            "like --set but skips the per-kind key check. For the one case the check "
+            "cannot see: job-side code at a different revision that reads a key this "
+            "revision does not. The override is merged and hashed exactly like --set, and "
+            "the keys are echoed to the log so the bypass is visible in the run's output."
+        ),
+    )
     args = parser.parse_args(argv)
     run(
         args.yaml_path,
@@ -1483,9 +1815,44 @@ def main(argv: list[str] | None = None) -> int:
         model_override=args.model,
         backends_override=args.backends,
         num_gpus_override=args.num_gpus,
+        set_overrides=args.set_overrides,
+        unchecked_overrides=args.unchecked_overrides,
+        # This is the CLI, so honour `require_gpu`. A real sweep that silently ran on CPU
+        # would burn hours and produce numbers that look like every other row.
+        enforce_require_gpu=True,
     )
+    if _CellTracker.failed_total:
+        _log(f"FAILED: {_CellTracker.failed_total} cell(s) failed — exiting non-zero")
+        return 1
     return 0
 
 
+def _exit(code: int) -> None:
+    """Leave the process without running interpreter shutdown.
+
+    Every rank of an 8-GPU finetune segfaults in NCCL/UCX teardown *after* the work is
+    finished — the logs show `finetune: done` and `1 passed, 0 failed` on all 8 ranks,
+    then `Caught signal 11 (address not mapped ... 0x...1a0)` on all 8, at identical
+    offsets. It is a library atexit/destructor ordering bug at interpreter shutdown, not
+    ours: `ddi.finetune` already ends with `dist.barrier()` + `dist.destroy_process_group()`,
+    and the crash happens after that.
+
+    It would be harmless if it stayed cosmetic, but torchrun reads the child exit codes:
+    one rank exiting -11 becomes `ChildFailedError`, `make` returns 1, and the caller sees
+    a failed run. On 2026-08-06 that discarded a complete 4h18m 8-GPU training run whose
+    checkpoint was already written — the graph's guard exited before uploading it.
+
+    So once the work is done and the streams are flushed, skip shutdown entirely. There is
+    nothing left to clean up: `ddi` registers no `atexit` hooks and no `__del__`, results are
+    written and closed as they are produced, and the OS reclaims memory and file handles.
+    Set `DDI_HARD_EXIT=0` to restore normal shutdown when debugging the teardown itself.
+    """
+    sys.stdout.flush()
+    sys.stderr.flush()
+    if os.environ.get("DDI_HARD_EXIT", "1") == "1":
+        os._exit(code)
+    sys.exit(code)
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    _exit(main())
