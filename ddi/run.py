@@ -309,24 +309,15 @@ def _quality_cell(
                 full_ids.shape[-1] - answer_len,
                 full_ids.shape[-1],
             ).to(model.device)
-            allow = build_mask(
-                doc_lengths,
-                query_len=query_len,
-                answer_len=answer_len,
-                variant=variant_here,  # type: ignore[arg-type]
-                **_mask_kwargs(variant_here, bridge_k_here),
-            )
-            additive = (
-                to_additive(allow, dtype=model.dtype)
-                .to(model.device)
-                .unsqueeze(0)
-                .unsqueeze(0)
-            )
             with torch.no_grad():
-                out = model(
-                    input_ids=full_ids,
-                    attention_mask=additive,
-                    use_cache=False,
+                out = inference.forward(
+                    model,
+                    full_ids,
+                    mask_variant=variant_here,
+                    doc_lengths=doc_lengths,
+                    query_len=query_len,
+                    answer_len=answer_len,
+                    mask_kwargs=_mask_kwargs(variant_here, bridge_k_here),
                 )
             loss_val = float(shifted_cross_entropy(out.logits, labels).item())
         else:
