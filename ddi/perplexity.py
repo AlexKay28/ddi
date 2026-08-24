@@ -19,7 +19,7 @@ from collections.abc import Iterable
 
 import torch
 
-from ddi.masks import build_mask, to_additive
+from ddi.inference import forward
 from ddi.metrics import make_answer_labels
 from ddi.positions import build_positions
 from ddi.prompt import encode_record
@@ -77,19 +77,6 @@ def compute_perplexity(
                 full_ids.shape[-1],
             ).to(model.device)
 
-            allow = build_mask(
-                doc_lengths,
-                query_len=query_len,
-                answer_len=answer_len,
-                variant=variant_here,  # type: ignore[arg-type]
-                **kwargs_here,
-            )
-            additive = (
-                to_additive(allow, dtype=model.dtype)
-                .to(model.device)
-                .unsqueeze(0)
-                .unsqueeze(0)
-            )
             positions = (
                 build_positions(
                     doc_lengths, query_len, answer_len, layout  # type: ignore[arg-type]
@@ -99,11 +86,15 @@ def compute_perplexity(
             )
 
             with torch.no_grad():
-                out = model(
-                    input_ids=full_ids,
-                    attention_mask=additive,
+                out = forward(
+                    model,
+                    full_ids,
+                    mask_variant=variant_here,
+                    doc_lengths=doc_lengths,
+                    query_len=query_len,
+                    answer_len=answer_len,
+                    mask_kwargs=kwargs_here,
                     position_ids=positions,
-                    use_cache=False,
                 )
             # Standard next-token shift: predict position t from logits at t-1.
             shift_logits = out.logits[..., :-1, :].contiguous().float()
