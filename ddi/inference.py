@@ -1,22 +1,41 @@
 """Classic HF wrapper with DDI mask injection (issue #84, Phase 1 layer 2).
 
-The only HF-interaction surface in the `ddi/` package: load a model, encode
-N documents + a query, run a masked forward pass, or greedy-generate under a
-mask variant. Every piece of the pipeline is delegated to an existing module —
-`ddi.masks` (variant tensor), `ddi.positions` (layout), `ddi.model` (HF load
-and mask-injecting forward), `ddi.cache` (KV cache handling via HF's own path).
-No new attention logic lives here.
+The only HF-interaction surface in the `ddi/` package: this module owns every
+`model(...)` call. Two entry points cover the whole pipeline:
+
+- ``forward(model, input_ids, ...)`` — one HF forward pass. Covers prefill
+  (with or without a KV cache) and a single decode step. The mask is either
+  built here from ``mask_variant``/``doc_lengths``/``query_len``/``answer_len``
+  or supplied ready-made via ``additive_mask``; ``mask_variant=None`` with no
+  ``additive_mask`` is a bare decode step (no ``attention_mask`` passed).
+- ``generate(model, tokenizer, batch, mask_variant, ...)`` — the prefill +
+  greedy-decode combo; prefill and every decode step route through ``forward``.
+
+Callers that used to call ``model(...)`` directly now call ``forward``:
+  - ``ddi.timing.measure_prefill`` / ``measure_decode`` (prefill + decode)
+  - ``ddi.cache.compute_doc_kv`` (prefill, keeps ``past_key_values``)
+  - ``ddi.perplexity.compute_perplexity`` (prefill, answer-only loss)
+  - ``ddi.run._quality_cell`` / ``_cache_restart_quality`` loss arms (prefill)
+  - ``ddi.run._full_causal_logits`` / ``_ddi_recompute_logits`` (prefill)
+  - ``ddi.run._time_doc_prefill`` / ``_time_query_prefill`` / ``_time_full_causal``
+    (prefill, some + decode)
+
+``backend="hf"`` (the default) calls ``model(...)`` exactly as the inlined code
+did; a future ``"triton"`` / ``"fa2"`` kernel swap is one branch here, not 13.
+``patch_model`` / ``unpatch_model`` / ``load_model`` are re-exported so
+``from ddi.inference import ...`` is the single import surface for HF interaction.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import torch
 from transformers import PreTrainedModel, PreTrainedTokenizerBase
 
 from ddi.masks import Variant, build_mask, to_additive
-from ddi.model import load_model
+from ddi.model import load_model, patch_model, unpatch_model
 from ddi.positions import Layout, build_positions
 from ddi.prompt import encode_segments
 
@@ -44,7 +63,8 @@ class ForwardOutput:
 
     logits: torch.Tensor  # [1, T, V]
     hidden_states: tuple[torch.Tensor, ...] | None
-    mask_variant: str
+    past_key_values: Any | None
+    mask_variant: str | None
 
 
 def _resolve_dtype(dtype: str) -> torch.dtype:
@@ -135,41 +155,84 @@ def _build_additive(
     return to_additive(allow, dtype=dtype).to(device).unsqueeze(0).unsqueeze(0)
 
 
-def forward_with_mask(
+def forward(
     model: PreTrainedModel,
-    batch: BatchEncoding,
-    mask_variant: str,
+    input_ids: torch.Tensor,
+    *,
+    mask_variant: str | None = "full",
+    doc_lengths: list[int] | None = None,
+    query_len: int = 0,
+    answer_len: int = 0,
     mask_kwargs: dict | None = None,
+    position_ids: torch.Tensor | None = None,
+    past_key_values: Any | None = None,
+    use_cache: bool = False,
+    output_hidden_states: bool = False,
+    backend: str = "hf",
 ) -> ForwardOutput:
-    """Single forward pass under the given mask variant. Returns logits + hidden states.
+    """One HF forward pass under the DDI mask family.
 
-    Delegates mask construction to `ddi.masks` and relies on the `_update_causal_mask`
-    patch installed by `ddi.model.load_model` to route the 4D float mask through HF's
-    forward unchanged. `output_hidden_states=True` is set so downstream analyses (delta,
-    per-layer probes) do not need a second pass.
+    Two shapes, selected by `mask_variant`:
+
+    - **prefill** — `mask_variant` is not ``None``, no `past_key_values`. Builds the
+      4D additive mask from ``doc_lengths``/``query_len``/``answer_len`` via
+      ``ddi.masks.build_mask`` -> ``to_additive``. Returns logits.
+    - **decode step** — `mask_variant=None`, `past_key_values` present. No mask
+      built; ``input_ids`` is one new token, the cache supplies every previous
+      position. Returns logits + updated cache.
+
+    `position_ids` is passed through verbatim when given; omitted otherwise
+    (HF defaults to sequential). `output_hidden_states` is forwarded to HF when True.
+    `use_cache` is forwarded as-is — callers that need the K/V back read
+    ``out.past_key_values`` on the returned object.
+
+    ``backend="hf"`` (the default) calls ``model(...)`` exactly as the inlined
+    code did; a future ``"triton"`` / ``"fa2"`` kernel swap is one branch here.
+
+    ``torch.no_grad()`` is applied by the caller (this wraps model forward in it).
     """
-    input_ids = batch.input_ids.to(model.device)
-    positions = batch.position_ids.to(model.device)
-    additive = _build_additive(
-        batch.doc_lengths,
-        batch.query_len,
-        answer_len=0,
-        mask_variant=mask_variant,
-        mask_kwargs=mask_kwargs,
-        dtype=model.dtype,
-        device=model.device,
-    )
-    with torch.no_grad():
-        out = model(
-            input_ids=input_ids,
-            attention_mask=additive,
-            position_ids=positions,
-            use_cache=False,
-            output_hidden_states=True,
+    if backend != "hf":
+        raise ValueError(f"unknown backend {backend!r}; only 'hf' is implemented today")
+    input_ids = input_ids.to(model.device)
+
+    if mask_variant is not None:
+        # prefill: build mask
+        if doc_lengths is None:
+            raise ValueError("mask_variant requires doc_lengths")
+        additive = _build_additive(
+            doc_lengths,
+            query_len=query_len,
+            answer_len=answer_len,
+            mask_variant=mask_variant,
+            mask_kwargs=mask_kwargs,
+            dtype=model.dtype,
+            device=model.device,
         )
+    else:
+        # decode step: no attention_mask argument at all
+        additive = None
+
+    kwargs: dict = {"input_ids": input_ids, "use_cache": use_cache}
+    if additive is not None:
+        kwargs["attention_mask"] = additive
+    if position_ids is not None:
+        kwargs["position_ids"] = position_ids.to(model.device)
+    if past_key_values is not None:
+        kwargs["past_key_values"] = past_key_values
+    if output_hidden_states:
+        kwargs["output_hidden_states"] = True
+
+    with torch.no_grad():
+        out = model(**kwargs)
+
     return ForwardOutput(
         logits=out.logits,
-        hidden_states=tuple(out.hidden_states) if getattr(out, "hidden_states", None) else None,
+        hidden_states=(
+            tuple(out.hidden_states)
+            if getattr(out, "hidden_states", None)
+            else None
+        ),
+        past_key_values=getattr(out, "past_key_values", None),
         mask_variant=mask_variant,
     )
 
@@ -296,7 +359,10 @@ __all__ = [
     "Layout",
     "Variant",
     "encode",
-    "forward_with_mask",
+    "forward",
     "generate",
     "load",
+    "load_model",
+    "patch_model",
+    "unpatch_model",
 ]
