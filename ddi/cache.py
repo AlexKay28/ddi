@@ -29,7 +29,7 @@ from typing import Any
 import torch
 from transformers import PreTrainedModel, PreTrainedTokenizerBase
 
-from ddi.masks import build_mask, to_additive
+from ddi.inference import forward
 from ddi.positions import Layout, build_positions
 
 
@@ -155,15 +155,14 @@ def compute_doc_kv(
     input_ids = doc_ids.to(model.device)
     positions = build_positions([doc_len], 0, 0, layout).unsqueeze(0).to(model.device)
 
-    allow = build_mask([doc_len], query_len=0, answer_len=0, variant="full")
-    additive = to_additive(allow, dtype=model.dtype).to(model.device).unsqueeze(0).unsqueeze(0)
-
     with torch.no_grad():
-        # Bypass forward_with_mask because we need past_key_values back; the mask/positions
-        # validation there is duplicated here implicitly via build_mask/build_positions.
-        out = model(
-            input_ids=input_ids,
-            attention_mask=additive,
+        out = forward(
+            model,
+            input_ids,
+            mask_variant="full",
+            doc_lengths=[doc_len],
+            query_len=0,
+            answer_len=0,
             position_ids=positions,
             use_cache=True,
         )
