@@ -1409,6 +1409,9 @@ def run_finetune(cfg: dict[str, Any], cfg_hash: str, seed: int) -> None:
     # success after 8 GPU-hours (2026-08-07).
     max_grad_norm = float(cfg.get("max_grad_norm", 1.0))
     max_skipped_steps = int(cfg.get("max_skipped_steps", 20))
+    layout = str(cfg.get("layout", "sequential"))
+    if layout not in ("sequential", "restart", "mixed"):
+        raise ValueError(f"finetune: 'layout' must be sequential/restart/mixed, got {layout!r}")
     store_path = _store_path_for(cfg)
 
     prov = capture(
@@ -1443,6 +1446,7 @@ def run_finetune(cfg: dict[str, Any], cfg_hash: str, seed: int) -> None:
             holdout_eval_records=holdout_eval_records,
             max_grad_norm=max_grad_norm,
             max_skipped_steps=max_skipped_steps,
+            layout=layout,
             provenance=prov,
             store_path=store_path,
         )

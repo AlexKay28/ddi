@@ -405,6 +405,7 @@ def finetune(
     holdout_eval_records: int | None = None,
     max_grad_norm: float = 1.0,
     max_skipped_steps: int = 20,
+    layout: str = "sequential",
     provenance: Provenance,
     store_path: Path,
 ) -> None:
@@ -428,6 +429,8 @@ def finetune(
         raise ValueError(f"warmup_steps must be >= 0, got {warmup_steps}")
     if max_steps is not None and max_steps < 1:
         raise ValueError(f"max_steps must be >= 1, got {max_steps}")
+    if layout not in ("sequential", "restart", "mixed"):
+        raise ValueError(f"layout must be one of 'sequential', 'restart', 'mixed', got {layout!r}")
     if num_gpus < 1:
         raise ValueError(f"num_gpus must be >= 1, got {num_gpus}")
     if trainable_layers is not None and trainable_layers < 1:
@@ -669,9 +672,17 @@ def finetune(
             additive_student = _build_additive(
                 doc_lengths, query_len, answer_len, student_variant, dtype, device
             )
+            # Mixed-layout training: coin flip per record between sequential/restart.
+            # Teacher always uses sequential (frozen reference); student uses the chosen layout.
+            if layout == "mixed" and torch.rand(1).item() < 0.5:
+                record_layout = "restart"
+            elif layout in ("sequential", "restart"):
+                record_layout = layout
+            else:
+                record_layout = "sequential"
             positions = (
                 build_positions(
-                    doc_lengths, query_len, answer_len, "sequential"  # type: ignore[arg-type]
+                    doc_lengths, query_len, answer_len, record_layout  # type: ignore[arg-type]
                 )
                 .unsqueeze(0)
                 .to(device)
@@ -797,7 +808,18 @@ def finetune(
             epoch_rid = f"{run_prefix}:epoch={epoch + 1}"
             append(epoch_rid, "perplexity_student_ddi_qf_post", pplx_post,
                    provenance, store=store_path)
-            _log(f"epoch {epoch + 1} post: student_ddi_qf={pplx_post:.3f}")
+            if layout != "sequential":
+                pplx_restart = compute_perplexity(
+                    student_module, tokenizer, pplx_records,
+                    mask_variant="ddi_qf", layout="restart",
+                )
+                student_module.train()
+                append(epoch_rid, "perplexity_student_ddi_qf_post_restart", pplx_restart,
+                       provenance, store=store_path)
+                _log(f"epoch {epoch + 1} post: student_ddi_qf={pplx_post:.3f} "
+                     f"restart={pplx_restart:.3f}")
+            else:
+                _log(f"epoch {epoch + 1} post: student_ddi_qf={pplx_post:.3f}")
         if is_dist:
             dist.barrier()
 
