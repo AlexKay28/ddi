@@ -385,22 +385,35 @@ def measure_decode(
     def _prefill() -> None:
         """Untimed precondition: the decode loop cannot start without a warm KV cache."""
         nonlocal past, first_token
+        from ddi.inference import forward as _fwd
+        mask = prefill_kwargs.get("attention_mask")
+        pos = prefill_kwargs.get("position_ids")
         with torch.no_grad():
-            out = model(input_ids=prompt_ids, use_cache=True, **prefill_kwargs)
+            out = _fwd(
+                model, prompt_ids,
+                mask_variant=None,
+                additive_mask=mask,
+                position_ids=pos,
+                use_cache=True,
+            )
         past = out.past_key_values
         first_token = out.logits[0, -1].argmax(dim=-1, keepdim=True).unsqueeze(0)
 
     def _decode() -> object:
         # Local copies so a repeat always resumes from the cache `_prefill` just built rather
         # than from wherever the previous repeat left off.
+        from ddi.inference import forward as _fwd
         step_past, next_token = past, first_token
         with torch.no_grad():
             for i in range(n_new_tokens):
-                step = model(
-                    input_ids=next_token,
+                sk = step_kwargs[i]
+                step = _fwd(
+                    model, next_token,
+                    mask_variant=None,
+                    additive_mask=sk.get("attention_mask"),
+                    position_ids=sk.get("position_ids"),
                     past_key_values=step_past,
                     use_cache=True,
-                    **step_kwargs[i],
                 )
                 step_past = step.past_key_values
                 next_token = step.logits[0, -1].argmax(dim=-1, keepdim=True).unsqueeze(0)

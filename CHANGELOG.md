@@ -41,6 +41,24 @@ without the sub-issue / SHA / runs fields.
 
 ---
 
+## Unreleased — inference surface isolation (#122)
+
+Inference surface isolated to `ddi/inference.py`; 13 inlined `model(...)` call sites
+collapsed to 2 entry points (`forward`, `generate`). `patch_model`/`unpatch_model`/
+`load_model` re-exported from `ddi.inference`. No behavior change. Enables custom
+attention backends behind a `backend=` kwarg (default `'hf'`).
+
+- `ddi/inference.py::forward(model, input_ids, *, mask_variant, additive_mask,
+  doc_lengths, query_len, answer_len, mask_kwargs, position_ids, past_key_values,
+  use_cache, output_hidden_states, backend)` — single HF forward pass. Covers prefill
+  (with/without cache) and decode steps. `mask_variant=None` ⇒ decode step.
+- `ddi/inference.py::generate(...)` — unchanged shape; prefill + greedy decode combo.
+- `ddi/model.py::forward_with_mask` deleted (merged into `inference.forward`).
+- `ddi/timing.py`, `ddi/cache.py`, `ddi/perplexity.py`, `ddi/run.py` — all `model(...)`
+  calls replaced with `inference.forward(...)`.
+- Acceptance: `grep -E '\bmodel\s*\(' ddi/ -g '!inference.py' -g '!model.py'` returns
+  empty. 489 tests pass, 0 failures.
+
 ## Unreleased — VIBEQUEUE-2 harness review (R1–R10)
 
 Three critical defects broke the fine-tune parity measurement; all fixed.

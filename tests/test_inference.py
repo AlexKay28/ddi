@@ -2,7 +2,7 @@
 
 Pure-unit tests (no HF download) cover the small orchestration invariants:
 dtype resolution, backend name mapping, `encode` output shapes/layouts, and
-config validation. The end-to-end `generate` / `forward_with_mask` /
+config validation. The end-to-end `generate` / `forward` /
 mask-variant cross-check tests use `hf-internal-testing/tiny-random-LlamaForCausalLM`
 (same tiny checkpoint the rest of the suite uses) and are gated behind
 `DDI_INTEGRATION=1` so CPU-only CI does not download weights or run the real

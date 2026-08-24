@@ -664,19 +664,14 @@ def _cache_correctness(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path
     model_id = getattr(model.config, "_name_or_path", "") or type(model).__name__
 
     def _full_causal_logits(input_ids: torch.Tensor) -> torch.Tensor:
-        T = input_ids.shape[-1]
-        allow = build_mask([T], query_len=0, answer_len=0, variant="full")
-        additive = (
-            to_additive(allow, dtype=model.dtype)
-            .to(model.device)
-            .unsqueeze(0)
-            .unsqueeze(0)
-        )
         with torch.no_grad():
-            out = model(
-                input_ids=input_ids,
-                attention_mask=additive,
-                use_cache=False,
+            out = inference.forward(
+                model,
+                input_ids,
+                mask_variant="full",
+                doc_lengths=[int(input_ids.shape[-1])],
+                query_len=0,
+                answer_len=0,
             )
         return out.logits.detach()
 
@@ -687,23 +682,14 @@ def _cache_correctness(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path
         doc_lengths = [int(t.shape[-1]) for t in doc_ids_list]
         query_len = int(query_ids.shape[-1])
         input_ids = torch.cat(doc_ids_list + [query_ids], dim=-1).to(model.device)
-        allow = build_mask(
-            doc_lengths,
-            query_len=query_len,
-            answer_len=0,
-            variant="ddi_qf",
-        )
-        additive = (
-            to_additive(allow, dtype=model.dtype)
-            .to(model.device)
-            .unsqueeze(0)
-            .unsqueeze(0)
-        )
         with torch.no_grad():
-            out = model(
-                input_ids=input_ids,
-                attention_mask=additive,
-                use_cache=False,
+            out = inference.forward(
+                model,
+                input_ids,
+                mask_variant="ddi_qf",
+                doc_lengths=doc_lengths,
+                query_len=query_len,
+                answer_len=0,
             )
         return out.logits.detach()
 
@@ -892,16 +878,18 @@ def _time_doc_prefill(model, tokenizer, doc_text: str, layout: str) -> float:
     doc_len = int(doc_ids.shape[-1])
     input_ids = doc_ids.to(model.device)
     positions = build_positions([doc_len], 0, 0, layout).unsqueeze(0).to(model.device)  # type: ignore[arg-type]
-    allow = build_mask([doc_len], query_len=0, answer_len=0, variant="full")
-    additive = to_additive(allow, dtype=model.dtype).to(model.device).unsqueeze(0).unsqueeze(0)
 
     if torch.cuda.is_available():
         torch.cuda.synchronize()
     t0 = time.perf_counter()
     with torch.no_grad():
-        model(
-            input_ids=input_ids,
-            attention_mask=additive,
+        inference.forward(
+            model,
+            input_ids,
+            mask_variant="full",
+            doc_lengths=[doc_len],
+            query_len=0,
+            answer_len=0,
             position_ids=positions,
             use_cache=True,
         )
@@ -920,20 +908,27 @@ def _time_query_prefill(
     ids = tokenizer(query_text, return_tensors="pt", add_special_tokens=False).input_ids.to(
         model.device
     )
-    q_len = ids.shape[-1]
-    allow = build_mask([q_len], query_len=0, answer_len=0, variant="full")
-    additive = to_additive(allow, dtype=model.dtype).to(model.device).unsqueeze(0).unsqueeze(0)
 
     if torch.cuda.is_available():
         torch.cuda.synchronize()
     t0 = time.perf_counter()
     with torch.no_grad():
-        out = model(input_ids=ids, attention_mask=additive, use_cache=True)
+        out = inference.forward(
+            model,
+            ids,
+            mask_variant="full",
+            doc_lengths=[q_len],
+            query_len=0,
+            answer_len=0,
+            use_cache=True,
+        )
         past = out.past_key_values
         next_token = out.logits[0, -1].argmax(dim=-1, keepdim=True).unsqueeze(0)
         for _ in range(n_new_tokens):
-            step = model(
-                input_ids=next_token,
+            step = inference.forward(
+                model,
+                next_token,
+                mask_variant=None,
                 past_key_values=past,
                 use_cache=True,
             )
@@ -962,19 +957,26 @@ def _time_full_causal(
     full_ids = torch.cat(doc_ids_list + [query_ids], dim=-1).to(model.device)
     T = full_ids.shape[-1]
 
-    allow = build_mask([T], query_len=0, answer_len=0, variant="full")
-    additive = to_additive(allow, dtype=model.dtype).to(model.device).unsqueeze(0).unsqueeze(0)
-
     if torch.cuda.is_available():
         torch.cuda.synchronize()
     t0 = time.perf_counter()
     with torch.no_grad():
-        out = model(input_ids=full_ids, attention_mask=additive, use_cache=True)
+        out = inference.forward(
+            model,
+            full_ids,
+            mask_variant="full",
+            doc_lengths=[T],
+            query_len=0,
+            answer_len=0,
+            use_cache=True,
+        )
         past = out.past_key_values
         next_token = out.logits[0, -1].argmax(dim=-1, keepdim=True).unsqueeze(0)
         for _ in range(n_new_tokens):
-            step = model(
-                input_ids=next_token,
+            step = inference.forward(
+                model,
+                next_token,
+                mask_variant=None,
                 past_key_values=past,
                 use_cache=True,
             )
@@ -1245,30 +1247,21 @@ def _cache_restart_quality(
                             full_ids.shape[-1],
                         ).to(model.device)
 
-                        allow = build_mask(
-                            doc_lengths,
-                            query_len=query_len,
-                            answer_len=answer_len,
-                            variant=variant_here,  # type: ignore[arg-type]
-                            **_mask_kwargs(variant_here, bridge_k_here),
-                        )
-                        additive = (
-                            to_additive(allow, dtype=model.dtype)
-                            .to(model.device)
-                            .unsqueeze(0)
-                            .unsqueeze(0)
-                        )
                         positions = (
                             build_positions(doc_lengths, query_len, answer_len, layout)  # type: ignore[arg-type]
                             .unsqueeze(0)
                             .to(model.device)
                         )
                         with torch.no_grad():
-                            out = model(
-                                input_ids=full_ids,
-                                attention_mask=additive,
+                            out = inference.forward(
+                                model,
+                                full_ids,
+                                mask_variant=variant_here,
+                                doc_lengths=doc_lengths,
+                                query_len=query_len,
+                                answer_len=answer_len,
+                                mask_kwargs=_mask_kwargs(variant_here, bridge_k_here),
                                 position_ids=positions,
-                                use_cache=False,
                             )
                         loss_val = float(shifted_cross_entropy(out.logits, labels).item())
 
