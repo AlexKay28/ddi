@@ -528,15 +528,20 @@ def finetune(
     # 8-bit optimizer states on CUDA: full AdamW states in bf16 already push a 7B
     # teacher+student pair close to an 80GB GPU's limit (issue #120 follow-up).
     # bitsandbytes needs CUDA tensors, so CPU-only runs (e.g. unit tests) keep
-    # plain torch.optim.AdamW.
+    # plain torch.optim.AdamW. bitsandbytes is optional — fall back to plain
+    # AdamW when it is not installed, at the cost of extra optimizer memory.
     if device.type == "cuda":
         # Imported here, not at module scope: bitsandbytes is a CUDA-oriented package and is
         # now an optional dependency (the `train` extra). A top-level import made the whole
         # trainer module unimportable on any CPU-only host, which is what made
         # tests/test_finetune.py fail at collection time.
-        import bitsandbytes as bnb
+        try:
+            import bitsandbytes as bnb
 
-        optimizer = bnb.optim.AdamW8bit(trainable_params, lr=lr, weight_decay=weight_decay)
+            optimizer = bnb.optim.AdamW8bit(trainable_params, lr=lr, weight_decay=weight_decay)
+        except ImportError:
+            _log("bitsandbytes not installed; falling back to torch.optim.AdamW (more VRAM)")
+            optimizer = torch.optim.AdamW(trainable_params, lr=lr, weight_decay=weight_decay)
     else:
         optimizer = torch.optim.AdamW(trainable_params, lr=lr, weight_decay=weight_decay)
 
