@@ -195,6 +195,34 @@ def forward(
     if backend != "hf":
         raise ValueError(f"unknown backend {backend!r}; only 'hf' is implemented today")
 
+    if position_ids is not None:
+        if position_ids.dim() != 2:
+            raise ValueError(
+                f"position_ids must be 2D [batch, T]; got {position_ids.dim()}D "
+                f"shape={tuple(position_ids.shape)}"
+            )
+        if position_ids.shape != input_ids.shape:
+            raise ValueError(
+                f"position_ids shape {tuple(position_ids.shape)} must match input_ids shape "
+                f"{tuple(input_ids.shape)}"
+            )
+        if position_ids.dtype != torch.long:
+            raise ValueError(
+                f"position_ids must be torch.long; got {position_ids.dtype}"
+            )
+
+    if additive_mask is not None:
+        if additive_mask.dim() != 4:
+            raise ValueError(
+                f"additive_mask must be 4D [B, H|1, T, T]; got {additive_mask.dim()}D "
+            f"shape={tuple(additive_mask.shape)}"
+        )
+        if not additive_mask.dtype.is_floating_point:
+            raise ValueError(
+                f"additive_mask must be a floating-point additive mask (0 / -inf); got dtype "
+                f"{additive_mask.dtype}. Use ddi.masks.to_additive to convert a bool allow-matrix."
+            )
+
     if additive_mask is not None:
         # Caller-supplied pre-built additive mask (e.g. timing sweeps).
         additive = additive_mask
@@ -219,7 +247,10 @@ def forward(
     if additive is not None:
         kwargs["attention_mask"] = additive
     if position_ids is not None:
-        kwargs["position_ids"] = position_ids.to(model.device)
+        if hasattr(model, "device"):
+            kwargs["position_ids"] = position_ids.to(model.device)
+        else:
+            kwargs["position_ids"] = position_ids
     if past_key_values is not None:
         kwargs["past_key_values"] = past_key_values
     if output_hidden_states:
