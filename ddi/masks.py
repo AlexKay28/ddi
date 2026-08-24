@@ -119,7 +119,11 @@ def to_additive(allow: torch.Tensor, dtype: torch.dtype = torch.bfloat16) -> tor
     """Convert a boolean allow-matrix to an additive mask (0 = keep, -inf = block)."""
     if allow.dtype != torch.bool:
         raise ValueError(f"expected bool allow-matrix, got {allow.dtype}")
-    # Build additive form as -inf then zero-out the allowed entries. Using masked_fill on a
-    # pre-filled -inf tensor keeps the -inf representable in bf16 (finfo(bf16).min → -inf).
-    out = torch.full(allow.shape, float("-inf"), dtype=dtype, device=allow.device)
+    # Build additive form as finfo.min then zero-out the allowed entries.
+    # Using finfo.min rather than -inf avoids NaN in softmax backward when an
+    # entire key tile is masked (e.g. a doc_i × doc_j block under ddi_qf):
+    #   -inf  → exp(-inf - max(-inf)) = exp(0) = 1 → 1/0 = inf → NaN in grad
+    #   finfo.min → all keys get (roughly) equal weight → well-defined grad
+    # Pre-trained HF kernels use finfo.min for exactly this reason.
+    out = torch.full(allow.shape, torch.finfo(dtype).min, dtype=dtype, device=allow.device)
     return out.masked_fill(allow, 0.0)
