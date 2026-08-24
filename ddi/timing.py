@@ -180,22 +180,27 @@ def measure_prefill(
     warmup: int = 3,
     use_cuda_events: bool | None = None,
 ) -> Timing:
-    """FTT (first-token time) for a single masked prefill via `forward_with_mask`.
+    """FTT (first-token time) for a single masked prefill via `inference.forward`.
 
     `position_ids` is the optional `[1, T]` long tensor from `ddi.positions.build_positions`; it is
     forwarded verbatim so a timing sweep can hold the mask fixed and vary the layout axis
     (`sequential` vs `restart`). Omitted, HF's default sequential handling applies — the shape of
     the computation is identical either way, so this changes no existing number.
     """
-    # Imported here, not at module scope: `ddi.model` pulls in `transformers`, and a top-level
-    # import made the whole timing suite uncollectible on a host without it — which is how an
-    # entirely unmasked decode loop sat here undetected. Keep `ddi.timing` importable with torch
-    # alone so its regression tests run everywhere.
-    from ddi.model import forward_with_mask
+    # Route through inference.forward with mask_variant=None because callers
+    # already built the additive mask; we pass it straight through.
+    from ddi.inference import forward
 
     def _fn() -> object:
+        mask_for_call = additive_mask  # [1, 1, T, T] or [T, T]
         with torch.no_grad():
-            return forward_with_mask(model, input_ids, additive_mask, position_ids=position_ids)
+            return forward(
+                model,
+                input_ids,
+                mask_variant=None,
+                additive_mask=mask_for_call,
+                position_ids=position_ids,
+            )
 
     return measure(
         _fn,

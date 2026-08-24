@@ -160,6 +160,7 @@ def forward(
     input_ids: torch.Tensor,
     *,
     mask_variant: str | None = "full",
+    additive_mask: torch.Tensor | None = None,
     doc_lengths: list[int] | None = None,
     query_len: int = 0,
     answer_len: int = 0,
@@ -193,10 +194,12 @@ def forward(
     """
     if backend != "hf":
         raise ValueError(f"unknown backend {backend!r}; only 'hf' is implemented today")
-    input_ids = input_ids.to(model.device)
 
-    if mask_variant is not None:
-        # prefill: build mask
+    if additive_mask is not None:
+        # Caller-supplied pre-built additive mask (e.g. timing sweeps).
+        additive = additive_mask
+    elif mask_variant is not None:
+        # prefill: build mask from variant + block structure
         if doc_lengths is None:
             raise ValueError("mask_variant requires doc_lengths")
         additive = _build_additive(
