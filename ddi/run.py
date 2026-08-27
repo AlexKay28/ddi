@@ -37,8 +37,6 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-import gc
-
 import numpy as np
 import torch
 import yaml
@@ -311,15 +309,24 @@ def _quality_cell(
                 full_ids.shape[-1] - answer_len,
                 full_ids.shape[-1],
             ).to(model.device)
+            allow = build_mask(
+                doc_lengths,
+                query_len=query_len,
+                answer_len=answer_len,
+                variant=variant_here,  # type: ignore[arg-type]
+                **_mask_kwargs(variant_here, bridge_k_here),
+            )
+            additive = (
+                to_additive(allow, dtype=model.dtype)
+                .to(model.device)
+                .unsqueeze(0)
+                .unsqueeze(0)
+            )
             with torch.no_grad():
-                out = inference.forward(
-                    model,
-                    full_ids,
-                    mask_variant=variant_here,
-                    doc_lengths=doc_lengths,
-                    query_len=query_len,
-                    answer_len=answer_len,
-                    mask_kwargs=_mask_kwargs(variant_here, bridge_k_here),
+                out = model(
+                    input_ids=full_ids,
+                    attention_mask=additive,
+                    use_cache=False,
                 )
             loss_val = float(shifted_cross_entropy(out.logits, labels).item())
         else:
@@ -481,73 +488,67 @@ def _timing_cell(
 
     # Fresh load per backend — HF picks attn kernel at from_pretrained time.
     model, _tokenizer = inference.load(model_name, backend=backend, checkpoint_dir=checkpoint)
-    try:
-        model.eval()
-        if torch.cuda.is_available():
-            model = model.to("cuda")
+    model.eval()
+    if torch.cuda.is_available():
+        model = model.to("cuda")
 
-        vocab_size = model.config.vocab_size
-        torch.manual_seed(seed)
-        doc_lengths = [L] * N
-        T_prefill = N * L + Q
-        prefill_ids = torch.randint(0, vocab_size, (1, T_prefill), device=model.device)
+    vocab_size = model.config.vocab_size
+    torch.manual_seed(seed)
+    doc_lengths = [L] * N
+    T_prefill = N * L + Q
+    prefill_ids = torch.randint(0, vocab_size, (1, T_prefill), device=model.device)
 
-        kwargs = _mask_kwargs(mask_variant, bridge_k)
-        allow = build_mask(
-            doc_lengths,
-            query_len=Q,
-            answer_len=0,
-            variant=mask_variant,  # type: ignore[arg-type]
-            **kwargs,
-        )
-        additive = (
-            to_additive(allow, dtype=model.dtype).to(model.device).unsqueeze(0).unsqueeze(0)
-        )
+    kwargs = _mask_kwargs(mask_variant, bridge_k)
+    allow = build_mask(
+        doc_lengths,
+        query_len=Q,
+        answer_len=0,
+        variant=mask_variant,  # type: ignore[arg-type]
+        **kwargs,
+    )
+    additive = (
+        to_additive(allow, dtype=model.dtype).to(model.device).unsqueeze(0).unsqueeze(0)
+    )
 
-        prov = capture(
-            config_hash=cfg_hash,
-            seed=seed,
-            model_revision=model_name,
-            dataset_revision=f"synthetic_timing_N{N}_L{L}_Q{Q}",
-        )
-        tag = _variant_tag(mask_variant, bridge_k)
-        run_id = (
-            f"phase3_timing:{model_name}:N={N}:L={L}:Q={Q}:{tag}:{backend}:"
-            f"seed={seed}:{prov.git_sha[:8]}"
-        )
+    prov = capture(
+        config_hash=cfg_hash,
+        seed=seed,
+        model_revision=model_name,
+        dataset_revision=f"synthetic_timing_N{N}_L{L}_Q{Q}",
+    )
+    tag = _variant_tag(mask_variant, bridge_k)
+    run_id = (
+        f"phase3_timing:{model_name}:N={N}:L={L}:Q={Q}:{tag}:{backend}:"
+        f"seed={seed}:{prov.git_sha[:8]}"
+    )
 
-        sparsity = _sparsity(allow)
-        append(run_id, "mask_sparsity", sparsity, prov, store=store_path)
+    sparsity = _sparsity(allow)
+    append(run_id, "mask_sparsity", sparsity, prov, store=store_path)
 
-        # Two independent measurements, deliberately not one. `measure_decode` runs a prefill of its
-        # own each iteration — the decode loop needs a warm KV cache — but times only the decode steps,
-        # so `tpot` is time-per-output-token and not `(FTT + n*TPOT) / n`. Do not "save a prefill" by
-        # deriving one of these from the other: the prefill term is where mask sparsity pays off, so
-        # folding it into `tpot` credits decode with a prefill speedup (see measure_decode's docstring).
-        #
-        # The four rows `append_timing` writes per metric — `{ftt,tpot}_{median_ms,iqr_low_ms,
-        # iqr_high_ms,repeats_ms}` — are parsed by name in `ddi.aggregate`; keep the metric strings.
-        ftt = measure_prefill(model, prefill_ids, additive, n_repeats=n_repeats, warmup=warmup)
-        append_timing(store=store_path, run_id=run_id, metric="ftt", timing=ftt, provenance=prov)
+    # Two independent measurements, deliberately not one. `measure_decode` runs a prefill of its
+    # own each iteration — the decode loop needs a warm KV cache — but times only the decode steps,
+    # so `tpot` is time-per-output-token and not `(FTT + n*TPOT) / n`. Do not "save a prefill" by
+    # deriving one of these from the other: the prefill term is where mask sparsity pays off, so
+    # folding it into `tpot` credits decode with a prefill speedup (see measure_decode's docstring).
+    #
+    # The four rows `append_timing` writes per metric — `{ftt,tpot}_{median_ms,iqr_low_ms,
+    # iqr_high_ms,repeats_ms}` — are parsed by name in `ddi.aggregate`; keep the metric strings.
+    ftt = measure_prefill(model, prefill_ids, additive, n_repeats=n_repeats, warmup=warmup)
+    append_timing(store=store_path, run_id=run_id, metric="ftt", timing=ftt, provenance=prov)
 
-        tpot = measure_decode(
-            model,
-            prefill_ids,
-            additive,
-            n_new_tokens=n_new_tokens,
-            n_repeats=n_repeats,
-            warmup=warmup,
-        )
-        append_timing(store=store_path, run_id=run_id, metric="tpot", timing=tpot, provenance=prov)
+    tpot = measure_decode(
+        model,
+        prefill_ids,
+        additive,
+        n_new_tokens=n_new_tokens,
+        n_repeats=n_repeats,
+        warmup=warmup,
+    )
+    append_timing(store=store_path, run_id=run_id, metric="tpot", timing=tpot, provenance=prov)
 
-        speedup = _analytical_speedup(mask_variant, N, L, Q)
-        append(run_id, "analytical_speedup", speedup, prov, store=store_path)
-        append(run_id, "backend_used", backend, prov, store=store_path)
-    finally:
-        del model
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
+    speedup = _analytical_speedup(mask_variant, N, L, Q)
+    append(run_id, "analytical_speedup", speedup, prov, store=store_path)
+    append(run_id, "backend_used", backend, prov, store=store_path)
 
 
 def run_timing(cfg: dict[str, Any], cfg_hash: str, seed: int) -> None:
@@ -600,10 +601,6 @@ def run_timing(cfg: dict[str, Any], cfg_hash: str, seed: int) -> None:
                     except Exception as exc:
                         _log_cell_failure(f"timing({cell_desc})", exc)
                         tracker.fail(t)
-                    finally:
-                        gc.collect()
-                        if torch.cuda.is_available():
-                            torch.cuda.empty_cache()
     tracker.summary()
 
 
@@ -676,14 +673,19 @@ def _cache_correctness(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path
     model_id = getattr(model.config, "_name_or_path", "") or type(model).__name__
 
     def _full_causal_logits(input_ids: torch.Tensor) -> torch.Tensor:
+        T = input_ids.shape[-1]
+        allow = build_mask([T], query_len=0, answer_len=0, variant="full")
+        additive = (
+            to_additive(allow, dtype=model.dtype)
+            .to(model.device)
+            .unsqueeze(0)
+            .unsqueeze(0)
+        )
         with torch.no_grad():
-            out = inference.forward(
-                model,
-                input_ids,
-                mask_variant="full",
-                doc_lengths=[int(input_ids.shape[-1])],
-                query_len=0,
-                answer_len=0,
+            out = model(
+                input_ids=input_ids,
+                attention_mask=additive,
+                use_cache=False,
             )
         return out.logits.detach()
 
@@ -694,14 +696,23 @@ def _cache_correctness(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path
         doc_lengths = [int(t.shape[-1]) for t in doc_ids_list]
         query_len = int(query_ids.shape[-1])
         input_ids = torch.cat(doc_ids_list + [query_ids], dim=-1).to(model.device)
+        allow = build_mask(
+            doc_lengths,
+            query_len=query_len,
+            answer_len=0,
+            variant="ddi_qf",
+        )
+        additive = (
+            to_additive(allow, dtype=model.dtype)
+            .to(model.device)
+            .unsqueeze(0)
+            .unsqueeze(0)
+        )
         with torch.no_grad():
-            out = inference.forward(
-                model,
-                input_ids,
-                mask_variant="ddi_qf",
-                doc_lengths=doc_lengths,
-                query_len=query_len,
-                answer_len=0,
+            out = model(
+                input_ids=input_ids,
+                attention_mask=additive,
+                use_cache=False,
             )
         return out.logits.detach()
 
@@ -890,18 +901,16 @@ def _time_doc_prefill(model, tokenizer, doc_text: str, layout: str) -> float:
     doc_len = int(doc_ids.shape[-1])
     input_ids = doc_ids.to(model.device)
     positions = build_positions([doc_len], 0, 0, layout).unsqueeze(0).to(model.device)  # type: ignore[arg-type]
+    allow = build_mask([doc_len], query_len=0, answer_len=0, variant="full")
+    additive = to_additive(allow, dtype=model.dtype).to(model.device).unsqueeze(0).unsqueeze(0)
 
     if torch.cuda.is_available():
         torch.cuda.synchronize()
     t0 = time.perf_counter()
     with torch.no_grad():
-        inference.forward(
-            model,
-            input_ids,
-            mask_variant="full",
-            doc_lengths=[doc_len],
-            query_len=0,
-            answer_len=0,
+        model(
+            input_ids=input_ids,
+            attention_mask=additive,
             position_ids=positions,
             use_cache=True,
         )
@@ -920,28 +929,20 @@ def _time_query_prefill(
     ids = tokenizer(query_text, return_tensors="pt", add_special_tokens=False).input_ids.to(
         model.device
     )
-    q_len = ids.shape[1]
+    q_len = ids.shape[-1]
+    allow = build_mask([q_len], query_len=0, answer_len=0, variant="full")
+    additive = to_additive(allow, dtype=model.dtype).to(model.device).unsqueeze(0).unsqueeze(0)
 
     if torch.cuda.is_available():
         torch.cuda.synchronize()
     t0 = time.perf_counter()
     with torch.no_grad():
-        out = inference.forward(
-            model,
-            ids,
-            mask_variant="full",
-            doc_lengths=[q_len],
-            query_len=0,
-            answer_len=0,
-            use_cache=True,
-        )
+        out = model(input_ids=ids, attention_mask=additive, use_cache=True)
         past = out.past_key_values
         next_token = out.logits[0, -1].argmax(dim=-1, keepdim=True).unsqueeze(0)
         for _ in range(n_new_tokens):
-            step = inference.forward(
-                model,
-                next_token,
-                mask_variant=None,
+            step = model(
+                input_ids=next_token,
                 past_key_values=past,
                 use_cache=True,
             )
@@ -970,26 +971,19 @@ def _time_full_causal(
     full_ids = torch.cat(doc_ids_list + [query_ids], dim=-1).to(model.device)
     T = full_ids.shape[-1]
 
+    allow = build_mask([T], query_len=0, answer_len=0, variant="full")
+    additive = to_additive(allow, dtype=model.dtype).to(model.device).unsqueeze(0).unsqueeze(0)
+
     if torch.cuda.is_available():
         torch.cuda.synchronize()
     t0 = time.perf_counter()
     with torch.no_grad():
-        out = inference.forward(
-            model,
-            full_ids,
-            mask_variant="full",
-            doc_lengths=[T],
-            query_len=0,
-            answer_len=0,
-            use_cache=True,
-        )
+        out = model(input_ids=full_ids, attention_mask=additive, use_cache=True)
         past = out.past_key_values
         next_token = out.logits[0, -1].argmax(dim=-1, keepdim=True).unsqueeze(0)
         for _ in range(n_new_tokens):
-            step = inference.forward(
-                model,
-                next_token,
-                mask_variant=None,
+            step = model(
+                input_ids=next_token,
                 past_key_values=past,
                 use_cache=True,
             )
@@ -1260,21 +1254,30 @@ def _cache_restart_quality(
                             full_ids.shape[-1],
                         ).to(model.device)
 
+                        allow = build_mask(
+                            doc_lengths,
+                            query_len=query_len,
+                            answer_len=answer_len,
+                            variant=variant_here,  # type: ignore[arg-type]
+                            **_mask_kwargs(variant_here, bridge_k_here),
+                        )
+                        additive = (
+                            to_additive(allow, dtype=model.dtype)
+                            .to(model.device)
+                            .unsqueeze(0)
+                            .unsqueeze(0)
+                        )
                         positions = (
                             build_positions(doc_lengths, query_len, answer_len, layout)  # type: ignore[arg-type]
                             .unsqueeze(0)
                             .to(model.device)
                         )
                         with torch.no_grad():
-                            out = inference.forward(
-                                model,
-                                full_ids,
-                                mask_variant=variant_here,
-                                doc_lengths=doc_lengths,
-                                query_len=query_len,
-                                answer_len=answer_len,
-                                mask_kwargs=_mask_kwargs(variant_here, bridge_k_here),
+                            out = model(
+                                input_ids=full_ids,
+                                attention_mask=additive,
                                 position_ids=positions,
+                                use_cache=False,
                             )
                         loss_val = float(shifted_cross_entropy(out.logits, labels).item())
 
@@ -1411,7 +1414,9 @@ def run_finetune(cfg: dict[str, Any], cfg_hash: str, seed: int) -> None:
     max_skipped_steps = int(cfg.get("max_skipped_steps", 20))
     layout = str(cfg.get("layout", "sequential"))
     if layout not in ("sequential", "restart", "mixed"):
-        raise ValueError(f"finetune: 'layout' must be sequential/restart/mixed, got {layout!r}")
+        raise ValueError(
+            f"finetune: 'layout' must be sequential/restart/mixed, got {layout!r}"
+        )
     store_path = _store_path_for(cfg)
 
     prov = capture(
@@ -1563,6 +1568,7 @@ _SET_KEYS: dict[str, frozenset[str]] = {
         "holdout_eval_records",
         "max_grad_norm",
         "max_skipped_steps",
+        "layout",
     },
 }
 

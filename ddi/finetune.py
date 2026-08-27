@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import shutil
 import sys
 from datetime import timedelta
 from itertools import zip_longest
@@ -429,8 +430,6 @@ def finetune(
         raise ValueError(f"warmup_steps must be >= 0, got {warmup_steps}")
     if max_steps is not None and max_steps < 1:
         raise ValueError(f"max_steps must be >= 1, got {max_steps}")
-    if layout not in ("sequential", "restart", "mixed"):
-        raise ValueError(f"layout must be one of 'sequential', 'restart', 'mixed', got {layout!r}")
     if num_gpus < 1:
         raise ValueError(f"num_gpus must be >= 1, got {num_gpus}")
     if trainable_layers is not None and trainable_layers < 1:
@@ -442,6 +441,10 @@ def finetune(
     if holdout_eval_records is not None and holdout_eval_records < 1:
         raise ValueError(
             f"holdout_eval_records must be >= 1, got {holdout_eval_records}"
+        )
+    if layout not in ("sequential", "restart", "mixed"):
+        raise ValueError(
+            f"layout must be 'sequential', 'restart', or 'mixed', got {layout!r}"
         )
 
     rank, world_size, local_rank = _init_ddp(num_gpus)
@@ -531,8 +534,7 @@ def finetune(
     # 8-bit optimizer states on CUDA: full AdamW states in bf16 already push a 7B
     # teacher+student pair close to an 80GB GPU's limit (issue #120 follow-up).
     # bitsandbytes needs CUDA tensors, so CPU-only runs (e.g. unit tests) keep
-    # plain torch.optim.AdamW. bitsandbytes is optional — fall back to plain
-    # AdamW when it is not installed, at the cost of extra optimizer memory.
+    # plain torch.optim.AdamW.
     if device.type == "cuda":
         # Imported here, not at module scope: bitsandbytes is a CUDA-oriented package and is
         # now an optional dependency (the `train` extra). A top-level import made the whole
@@ -542,7 +544,7 @@ def finetune(
             import bitsandbytes as bnb
 
             optimizer = bnb.optim.AdamW8bit(trainable_params, lr=lr, weight_decay=weight_decay)
-        except ImportError:
+        except (ImportError, ModuleNotFoundError):
             _log("bitsandbytes not installed; falling back to torch.optim.AdamW (more VRAM)")
             optimizer = torch.optim.AdamW(trainable_params, lr=lr, weight_decay=weight_decay)
     else:
@@ -672,15 +674,25 @@ def finetune(
             additive_student = _build_additive(
                 doc_lengths, query_len, answer_len, student_variant, dtype, device
             )
+
             # Mixed-layout training: coin flip per record between sequential/restart.
-            # Teacher always uses sequential (frozen reference); student uses the chosen layout.
-            if layout == "mixed" and torch.rand(1).item() < 0.5:
-                record_layout = "restart"
-            elif layout in ("sequential", "restart"):
-                record_layout = layout
+            # Teacher always uses sequential positions (frozen reference); the student
+            # learns to produce the same answer logits under the chosen layout.  This
+            # teaches the model to be robust to the position-reset that ddi_cache uses
+            # at inference time, without which restart quality collapses (VIBEQUEUE-2).
+            if layout == "mixed":
+                record_layout = "restart" if torch.rand(1).item() < 0.5 else "sequential"
             else:
-                record_layout = "sequential"
-            positions = (
+                record_layout = layout
+
+            teacher_positions = (
+                build_positions(
+                    doc_lengths, query_len, answer_len, "sequential"
+                )
+                .unsqueeze(0)
+                .to(device)
+            )
+            student_positions = (
                 build_positions(
                     doc_lengths, query_len, answer_len, record_layout  # type: ignore[arg-type]
                 )
@@ -692,13 +704,13 @@ def finetune(
                 teacher_out = teacher(
                     input_ids=full_ids,
                     attention_mask=additive_teacher,
-                    position_ids=positions,
+                    position_ids=teacher_positions,
                     use_cache=False,
                 )
             student_out = student(
                 input_ids=full_ids,
                 attention_mask=additive_student,
-                position_ids=positions,
+                position_ids=student_positions,
                 use_cache=False,
             )
 
@@ -790,6 +802,24 @@ def finetune(
                         f"(epoch {epoch + 1}, rec {rec_i + 1}/{len(train_records)})"
                     )
 
+                # Periodic checkpoint every 5000 optimizer steps — survives crashes
+                # that would otherwise lose an entire overnight run (VIBEQUEUE-2).
+                # Only the latest is kept; the previous .stepN dir is removed to avoid
+                # accumulating 15 GB per save (5 checkpoints × 15 GB = 75 GB).
+                if is_main and global_step % 5000 == 0 and global_step > 0:
+                    ckpt_path = output_dir.parent / f"{output_dir.name}.step{global_step}"
+                    _log(f"periodic checkpoint -> {ckpt_path}")
+                    student_module.save_pretrained(ckpt_path)
+                    tokenizer.save_pretrained(ckpt_path)
+                    # Remove previous periodic checkpoint(s) — keep only this one.
+                    prev = sorted(
+                        output_dir.parent.glob(f"{output_dir.name}.step*")
+                    )
+                    prev = [p for p in prev if p != ckpt_path]
+                    for old in prev:
+                        _log(f"removing old checkpoint {old}")
+                        shutil.rmtree(old, ignore_errors=True)
+
                 if max_steps is not None and global_step >= max_steps:
                     _log(f"max_steps={max_steps} reached; stopping early")
                     stop_early = True
@@ -808,18 +838,16 @@ def finetune(
             epoch_rid = f"{run_prefix}:epoch={epoch + 1}"
             append(epoch_rid, "perplexity_student_ddi_qf_post", pplx_post,
                    provenance, store=store_path)
+            _log(f"epoch {epoch + 1} post: student_ddi_qf={pplx_post:.3f}")
             if layout != "sequential":
                 pplx_restart = compute_perplexity(
                     student_module, tokenizer, pplx_records,
                     mask_variant="ddi_qf", layout="restart",
                 )
                 student_module.train()
-                append(epoch_rid, "perplexity_student_ddi_qf_post_restart", pplx_restart,
+                append(epoch_rid, "perplexity_student_ddi_qf_restart", pplx_restart,
                        provenance, store=store_path)
-                _log(f"epoch {epoch + 1} post: student_ddi_qf={pplx_post:.3f} "
-                     f"restart={pplx_restart:.3f}")
-            else:
-                _log(f"epoch {epoch + 1} post: student_ddi_qf={pplx_post:.3f}")
+                _log(f"epoch {epoch + 1} post: student_ddi_qf_restart={pplx_restart:.3f}")
         if is_dist:
             dist.barrier()
 
