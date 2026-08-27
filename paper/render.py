@@ -194,9 +194,107 @@ def render_f5() -> None:
     print("[render] F5.pdf written")
 
 
+# ---- T4: finetune results (base vs seq-tuned vs mixed-tuned quality + restart) -
+
+def render_t4() -> None:
+    """Quality and restart results across base, sequential-tuned, mixed-tuned 7B.
+
+    Numbers are hardcoded from the VIBEQUEUE-2 resolution chain (2026-08-27).
+    Source: results/runs.jsonl, 100 records per cell, EM metric.
+    """
+    rows = [
+        # (checkpoint, mask, dataset, EM)
+        ("base",       "full",   "hotpot", 0.57),
+        ("base",       "ddi_qf", "hotpot", 0.31),
+        ("base",       "full",   "musique", 0.29),
+        ("base",       "ddi_qf", "musique", 0.05),
+        ("seq-tuned",  "full",   "hotpot", 0.46),
+        ("seq-tuned",  "ddi_qf", "hotpot", 0.46),
+        ("seq-tuned",  "full",   "musique", 0.23),
+        ("seq-tuned",  "ddi_qf", "musique", 0.13),
+        ("mixed-tuned","full",   "hotpot", 0.40),
+        ("mixed-tuned","ddi_qf", "hotpot", 0.39),
+        ("mixed-tuned","full",   "musique", 0.22),
+        ("mixed-tuned","ddi_qf", "musique", 0.12),
+    ]
+
+    restart_rows = [
+        # (checkpoint, layout, dataset, EM)
+        ("base",        "sequential", "hotpot", 0.31),
+        ("base",        "restart",    "hotpot", 0.07),
+        ("seq-tuned",   "sequential", "hotpot", 0.46),
+        ("seq-tuned",   "restart",    "hotpot", 0.06),
+        ("mixed-tuned", "sequential", "hotpot", 0.39),
+        ("mixed-tuned", "restart",    "hotpot", 0.07),
+    ]
+
+    checkpoints = ["base", "seq-tuned", "mixed-tuned"]
+    masks = ["full", "ddi_qf"]
+    datasets = ["hotpot", "musique"]
+
+    def lookup(ckpt, mask, ds):
+        for c, m, d, em in rows:
+            if c == ckpt and m == mask and d == ds:
+                return f"{em:.2f}"
+        return "—"
+
+    lines = [
+        r"\begin{tabular}{ll|cc|cc}",
+        r" & & \multicolumn{2}{c|}{hotpot} & \multicolumn{2}{c}{musique} \\",
+        r" checkpoint & mask & EM & $\Delta$ & EM & $\Delta$ \\",
+        r"\hline",
+    ]
+    for ckpt in checkpoints:
+        for j, mask in enumerate(masks):
+            row_parts = []
+            if j == 0:
+                row_parts.append(r"\multirow{2}{*}{" + ckpt + r"}")
+            else:
+                row_parts.append("")
+            row_parts.append(mask)
+            for ds in datasets:
+                row_parts.append(lookup(ckpt, mask, ds))
+                # delta = full - ddi_qf for this checkpoint+dataset
+                full_v = next((em for c,m,d,em in rows if c==ckpt and m=="full" and d==ds), None)
+                ddi_v = next((em for c,m,d,em in rows if c==ckpt and m=="ddi_qf" and d==ds), None)
+                if full_v is not None and ddi_v is not None:
+                    delta = full_v - ddi_v
+                    row_parts.append(f"{delta:+.2f}")
+                else:
+                    row_parts.append("—")
+            lines.append(" & ".join(row_parts) + r" \\")
+        lines.append(r"\hline")
+
+    lines.append(r"\end{tabular}")
+    (GEN / "T4.tex").write_text("\n".join(lines))
+    print("[render] T4.tex written")
+
+    # Restart quality table
+    def lookup_restart(ckpt, layout):
+        for c, l, d, em in restart_rows:
+            if c == ckpt and l == layout and d == "hotpot":
+                return f"{em:.2f}"
+        return "—"
+
+    rlines = [
+        r"\begin{tabular}{l|cc|c}",
+        r" & \multicolumn{2}{c|}{hotpot EM} & \\",
+        r" checkpoint & sequential & restart & $\Delta$ \\",
+        r"\hline",
+    ]
+    for ckpt in checkpoints:
+        seq_v = next((em for c,l,d,em in restart_rows if c==ckpt and l=="sequential" and d=="hotpot"), None)
+        rst_v = next((em for c,l,d,em in restart_rows if c==ckpt and l=="restart" and d=="hotpot"), None)
+        rlines.append(f"{ckpt} & {lookup_restart(ckpt,'sequential')} & {lookup_restart(ckpt,'restart')} & {f'{seq_v-rst_v:+.2f}' if seq_v is not None and rst_v is not None else '—'}" + r" \\")
+    rlines.append(r"\end{tabular}")
+    (GEN / "T4_restart.tex").write_text("\n".join(rlines))
+    print("[render] T4_restart.tex written")
+
+
 if __name__ == "__main__":
     render_t2()
     render_t3()
     render_f3()
     render_f5()
+    render_t4()
     print("[render] done")
