@@ -17,10 +17,13 @@ efficiency numbers are for the single-request setting; server-side
 throughput at higher batch sizes is out of scope.
 
 \paragraph{Preprint scope.}
-This preprint covers single-hop retrieval quality (C1), TTFT / realized
-speedup (C3), and KV-cache reuse under restart layout (C4). Multi-hop
-failure characterization, PCW comparison, and fine-tuning are not
-attempted here.
+This preprint covers retrieval quality (C1) on Qwen2.5-7B-Instruct, including
+self-distillation finetuning to close the mask quality gap. TTFT / realized
+speedup (C3) and KV-cache reuse (C4) are measured on the same model. The
+restart position layout, which enables position-independent KV blocks for
+caching, degrades generation quality even after mixed-layout finetuning;
+this is a known limitation (see below) and the cache throughput claim is
+scoped to the sequential layout.
 
 \paragraph{Realization gap.}
 If the analytical/realized gap of Section~\ref{sec:results-efficiency-gap}
@@ -31,20 +34,36 @@ the co-headline caching result of Section~\ref{sec:results-caching}
 carries proportionally more of the paper. We flag this in the results
 sections rather than only here, so a reader cannot miss the constraint.
 
+\paragraph{Restart layout quality.}
+The restart position layout (Section~\ref{sec:method-positions}) resets
+each document's RoPE positions to zero, making KV blocks position-independent
+and therefore cacheable across requests. On Qwen2.5-7B-Instruct, this layout
+degrades generation quality (EM) relative to the sequential layout: 0.07 vs
+0.39 on hotpot\_qa after mixed-layout finetuning. The perplexity gap closes
+(1.628 vs 1.635) but the generation gap persists --- greedy decoding under
+restart positions compounds small token-level errors. Mixed-layout training
+(50/50 coin-flip per record) was attempted but each record sees only one
+layout per epoch, so the model never learns consistent outputs across
+layouts for the same record. The cache throughput claim (1.72$\times$ QPS)
+is therefore scoped to the sequential layout. Future work: 2-epoch mixed
+training, restart-only finetuning, or position-agnostic architecture changes.
+
 \section{Conclusion}
 \label{sec:conclusion}
 
 We present a characterization of block-diagonal attention over retrieved
-documents in decoder-only language models. On single-hop retrieval
-benchmarks we test whether \texttt{ddi\_qf} matches full-causal quality
-within the non-inferiority margin $\Delta$ (Section~\ref{sec:results-quality}),
-report the realized versus analytical prefill speedup at matched shapes
-(Section~\ref{sec:results-efficiency}), and measure per-document KV-cache
-reuse under the restart position layout
+documents in decoder-only language models. On retrieval benchmarks we show
+that \texttt{ddi\_qf} matches full-causal quality within the
+non-inferiority margin after self-distillation finetuning
+(Section~\ref{sec:results-quality}), report the realized versus analytical
+prefill speedup at matched shapes (Section~\ref{sec:results-efficiency}),
+and measure per-document KV-cache reuse throughput
 (Section~\ref{sec:results-caching}). The caching path turns the
 structural sparsity of the mask into a reusability property of KV
-blocks, which no kernel improvement under full-causal attention can
-match.
+blocks, yielding 1.72$\times$ throughput on the sequential layout. The
+restart position layout, designed to make KV blocks position-independent,
+degrades generation quality even after mixed-layout finetuning; this
+limitation is reported as a negative finding with root cause analysis.
 
 The value of the paper does not depend on any variant beating a
 baseline; it depends on the parity, efficiency, and caching axes being

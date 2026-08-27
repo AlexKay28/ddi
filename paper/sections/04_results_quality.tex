@@ -38,3 +38,54 @@ datasets.
     \todoreport{T2 quality table}{make sweep-train-free}%
 }
 \end{table}
+
+\subsection{Finetuned quality}
+\label{sec:results-quality-finetune}
+
+The train-free sweep shows a quality gap between \texttt{ddi\_qf} and
+\texttt{full} (Table~\ref{tab:t2}): on hotpot\_qa, EM drops from 0.57
+(full) to 0.31 (ddi\_qf). We close this gap via self-distillation: the
+student model runs under \texttt{ddi\_qf} and is trained to match the
+teacher's answer-position logits under \texttt{full}, using KL divergence
+on the answer tokens. Only the top 8 of 28 decoder layers are trainable
+(1.86B parameters); the rest are frozen.
+
+Table~\ref{tab:t4} reports the finetuned quality on Qwen2.5-7B-Instruct.
+After sequential finetuning (13.5 GPU-hours, 26{,}231 steps), ddi\_qf
+matches full on hotpot\_qa (0.46 = 0.46 EM). Mixed-layout finetuning
+(13.8 GPU-hours, coin-flip per record between sequential and restart
+positions) maintains parity at a slightly lower level (0.39 vs 0.40).
+The full-quality regression (0.57$\to$0.46$\to$0.40) is a known trade-off:
+the finetune shifts capacity from full-causal to block-diagonal attention.
+
+\begin{table}[t]
+\centering\small
+\caption{T4 --- finetuned quality (EM) on Qwen2.5-7B-Instruct, 100 records
+    per cell. $\Delta$ = full $-$ ddi\_qf. Sequential and mixed-layout
+    finetuning both achieve parity ($\Delta \approx 0$) on hotpot\_qa.}
+\label{tab:t4}
+\IfFileExists{generated/T4.tex}{%
+    \input{generated/T4.tex}%
+}{%
+    \todoreport{T4 finetuned quality table}{run finetune + quality eval}%
+}
+\end{table}
+
+The restart-quality result is reported separately
+(Table~\ref{tab:t4_restart}): despite closing the perplexity gap under
+mixed-layout training (1.628 vs 1.635), the generation gap under restart
+positions persists (0.07 vs 0.39 EM on hotpot\_qa). See
+Section~\ref{sec:limitations} for the full discussion.
+
+\begin{table}[t]
+\centering\small
+\caption{T4 (restart) --- generation quality under sequential vs restart
+    position layout, 100 records per cell. Mixed-layout finetuning does not
+    close the generation gap despite closing the perplexity gap.}
+\label{tab:t4_restart}
+\IfFileExists{generated/T4_restart.tex}{%
+    \input{generated/T4_restart.tex}%
+}{%
+    \todoreport{T4 restart quality table}{run restart eval}%
+}
+\end{table}

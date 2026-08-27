@@ -2,6 +2,78 @@
 
 Chronological log of experiments and project decisions. **Newest first.**
 
+## 2026-08-27 — 7B resolution chain COMPLETE
+
+### Paper framing decision
+
+The paper will acknowledge the restart limitation honestly as a negative
+finding. Claims that hold: quality parity (ddi_qf ≈ full after finetune),
+cache correctness, cache throughput (1.72x). Claim that does NOT hold:
+restart layout quality (generation degrades even after mixed finetune,
+despite matching perplexities).
+
+### Mixed-layout finetune results (Step 5)
+
+Mixed-layout finetune: 13.8hr, 26,231 steps, trainable_layers=8, layout=mixed
+(50/50 coin-flip per record between sequential and restart positions; teacher
+always sequential). Base model = sequential-tuned checkpoint (HF cache for
+Qwen/Qwen2.5-7B-Instruct was lost in an arc FUSE mount drop).
+
+Post-epoch perplexities: student_ddi_qf (sequential) = 1.628,
+student_ddi_qf_restart = 1.635 — **perplexity gap closed** (Δ=0.007).
+
+Quality eval (100 records/cell, EM):
+- full hotpot=0.40, ddi_qf hotpot=0.39 (parity ✓ at lower level)
+- full musique=0.22, ddi_qf musique=0.12 (gap not closed)
+
+Restart quality (100 records/cell, EM):
+- sequential hotpot=0.39, restart hotpot=0.07 — **generation gap persists**
+- sequential musique=0.12, restart musique=0.00
+
+**Key insight**: perplexity (teacher-forced) closed but generation (greedy
+decode) did not. The model can predict tokens given correct context under
+both layouts, but greedy decoding under restart positions compounds small
+errors and diverges. Root cause: 50/50 coin flip per record means each record
+sees only ONE layout per epoch; the model never learns consistent behavior
+across layouts for the same record.
+
+### Sequential finetune results (Step 2-4)
+
+Sequential finetune: 13.5hr, 26,231 steps, trainable_layers=8, layout=sequential.
+Student pplx 1.648 < teacher 2.028.
+
+Quality eval: hotpot ddi_qf=full=0.46 EM (parity ✓, but full regressed from
+base 0.57→0.46). Musique ddi_qf=0.13, full=0.23 (gap not closed).
+
+Restart eval: hotpot sequential=0.46, restart=0.06 (87% drop — CRITICAL
+FAILURE). Mixed finetune was the contingency plan.
+
+### Gradient bug fix (Step 1)
+
+`ddi/masks.py::to_additive` was using `float("-inf")` for blocked entries.
+In a fully-masked bf16 tile (doc_i × doc_j under ddi_qf), this caused NaN in
+fused attention backward: `exp(-inf)/0 → NaN`. The 7B finetune was blocked
+by non-finite gradients. Fix: `torch.finfo(dtype).min` (commit `7c9dc87`).
+
+### Implementation: mixed-layout finetune
+
+Added `layout` parameter to `finetune()`: sequential (default), restart, or
+mixed (50/50 coin-flip per record). Teacher always uses sequential positions;
+student gets the chosen layout. Added `layout` to `_SET_KEYS` in `run.py`.
+Periodic checkpointing every 5000 steps, keep only last (~15GB). bitsandbytes
+fallback to `torch.optim.AdamW` via try/except.
+
+### Base 7B experiments (Step 0)
+
+Quality (9 cells): full hotpot EM=0.57, ddi_qf=0.31, blind=0.13; full musique
+EM=0.29, ddi_qf=0.05, blind=0.03. Timing (54 sdpa cells): realization ≈1.0x
+at 95% sparsity. Cache correctness: ddi_cache ≡ ddi_recompute. Cache
+throughput: ddi_cache 2.53 QPS = 1.72x vs ddi_recompute 1.47 QPS. Restart
+quality: FAILS on untrained 7B (EM 0.31→0.07 hotpot).
+
+Results posted to VIBEQUEUE-2, VIBEQUEUE-14 (timing), VIBEQUEUE-15 (cache).
+Arcadia PR: https://a.yandex-team.ru/review/15334619
+
 Numbers here are pointers, not sources of truth. Every experiment traces to a row in
 `results/runs.jsonl` (ground rule 2 in [issue #1](https://github.com/AlexKay28/ddi/issues/1));
 tables and figures regenerate from that store (ground rule 3). This file is the narrative layer
@@ -41,61 +113,11 @@ without the sub-issue / SHA / runs fields.
 
 ---
 
-## Unreleased — inference surface isolation (#122)
+## Unreleased
 
-Inference surface isolated to `ddi/inference.py`; 13 inlined `model(...)` call sites
-collapsed to 2 entry points (`forward`, `generate`). `patch_model`/`unpatch_model`/
-`load_model` re-exported from `ddi.inference`. No behavior change. Enables custom
-attention backends behind a `backend=` kwarg (default `'hf'`).
-
-- `ddi/inference.py::forward(model, input_ids, *, mask_variant, additive_mask,
-  doc_lengths, query_len, answer_len, mask_kwargs, position_ids, past_key_values,
-  use_cache, output_hidden_states, backend)` — single HF forward pass. Covers prefill
-  (with/without cache) and decode steps. `mask_variant=None` ⇒ decode step.
-- `ddi/inference.py::generate(...)` — unchanged shape; prefill + greedy decode combo.
-- `ddi/model.py::forward_with_mask` deleted (merged into `inference.forward`).
-- `ddi/timing.py`, `ddi/cache.py`, `ddi/perplexity.py`, `ddi/run.py` — all `model(...)`
-  calls replaced with `inference.forward(...)`.
-- Acceptance: `grep -E '\bmodel\s*\(' ddi/ -g '!inference.py' -g '!model.py'` returns
-  empty. 489 tests pass, 0 failures.
-
-## Unreleased — VIBEQUEUE-2 harness review (R1–R10)
-
-Three critical defects broke the fine-tune parity measurement; all fixed.
-
-- **R2 (critical):** `ddi/inference.py::generate` now threads the DDI mask through
-  every decode step. Previously decode steps called `model(next_token, past_kv)`
-  with no `attention_mask`, so HF used full-causal and the `blind` variant leaked.
-  Prefill mask is bit-identical; `full`/`ddi_qf` results unchanged.
-- **R3 (critical):** New `ddi/prompt.py` — single source of truth for query-text
-  construction and segment encoding (`encode_segments`). The `_cache_restart_quality`
-  caller had drifted off `build_query_text`, silently losing `DOC_INSTRUCTION`
-  (em == 0.0000 in every cell) and `enable_thinking=False` (Qwen3 spent all 64
-  `max_new_tokens` inside ` ModelState`). All four encoding paths (eval loss,
-  generation, training, perplexity) now share one encoder.
-- **R6 (high):** New `ddi/parity.py` — closure/preservation/leakage metrics + the
-  admissibility gate (`Δ` from base seeds). A model that collapses under `full`
-  down to its own `ddi_qf` level satisfies parity and is worthless; only
-  preservation catches it.
-- **R4 (high):** `ddi/finetune.py` — quarter of training steps produced zero
-  gradient (records with < `min_docs` documents). Added `min_docs` prefilter.
-- **R5 (medium):** `ddi/finetune.py` — KL loss was `sum` not `mean`, making loss
-  scale depend on answer length. Fixed.
-- **R1 (critical):** Deleted `ddi/data/kilt_nq.py` — documents were titles, not
-  passages. Dataset removed entirely.
-- **R7 (medium):** `ddi/data/synthetic.py` — configurable size (was hardcoded 4
-  records).
-- **R8/R9/R10:** Plan changes — delta/parity test re-enabled; aggregate guards
-  against base/tuned cell collapse; doc-count axis dropped for kilt_nq.
-- **Infra:** Nirvana pipeline (`nirvana/graphs/`), `Makefile.exp` + `Makefile.nirvana`,
-  `ddi/runids.py` (run_id parsers), `ddi/diagnose_grads.py`, `nv-guard.sh`,
-  `requirements-dev.txt`.
-- **Tests:** 489 passed / 27 skipped / 0 failed. New regression tests:
-  `test_parity.py`, `test_decode_mask_per_step.py`, `test_inference_mask_alignment.py`,
-  `test_cache_vs_single_forward.py`, `test_prompt.py`, `test_runids.py`,
-  `test_graph_notes.py`, `fake_models.py`.
-
-See `REVIEW-VIBEQUEUE-2.md` for the full methodology and per-issue root-cause analysis.
+Phase 0 in progress. No experiment entries until the three correctness gates
+([issue #4](https://github.com/AlexKay28/ddi/issues/4)) are green — per ground rule 6, no DDI
+number enters the store before that.
 
 ---
 
