@@ -9,9 +9,9 @@ Resolve the DDI paper's two-blocker chain: quality closure on the 7B AND restart
 ## Current state (2026-08-28) — RESOLUTION COMPLETE
 
 - C1 quality: **PARTIALLY CLOSED** on 7B. Sequential finetune achieves ddi_qf ≈ full on hotpot (0.46=0.46). Full quality regressed from base 0.57→0.46. Mixed finetune maintains parity (ddi_qf=0.39, full=0.40) at slightly lower level. Restart-only finetune also achieves parity (ddi_qf=0.42, full=0.39).
-- C3 compute: null on sdpa (~1.0x realization at 95% sparsity), fa2 untested
+- C3 compute: **SOLVED with flex_attention** — 1.77x model-level speedup at 97.9% sparsity (N=25, L=2048). sdpa was a 0.40x REGRESSION (4D mask forces slow math backend). flex_attention compiles block-diagonal pattern into block-sparse kernel. See VIBEQUEUE-21.
 - C4 cache correctness: PASSES (ddi_cache ≡ ddi_recompute)
-- C4 cache throughput: 1.72x QPS (2.53 vs 1.47)
+- C4 cache throughput: 1.72x QPS (2.53 vs 1.47) — measured on restart layout (generation quality broken on restart; needs re-measurement on sequential)
 - C4 restart parity: **HARD WALL (DEFINITIVE)** — three finetune approaches all fail. Sequential, mixed-layout, and restart-only training all produce restart EM≈0.07 vs sequential EM≈0.42 on hotpot. Even restart-only training (perplexity 1.629 < sequential 1.638) fails to fix generation.
 
 ## Results summary

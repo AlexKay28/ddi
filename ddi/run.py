@@ -53,7 +53,7 @@ from ddi.metrics import (
 from ddi.prompt import build_query_text, encode_segments
 from ddi.provenance import capture
 from ddi.store import DEFAULT_STORE, append
-from ddi.timing import append_timing, measure_decode, measure_prefill
+from ddi.timing import Timing, append_timing, measure_decode, measure_prefill
 
 
 def shifted_cross_entropy(logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
@@ -462,6 +462,44 @@ def _sparsity(allow: torch.Tensor) -> float:
     return 1.0 - float(allow.sum().item()) / causal_pairs
 
 
+def _measure_prefill_flex(
+    model,
+    input_ids: torch.Tensor,
+    block_mask,
+    n_repeats: int,
+    warmup: int,
+) -> Timing:
+    """FTT for flex_attention backend.
+
+    Sets ``model._flex_block_mask`` so the patched attention layers use the
+    compiled flex_attention kernel. The first call triggers torch.compile
+    warm-up (graph capture), which is why we run an explicit untimed warm-up
+    before the timed repeats — the compilation cost must not land in a
+    measurement.
+    """
+    from ddi.timing import measure, _cuda_events_for
+
+    model._flex_block_mask = block_mask
+
+    # Trigger torch.compile graph capture outside the timed region.
+    with torch.no_grad():
+        model(input_ids=input_ids, use_cache=False)
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+
+    def _fn() -> object:
+        with torch.no_grad():
+            return model(input_ids=input_ids, use_cache=False)
+
+    return measure(
+        _fn,
+        n_repeats=n_repeats,
+        warmup=warmup,
+        name="prefill",
+        use_cuda_events=_cuda_events_for(input_ids, None),
+    )
+
+
 def _timing_cell(
     *,
     model_name: str,
@@ -510,6 +548,14 @@ def _timing_cell(
         to_additive(allow, dtype=model.dtype).to(model.device).unsqueeze(0).unsqueeze(0)
     )
 
+    # flex backend uses a compiled BlockMask instead of a 4D additive mask.
+    flex_block_mask = None
+    if backend == "flex":
+        from ddi.flex_attention import make_block_mask
+        flex_block_mask = make_block_mask(
+            doc_lengths, Q, mask_variant, device=model.device,
+        )
+
     prov = capture(
         config_hash=cfg_hash,
         seed=seed,
@@ -533,9 +579,17 @@ def _timing_cell(
     #
     # The four rows `append_timing` writes per metric — `{ftt,tpot}_{median_ms,iqr_low_ms,
     # iqr_high_ms,repeats_ms}` — are parsed by name in `ddi.aggregate`; keep the metric strings.
-    ftt = measure_prefill(model, prefill_ids, additive, n_repeats=n_repeats, warmup=warmup)
+    if backend == "flex":
+        ftt = _measure_prefill_flex(model, prefill_ids, flex_block_mask, n_repeats, warmup)
+    else:
+        ftt = measure_prefill(model, prefill_ids, additive, n_repeats=n_repeats, warmup=warmup)
     append_timing(store=store_path, run_id=run_id, metric="ftt", timing=ftt, provenance=prov)
 
+    # Decode: flex_attention offers no benefit at Q_LEN=1 (memory-bound), so
+    # both flex and sdpa use the same sdpa decode path. For flex, reset the
+    # block_mask so patched layers fall back to sdpa (see patch_model_for_flex).
+    if backend == "flex":
+        model._flex_block_mask = None  # type: ignore[attr-defined]
     tpot = measure_decode(
         model,
         prefill_ids,
@@ -601,6 +655,11 @@ def run_timing(cfg: dict[str, Any], cfg_hash: str, seed: int) -> None:
                     except Exception as exc:
                         _log_cell_failure(f"timing({cell_desc})", exc)
                         tracker.fail(t)
+                    finally:
+                        import gc
+                        gc.collect()
+                        if torch.cuda.is_available():
+                            torch.cuda.empty_cache()
     tracker.summary()
 
 

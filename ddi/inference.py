@@ -73,6 +73,8 @@ def load(
     """
     torch_dtype = _resolve_dtype(dtype)
     attn_impl = "flash_attention_2" if backend == "fa2" else backend
+    if backend == "flex":
+        attn_impl = "flex"
     load_name = checkpoint_dir if checkpoint_dir is not None else model_id
     return load_model(load_name, dtype=torch_dtype, attn_implementation=attn_impl)
 

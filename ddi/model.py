@@ -21,8 +21,10 @@ from transformers import (
 
 _ORIGINAL_ATTR = "__ddi_original_update_causal_mask__"
 
+_DDI_BACKENDS = {"sdpa", "fa2", "flex", "eager"}
+
 # DDI's own backend names (see ddi.attention.Backend) vs. HF's `attn_implementation` strings.
-_HF_ATTN_IMPLEMENTATION = {"fa2": "flash_attention_2"}
+_HF_ATTN_IMPLEMENTATION = {"fa2": "flash_attention_2", "flex": "eager"}
 
 
 def _resolve_offline_snapshot(name: str) -> str:
@@ -77,6 +79,9 @@ def load_model(
     )
     tokenizer = AutoTokenizer.from_pretrained(resolved)
     patch_model(model)
+    if attn_implementation == "flex":
+        from ddi.flex_attention import patch_model_for_flex
+        patch_model_for_flex(model)
     return model, tokenizer
 
 

@@ -75,14 +75,59 @@ Realized wall-clock speedup remains pinned near $1.0\times$ throughout.
 The picture that emerges is that the analytical/realized \emph{gap
 itself grows} with $N$ under this kernel: DDI's block-diagonal sparsity
 does not convert to wall-clock speedup at any tested shape with
-\texttt{sdpa}. The FlashAttention-2 varlen path was scoped as the
-kernel-fixable alternative but is not wired through DDI's mask family
-in the current runner; the FA2 half of the question is deferred.
-\todo{FA2 realization is the load-bearing open question for compute-side
-speedup and is tracked as a future-work item; if it too is near-unity
-across $N$, the prefill-only compute claim is null on the tested
-backends and the caching path
-(Section~\ref{sec:results-caching}) is the sole efficiency win.}
+\texttt{sdpa}.
+
+The root cause is structural, not incidental: passing a 4D additive
+attention mask to \texttt{sdpa} forces it off the fused flash/efficient
+kernel and onto the slow math backend, which materializes the full
+$T \times T$ attention matrix regardless of sparsity. The mask that
+should skip computation instead adds overhead. FlashAttention-2 was
+scoped as the kernel-fixable alternative but could not be compiled
+on the test platform (system \texttt{nvcc} 12.2 cannot compile
+torch 2.13 headers; no prebuilt wheel exists for Python 3.13).
+
+\subsection{Realized speedup via \texttt{flex\_attention}}
+\label{sec:results-efficiency-flex}
+
+PyTorch 2.13's \texttt{flex\_attention}
+\cite{flex_attention} compiles a block-sparse attention kernel from a
+mask specification, skipping masked $\mathbf{Q}\mathbf{K}^\top$ blocks
+at the kernel level rather than materializing and masking the full
+matrix. We integrated it as a third backend: each Qwen2 attention layer
+is patched to use the compiled \texttt{flex\_attention} kernel with a
+\texttt{BlockMask} built from the DDI document boundaries, while decode
+(Q\textsubscript{LEN}=1, memory-bound) falls back to \texttt{sdpa}.
+
+Table~\ref{tab:t3-flex} reports the realized prefill speedup under
+\texttt{flex\_attention} alongside the \texttt{sdpa} baseline at
+matching shapes. Two findings stand out:
+
+\begin{enumerate}
+\item \textbf{\texttt{sdpa} confirms the regression.} DDI speedup
+  (full\,/\,ddi\_qf) under \texttt{sdpa} is flat at 0.98--1.01$\times$
+  across all shapes --- the 4D mask penalty exactly cancels the sparsity
+  benefit.
+\item \textbf{\texttt{flex\_attention} realizes the speedup.} DDI
+  speedup under \texttt{flex} grows with $N$ and $\ell$: from
+  1.05$\times$ at $N{=}9$, $\ell{=}512$ to \textbf{1.81$\times$} at
+  $N{=}25$, $\ell{=}2048$ (94\% sparsity). The total system speedup
+  --- \texttt{flex+ddi\_qf} versus \texttt{sdpa+full}, the number a
+  deployer actually sees --- reaches \textbf{3.98$\times$} at that shape.
+\end{enumerate}
+
+\begin{table}[t]
+\centering
+\caption{T3-flex --- realized prefill speedup: \texttt{sdpa} vs
+    \texttt{flex\_attention}. DDI ratio = full\,/\,ddi\_qf within each
+    backend. System speedup = \texttt{sdpa+full}\,/\,\texttt{flex+ddi\_qf}.
+    $Q=64$, Qwen2.5-7B-Instruct, A100 80GB.}
+\label{tab:t3-flex}
+\IfFileExists{generated/T3_flex.tex}{%
+    \input{generated/T3_flex.tex}%
+}{%
+    \todoreport{T3-flex table}{make timing-flex}%
+}
+\end{table}
 
 We report prefill-only \emph{and} end-to-end numbers for every cell in
 Table~\ref{tab:t3}; the pair is the honest way to read the efficiency

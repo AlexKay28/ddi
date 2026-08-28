@@ -4,13 +4,14 @@
 # is exercised against Qwen2.5-7B-Instruct (tracking: #74) and Llama-3.1-8B-Instruct
 # (tracking: #75) — same 108-cell shape either way.
 #
-# 3 masks x 6 Ns x 3 Ls x 2 backends = 108 cells. One table per timing metric,
+# 3 masks x 6 Ns x 3 Ls x 3 backends = 162 cells. One table per timing metric,
 # split into blocks by (L, backend) so each block is a clean mask x N grid. That split is
 # the JSON body's own shape -- `{model: {L: {backend: {mask: {N: value}}}}}` -- not a knob:
 # the tables below used to carry `split_by: [L, backend]`, which no code read.
 #
 # fa2 cells may fail on machines without flash-attn (blocked by #70); the runner
-# annotates rather than aborting.
+# annotates rather than aborting. flex uses torch.nn.attention.flex_attention
+# (built into torch 2.13+, no external deps).
 #
 # Schema: experiments/README.md + issue #81 YAML format section.
 
@@ -18,7 +19,7 @@ kind: timing
 seed: 0
 Ns: [1, 3, 5, 9, 13, 25]
 Ls: [128, 512, 2048]
-backends: [sdpa, fa2]
+backends: [sdpa, fa2, flex]
 masks: [full, ddi_qf, blind]
 n_repeats: 5
 warmup: 3
