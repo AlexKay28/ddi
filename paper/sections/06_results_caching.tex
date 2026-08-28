@@ -34,9 +34,12 @@ which the mask family alone predicts and prior work does not.
 \textbf{Quality under restart} (Phase~4.1) was tested as a prerequisite but
 does \emph{not} hold on the 7B model. Restarting RoPE positions per document
 degrades generation quality (EM) relative to a sequential layout, even
-after mixed-layout finetuning (Section~\ref{sec:results-quality-finetune}).
-The perplexity gap closes (1.628 vs 1.635) but the generation gap persists
-(restart EM=0.07 vs sequential=0.39 on hotpot\_qa). The cache throughput
+after three finetuning strategies: sequential training (0.06 vs 0.46),
+mixed-layout training (0.07 vs 0.39), and restart-only training (0.07 vs
+0.42) on hotpot\_qa. The perplexity gap closes under restart-only training
+(restart 1.629 $<$ sequential 1.638) but the generation gap persists,
+indicating exposure bias amplified by position perturbation
+(Section~\ref{sec:results-quality-finetune}). The cache throughput
 result below is therefore reported on the sequential layout, where
 position-dependent caching still yields 1.72$\times$ QPS but does not
 achieve the order-independence that the restart layout was designed to

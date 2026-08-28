@@ -17,8 +17,7 @@ from torch import nn
 
 import ddi.model
 from ddi.masks import build_mask, to_additive
-from ddi.inference import forward
-from ddi.model import load_model, patch_model, unpatch_model
+from ddi.model import forward_with_mask, load_model, patch_model, unpatch_model
 
 
 # ---------------------------------------------------------------------------
@@ -232,51 +231,51 @@ def test_patch_on_outer_when_method_lives_there() -> None:
 
 
 # ---------------------------------------------------------------------------
-# forward (migrated from forward_with_mask — issue #122)
+# forward_with_mask
 # ---------------------------------------------------------------------------
 
 
-def test_forward_rejects_non_4d() -> None:
+def test_forward_with_mask_rejects_non_4d() -> None:
     mock = _MockModel()
     patch_model(mock)
     input_ids = torch.zeros(1, 4, dtype=torch.long)
     mask2d = torch.zeros(4, 4, dtype=torch.float32)
 
     with pytest.raises(ValueError, match="4D"):
-        forward(mock, input_ids, mask_variant="full", doc_lengths=[4], additive_mask=mask2d)
+        forward_with_mask(mock, input_ids, mask2d)
 
 
-def test_forward_rejects_non_float() -> None:
+def test_forward_with_mask_rejects_non_float() -> None:
     mock = _MockModel()
     patch_model(mock)
     input_ids = torch.zeros(1, 4, dtype=torch.long)
     mask_bool = torch.ones(1, 1, 4, 4, dtype=torch.bool)
 
     with pytest.raises(ValueError, match="floating-point"):
-        forward(mock, input_ids, mask_variant="full", doc_lengths=[4], additive_mask=mask_bool)
+        forward_with_mask(mock, input_ids, mask_bool)
 
 
-def test_forward_passes_mask_through() -> None:
+def test_forward_with_mask_passes_mask_through() -> None:
     mock = _MockModel()
     patch_model(mock)
 
     input_ids = torch.zeros(1, 4, dtype=torch.long)
     mask4d = torch.zeros(1, 1, 4, 4, dtype=torch.float32)
 
-    out = forward(mock, input_ids, mask_variant="full", doc_lengths=[4], additive_mask=mask4d)
+    logits = forward_with_mask(mock, input_ids, mask4d)
 
     # The 4D float mask survived HF's `_update_causal_mask` (mock short-circuits) and reached
     # the point where attention would consume it. Identity — same object, not a copy.
     assert mock.model.forwarded_with is mask4d
-    assert out.logits.shape == (1, 4, 10)
+    assert logits.shape == (1, 4, 10)
 
 
 # ---------------------------------------------------------------------------
-# forward — position_ids kwarg
+# forward_with_mask — position_ids kwarg (Phase 4.1, issue #22)
 # ---------------------------------------------------------------------------
 
 
-def test_forward_accepts_positions() -> None:
+def test_forward_with_mask_accepts_positions() -> None:
     """`position_ids` reaches the model's forward as the same tensor we passed."""
     mock = _MockModel()
     patch_model(mock)
@@ -285,12 +284,12 @@ def test_forward_accepts_positions() -> None:
     mask4d = torch.zeros(1, 1, 4, 4, dtype=torch.float32)
     positions = torch.tensor([[0, 1, 0, 1]], dtype=torch.long)
 
-    forward(mock, input_ids, mask_variant="full", doc_lengths=[4], additive_mask=mask4d, position_ids=positions)
+    forward_with_mask(mock, input_ids, mask4d, position_ids=positions)
 
     assert mock.model.positions_forwarded_with is positions
 
 
-def test_forward_omitting_positions_forwards_none() -> None:
+def test_forward_with_mask_omitting_positions_forwards_none() -> None:
     """Default `position_ids=None` preserves HF's own position handling (backwards-compat)."""
     mock = _MockModel()
     patch_model(mock)
@@ -298,12 +297,12 @@ def test_forward_omitting_positions_forwards_none() -> None:
     input_ids = torch.zeros(1, 4, dtype=torch.long)
     mask4d = torch.zeros(1, 1, 4, 4, dtype=torch.float32)
 
-    forward(mock, input_ids, mask_variant="full", doc_lengths=[4], additive_mask=mask4d)
+    forward_with_mask(mock, input_ids, mask4d)
 
     assert mock.model.positions_forwarded_with is None
 
 
-def test_forward_rejects_wrong_dim_positions() -> None:
+def test_forward_with_mask_rejects_wrong_dim_positions() -> None:
     mock = _MockModel()
     patch_model(mock)
 
@@ -312,10 +311,10 @@ def test_forward_rejects_wrong_dim_positions() -> None:
     positions_1d = torch.tensor([0, 1, 2, 3], dtype=torch.long)
 
     with pytest.raises(ValueError, match="2D"):
-        forward(mock, input_ids, mask_variant="full", doc_lengths=[4], additive_mask=mask4d, position_ids=positions_1d)
+        forward_with_mask(mock, input_ids, mask4d, position_ids=positions_1d)
 
 
-def test_forward_rejects_wrong_shape_positions() -> None:
+def test_forward_with_mask_rejects_wrong_shape_positions() -> None:
     mock = _MockModel()
     patch_model(mock)
 
@@ -324,10 +323,10 @@ def test_forward_rejects_wrong_shape_positions() -> None:
     positions_bad = torch.zeros(1, 5, dtype=torch.long)
 
     with pytest.raises(ValueError, match="must match"):
-        forward(mock, input_ids, mask_variant="full", doc_lengths=[4], additive_mask=mask4d, position_ids=positions_bad)
+        forward_with_mask(mock, input_ids, mask4d, position_ids=positions_bad)
 
 
-def test_forward_rejects_non_long_positions() -> None:
+def test_forward_with_mask_rejects_non_long_positions() -> None:
     mock = _MockModel()
     patch_model(mock)
 
@@ -336,7 +335,7 @@ def test_forward_rejects_non_long_positions() -> None:
     positions_float = torch.zeros(1, 4, dtype=torch.float32)
 
     with pytest.raises(ValueError, match="torch.long"):
-        forward(mock, input_ids, mask_variant="full", doc_lengths=[4], additive_mask=mask4d, position_ids=positions_float)
+        forward_with_mask(mock, input_ids, mask4d, position_ids=positions_float)
 
 
 # ---------------------------------------------------------------------------
@@ -367,8 +366,7 @@ def test_real_model_end_to_end() -> None:
     input_ids = torch.arange(total, dtype=torch.long).remainder(vocab).unsqueeze(0)
 
     with torch.no_grad():
-        out = forward(model, input_ids, mask_variant="full", doc_lengths=[total], additive_mask=additive)
-        logits = out.logits
+        logits = forward_with_mask(model, input_ids, additive)
 
     assert logits.shape[:2] == input_ids.shape
     assert logits.shape[-1] == vocab

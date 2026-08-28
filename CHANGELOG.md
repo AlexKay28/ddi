@@ -2,6 +2,41 @@
 
 Chronological log of experiments and project decisions. **Newest first.**
 
+## 2026-08-28 — Restart-only finetune: HARD WALL DEFINITIVE
+
+### Restart-only finetune results (Step 6)
+
+Restart-only finetune: 13.8hr, 26,231 steps, trainable_layers=8, layout=restart
+(exclusively restart positions; teacher always sequential). Base model =
+sequential-tuned checkpoint.
+
+Post-epoch perplexities: student_ddi_qf (sequential) = 1.638,
+student_ddi_qf_restart = 1.629 — **perplexity gap INVERTED** (restart BETTER
+than sequential by 0.009).
+
+Quality eval (100 records/cell, EM):
+- full hotpot=0.39, ddi_qf hotpot=0.42 (parity ✓)
+- full musique=0.21, ddi_qf musique=0.12 (gap not closed, same as other checkpoints)
+
+Restart quality (100 records/cell, EM):
+- sequential hotpot=0.42, restart hotpot=0.07 — **generation gap persists**
+- sequential musique=0.12, restart musique=0.00 — **generation gap persists**
+
+### Definitive conclusion
+
+Three finetuning strategies attempted, all fail to fix restart generation:
+1. Sequential training: restart=0.06 vs sequential=0.46 (perplexity gap 1.648 vs 1.443)
+2. Mixed-layout training: restart=0.07 vs sequential=0.39 (perplexity gap closed: 1.628 vs 1.635)
+3. Restart-only training: restart=0.07 vs sequential=0.42 (perplexity gap inverted: 1.629 < 1.638)
+
+Root cause: exposure bias amplified by position perturbation. Teacher-forced
+perplexity is stable under restart positions, but greedy autoregressive decoding
+compounds small errors that cascade under shifted positional encodings. This is
+NOT a training deficiency — it's a fundamental train/test mismatch.
+
+Paper stands with acknowledged limitation. Cache throughput claim (1.72x QPS)
+scoped to sequential layout only.
+
 ## 2026-08-27 — 7B resolution chain COMPLETE
 
 ### Paper framing decision

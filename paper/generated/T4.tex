@@ -1,0 +1,17 @@
+\begin{tabular}{ll|cc|cc}
+ & & \multicolumn{2}{c|}{hotpot} & \multicolumn{2}{c}{musique} \\
+checkpoint & mask & EM & $\Delta$ & EM & $\Delta$ \\
+\hline
+\multirow{2}{*}{base} & full & 0.57 & +0.26 & 0.29 & +0.24 \\
+ & ddi_qf & 0.31 & +0.26 & 0.05 & +0.24 \\
+\hline
+\multirow{2}{*}{seq-tuned} & full & 0.46 & +0.00 & 0.23 & +0.10 \\
+ & ddi_qf & 0.46 & +0.00 & 0.13 & +0.10 \\
+\hline
+\multirow{2}{*}{mixed-tuned} & full & 0.40 & +0.01 & 0.22 & +0.10 \\
+ & ddi_qf & 0.39 & +0.01 & 0.12 & +0.10 \\
+\hline
+\multirow{2}{*}{restart-tuned} & full & 0.39 & +0.03 & 0.21 & +0.09 \\
+ & ddi_qf & 0.42 & +0.03 & 0.12 & +0.09 \\
+\hline
+\end{tabular}

@@ -2,7 +2,7 @@
 
 Pure-unit tests (no HF download) cover the small orchestration invariants:
 dtype resolution, backend name mapping, `encode` output shapes/layouts, and
-config validation. The end-to-end `generate` / `forward` /
+config validation. The end-to-end `generate` / `forward_with_mask` /
 mask-variant cross-check tests use `hf-internal-testing/tiny-random-LlamaForCausalLM`
 (same tiny checkpoint the rest of the suite uses) and are gated behind
 `DDI_INTEGRATION=1` so CPU-only CI does not download weights or run the real
@@ -21,7 +21,7 @@ from ddi.inference import (
     ForwardOutput,
     _resolve_dtype,
     encode,
-    forward,
+    forward_with_mask,
     generate,
     load,
 )
@@ -126,19 +126,13 @@ def test_load_returns_compatible_model_and_tokenizer() -> None:
 
 
 @_SKIP_INTEGRATION
-def test_forward_returns_expected_logits_shape() -> None:
-    """`forward` must return logits with shape [1, T, V]."""
+def test_forward_with_mask_returns_expected_logits_shape() -> None:
+    """`forward_with_mask` must return logits with shape [1, T, V]."""
     model, tokenizer = load(_TINY_MODEL, dtype="fp32", backend="eager")
     model.eval()
 
     batch = encode(tokenizer, docs=["alpha bravo", "charlie"], query="delta")
-    out = forward(
-        model,
-        batch.input_ids,
-        mask_variant="ddi_qf",
-        doc_lengths=batch.doc_lengths,
-        query_len=batch.query_len,
-    )
+    out = forward_with_mask(model, batch, mask_variant="ddi_qf")
 
     assert isinstance(out, ForwardOutput)
     T = batch.input_ids.shape[-1]
@@ -185,20 +179,8 @@ def test_mask_variant_actually_affects_forward_output() -> None:
 
     batch = encode(tokenizer, docs=["alpha bravo", "charlie delta"], query="echo foxtrot")
 
-    out_full = forward(
-        model,
-        batch.input_ids,
-        mask_variant="full",
-        doc_lengths=batch.doc_lengths,
-        query_len=batch.query_len,
-    )
-    out_strict = forward(
-        model,
-        batch.input_ids,
-        mask_variant="ddi_strict",
-        doc_lengths=batch.doc_lengths,
-        query_len=batch.query_len,
-    )
+    out_full = forward_with_mask(model, batch, mask_variant="full")
+    out_strict = forward_with_mask(model, batch, mask_variant="ddi_strict")
 
     assert out_full.logits.shape == out_strict.logits.shape
     # If the mask were silently ignored the two forwards would be bit-identical.
@@ -219,9 +201,8 @@ def test_generate_next_token_logits_differ_across_mask_variants() -> None:
 
     batch = encode(tokenizer, docs=["alpha bravo", "charlie delta"], query="echo foxtrot")
 
-    shared = dict(doc_lengths=batch.doc_lengths, query_len=batch.query_len)
-    logits_full = forward(model, batch.input_ids, mask_variant="full", **shared).logits[0, -1]
-    logits_blind = forward(model, batch.input_ids, mask_variant="blind", **shared).logits[0, -1]
+    logits_full = forward_with_mask(model, batch, mask_variant="full").logits[0, -1]
+    logits_blind = forward_with_mask(model, batch, mask_variant="blind").logits[0, -1]
 
     # `blind` cuts query->doc attention entirely; the last-token logits must diverge.
     assert not torch.allclose(logits_full, logits_blind, atol=1e-6)

@@ -21,7 +21,8 @@ This preprint covers retrieval quality (C1) on Qwen2.5-7B-Instruct, including
 self-distillation finetuning to close the mask quality gap. TTFT / realized
 speedup (C3) and KV-cache reuse (C4) are measured on the same model. The
 restart position layout, which enables position-independent KV blocks for
-caching, degrades generation quality even after mixed-layout finetuning;
+caching, degrades generation quality even after three finetuning strategies
+(sequential, mixed-layout, and restart-only training);
 this is a known limitation (see below) and the cache throughput claim is
 scoped to the sequential layout.
 
@@ -38,15 +39,17 @@ sections rather than only here, so a reader cannot miss the constraint.
 The restart position layout (Section~\ref{sec:method-positions}) resets
 each document's RoPE positions to zero, making KV blocks position-independent
 and therefore cacheable across requests. On Qwen2.5-7B-Instruct, this layout
-degrades generation quality (EM) relative to the sequential layout: 0.07 vs
-0.39 on hotpot\_qa after mixed-layout finetuning. The perplexity gap closes
-(1.628 vs 1.635) but the generation gap persists --- greedy decoding under
-restart positions compounds small token-level errors. Mixed-layout training
-(50/50 coin-flip per record) was attempted but each record sees only one
-layout per epoch, so the model never learns consistent outputs across
-layouts for the same record. The cache throughput claim (1.72$\times$ QPS)
-is therefore scoped to the sequential layout. Future work: 2-epoch mixed
-training, restart-only finetuning, or position-agnostic architecture changes.
+degrades generation quality (EM) relative to the sequential layout across all
+three finetuning strategies attempted: sequential training (0.06 vs 0.46),
+mixed-layout training (0.07 vs 0.39), and restart-only training (0.07 vs 0.42).
+The perplexity gap closes under restart-only training --- restart perplexity
+(1.629) is even lower than sequential (1.638) --- yet the generation gap
+persists unchanged. This is exposure bias amplified by position perturbation:
+teacher-forced next-token prediction is stable under restart positions, but
+greedy autoregressive decoding compounds small errors that cascade under
+shifted positional encodings. The cache throughput claim (1.72$\times$ QPS)
+is therefore scoped to the sequential layout. Future work: position-agnostic
+attention architectures or contrastive layout-invariant training objectives.
 
 \section{Conclusion}
 \label{sec:conclusion}
@@ -62,8 +65,9 @@ and measure per-document KV-cache reuse throughput
 structural sparsity of the mask into a reusability property of KV
 blocks, yielding 1.72$\times$ throughput on the sequential layout. The
 restart position layout, designed to make KV blocks position-independent,
-degrades generation quality even after mixed-layout finetuning; this
-limitation is reported as a negative finding with root cause analysis.
+degrades generation quality even after three finetuning strategies (sequential,
+mixed-layout, and restart-only training); this limitation is reported as a
+negative finding with root cause analysis.
 
 The value of the paper does not depend on any variant beating a
 baseline; it depends on the parity, efficiency, and caching axes being

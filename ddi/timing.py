@@ -180,27 +180,22 @@ def measure_prefill(
     warmup: int = 3,
     use_cuda_events: bool | None = None,
 ) -> Timing:
-    """FTT (first-token time) for a single masked prefill via `inference.forward`.
+    """FTT (first-token time) for a single masked prefill via `forward_with_mask`.
 
     `position_ids` is the optional `[1, T]` long tensor from `ddi.positions.build_positions`; it is
     forwarded verbatim so a timing sweep can hold the mask fixed and vary the layout axis
     (`sequential` vs `restart`). Omitted, HF's default sequential handling applies — the shape of
     the computation is identical either way, so this changes no existing number.
     """
-    # Route through inference.forward with mask_variant=None because callers
-    # already built the additive mask; we pass it straight through.
-    from ddi.inference import forward
+    # Imported here, not at module scope: `ddi.model` pulls in `transformers`, and a top-level
+    # import made the whole timing suite uncollectible on a host without it — which is how an
+    # entirely unmasked decode loop sat here undetected. Keep `ddi.timing` importable with torch
+    # alone so its regression tests run everywhere.
+    from ddi.model import forward_with_mask
 
     def _fn() -> object:
-        mask_for_call = additive_mask  # [1, 1, T, T] or [T, T]
         with torch.no_grad():
-            return forward(
-                model,
-                input_ids,
-                mask_variant=None,
-                additive_mask=mask_for_call,
-                position_ids=position_ids,
-            )
+            return forward_with_mask(model, input_ids, additive_mask, position_ids=position_ids)
 
     return measure(
         _fn,
@@ -385,35 +380,22 @@ def measure_decode(
     def _prefill() -> None:
         """Untimed precondition: the decode loop cannot start without a warm KV cache."""
         nonlocal past, first_token
-        from ddi.inference import forward as _fwd
-        mask = prefill_kwargs.get("attention_mask")
-        pos = prefill_kwargs.get("position_ids")
         with torch.no_grad():
-            out = _fwd(
-                model, prompt_ids,
-                mask_variant=None,
-                additive_mask=mask,
-                position_ids=pos,
-                use_cache=True,
-            )
+            out = model(input_ids=prompt_ids, use_cache=True, **prefill_kwargs)
         past = out.past_key_values
         first_token = out.logits[0, -1].argmax(dim=-1, keepdim=True).unsqueeze(0)
 
     def _decode() -> object:
         # Local copies so a repeat always resumes from the cache `_prefill` just built rather
         # than from wherever the previous repeat left off.
-        from ddi.inference import forward as _fwd
         step_past, next_token = past, first_token
         with torch.no_grad():
             for i in range(n_new_tokens):
-                sk = step_kwargs[i]
-                step = _fwd(
-                    model, next_token,
-                    mask_variant=None,
-                    additive_mask=sk.get("attention_mask"),
-                    position_ids=sk.get("position_ids"),
+                step = model(
+                    input_ids=next_token,
                     past_key_values=step_past,
                     use_cache=True,
+                    **step_kwargs[i],
                 )
                 step_past = step.past_key_values
                 next_token = step.logits[0, -1].argmax(dim=-1, keepdim=True).unsqueeze(0)
