@@ -93,3 +93,33 @@ Section~\ref{sec:limitations} for the full discussion.
     \todoreport{T4 restart quality table}{run restart eval}%
 }
 \end{table}
+
+\subsection{Closure across document counts}
+\label{sec:results-quality-docsweep}
+
+Phase~1 established that the mask quality gap on the \emph{base} model grows
+with document count (Section~\ref{sec:results-quality-sweep}). Phase~3 tests
+whether the finetuned closure survives at higher document counts --- the
+operating point DDI is designed for. Table~\ref{tab:t5} reports the tuned
+checkpoint (sequential finetune, 8 trainable layers) at $N \in \{2, 5, 10\}$
+documents on hotpot\_qa.
+
+\begin{table}[t]
+\centering\small
+\caption{T5 --- quality vs document count on the tuned checkpoint, hotpot\_qa,
+    100 records per cell. The gap \emph{closes} at $N{=}10$, the opposite of
+    the base-model pattern in Phase~1.}
+\label{tab:t5}
+\IfFileExists{generated/T5.tex}{%
+    \input{generated/T5.tex}%
+}{%
+    \todoreport{T5 document-count sweep}{run phase3 sweep}%
+}
+\end{table}
+
+The gap does not grow with $N$; it shrinks. At $N{=}10$ the EM gap is zero
+(0.46 vs 0.46), and the F1 gap narrows to 0.03. This is the opposite of the
+base-model pattern (Phase~1), where the gap widened with document count. The
+finetune taught the model to work \emph{under the mask}, not merely the task
+--- a closure that generalizes to the document counts where DDI's compute and
+caching benefits are largest.
