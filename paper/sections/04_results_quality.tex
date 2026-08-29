@@ -60,6 +60,27 @@ also achieves parity (0.42 vs 0.39). The full-quality regression
 (0.57$\to$0.46$\to$0.40$\to$0.39) is a known trade-off:
 the finetune shifts capacity from full-causal to block-diagonal attention.
 
+On musique, the 8-layer finetune leaves a residual gap (0.13 vs 0.23 EM,
+$\Delta$=+0.10). Doubling the trainable layers to 16 (3.73B params,
+17.97 GPU-hours, building on the 8L checkpoint) narrows the musique gap
+to $\Delta$=+0.04 (0.19 vs 0.23 EM) while maintaining hotpot parity
+(Table~\ref{tab:t4-16l}). The student perplexity (1.453) nearly matches
+the teacher (1.446), and the remaining musique gap is at the resolution
+limit of a 100-record eval.
+
+\begin{table}[t]
+\centering\small
+\caption{T4 (16L) --- 8-layer vs 16-layer finetune comparison (EM), 100
+    records per cell. Doubling capacity narrows the musique gap from
+    +0.10 to +0.04 while preserving hotpot parity.}
+\label{tab:t4-16l}
+\IfFileExists{generated/T4_16L.tex}{%
+    \input{generated/T4_16L.tex}%
+}{%
+    \todoreport{T4 16L table}{run 16L eval}%
+}
+\end{table}
+
 \begin{table}[t]
 \centering\small
 \caption{T4 --- finetuned quality (EM) on Qwen2.5-7B-Instruct, 100 records

@@ -61,7 +61,9 @@ non-inferiority margin after self-distillation finetuning
 (Section~\ref{sec:results-quality}), report the realized versus analytical
 prefill speedup at matched shapes (Section~\ref{sec:results-efficiency}),
 and measure per-document KV-cache reuse throughput
-(Section~\ref{sec:results-caching}). The caching path turns the
+(Section~\ref{sec:results-caching}). Quality parity holds on hotpot\_qa
+($\Delta$=0.00 EM) and nearly holds on musique ($\Delta$=+0.04 EM with
+16-layer finetuning). The caching path turns the
 structural sparsity of the mask into a reusability property of KV
 blocks, yielding 1.76$\times$ throughput on the sequential layout. The
 restart position layout, designed to make KV blocks position-independent,
