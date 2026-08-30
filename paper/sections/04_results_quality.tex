@@ -22,8 +22,11 @@ seeds. If the median gap to \texttt{full} is smaller than the
 non-inferiority margin $\Delta$ (Section~\ref{sec:method-delta}) the
 train-free result supports the parity claim for that cell.
 
-Table~\ref{tab:t2} reports train-free quality on the parity-detection
-datasets.
+Table~\ref{tab:t2} reports train-free quality on three models
+(Qwen2.5-7B-Instruct, Qwen2.5-1.5B-Instruct, Llama-3.1-8B-Instruct)
+and two parity-detection datasets. The gap between \texttt{full} and
+\texttt{ddi\_qf} is present on all three models, confirming it is a
+property of the mask, not of a single model family.
 
 \begin{table}[t]
 \centering

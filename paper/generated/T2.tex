@@ -1,12 +1,20 @@
-% Train-free mask sweep (base model). Source: results/runs.jsonl, results/sprint_a_strict_base.jsonl
-\begin{tabular}{lccc ccc ccc}
+% Train-free mask sweep (base models). Source: results/runs.jsonl, results/sprint_c_1.5B.jsonl, results/sprint_c_llama.jsonl
+\begin{tabular}{llccc ccc}
 \toprule
- & \multicolumn{3}{c}{EM} & \multicolumn{3}{c}{F1} & \multicolumn{3}{c}{Presence} \\
- mask & hotpot & musique & synth & hotpot & musique & synth & hotpot & musique & synth \\
+ & & \multicolumn{3}{c}{EM} & \multicolumn{3}{c}{F1} \\
+model & mask & hotpot & musique & synth & hotpot & musique & synth \\
 \midrule
-full & 0.57 & 0.29 & 1.00 & 0.70 & 0.38 & 1.00 & 0.61 & 0.34 & 1.00 \\
-ddi\_qf & 0.31 & 0.05 & 1.00 & 0.43 & 0.15 & 1.00 & 0.32 & 0.08 & 1.00 \\
-ddi\_strict & 0.24 & 0.10 & --- & 0.36 & 0.15 & --- & --- & --- & --- \\
-blind & 0.13 & 0.03 & 0.00 & 0.25 & 0.11 & 0.00 & 0.16 & 0.04 & 0.00 \\
+\multirow{4}{*}{Qwen2.5-7B} & full & 0.57 & 0.29 & 1.00 & 0.70 & 0.38 & 1.00 \\
+ & ddi\_qf & 0.31 & 0.05 & 1.00 & 0.43 & 0.15 & 1.00 \\
+ & ddi\_strict & 0.24 & 0.10 & --- & 0.36 & 0.15 & --- \\
+ & blind & 0.13 & 0.03 & 0.00 & 0.25 & 0.11 & 0.00 \\
+\midrule
+\multirow{3}{*}{Qwen2.5-1.5B} & full & 0.40 & 0.16 & --- & 0.53 & 0.30 & --- \\
+ & ddi\_qf & 0.23 & 0.07 & --- & 0.33 & 0.15 & --- \\
+ & blind & 0.11 & 0.04 & --- & 0.17 & 0.10 & --- \\
+\midrule
+\multirow{3}{*}{Llama-3.1-8B} & full & 0.50 & 0.30 & --- & 0.67 & 0.42 & --- \\
+ & ddi\_qf & 0.34 & 0.14 & --- & 0.45 & 0.22 & --- \\
+ & blind & 0.02 & 0.00 & --- & 0.02 & 0.01 & --- \\
 \bottomrule
 \end{tabular}
