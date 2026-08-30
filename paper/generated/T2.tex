@@ -1,10 +1,12 @@
+% Train-free mask sweep (base model). Source: results/runs.jsonl, results/sprint_a_strict_base.jsonl
 \begin{tabular}{lccc ccc ccc}
 \toprule
  & \multicolumn{3}{c}{EM} & \multicolumn{3}{c}{F1} & \multicolumn{3}{c}{Presence} \\
  mask & hotpot & musique & synth & hotpot & musique & synth & hotpot & musique & synth \\
 \midrule
 full & 0.57 & 0.29 & 1.00 & 0.70 & 0.38 & 1.00 & 0.61 & 0.34 & 1.00 \\
-ddi_qf & 0.31 & 0.05 & 1.00 & 0.43 & 0.15 & 1.00 & 0.32 & 0.08 & 1.00 \\
+ddi\_qf & 0.31 & 0.05 & 1.00 & 0.43 & 0.15 & 1.00 & 0.32 & 0.08 & 1.00 \\
+ddi\_strict & 0.24 & 0.10 & --- & 0.36 & 0.15 & --- & --- & --- & --- \\
 blind & 0.13 & 0.03 & 0.00 & 0.25 & 0.11 & 0.00 & 0.16 & 0.04 & 0.00 \\
 \bottomrule
 \end{tabular}

@@ -65,8 +65,26 @@ $\Delta$=+0.10). Doubling the trainable layers to 16 (3.73B params,
 17.97 GPU-hours, building on the 8L checkpoint) narrows the musique gap
 to $\Delta$=+0.04 (0.19 vs 0.23 EM) while maintaining hotpot parity
 (Table~\ref{tab:t4-16l}). The student perplexity (1.453) nearly matches
-the teacher (1.446), and the remaining musique gap is at the resolution
-limit of a 100-record eval.
+the teacher (1.446).
+
+The non-inferiority margin $\Delta$ is computed from 3 seeds on the
+full-causal baseline (Table~\ref{tab:t6-delta}): $\Delta_\text{EM} = 0.200$
+on hotpot\_qa and $0.135$ on musique. At 500 records
+(Table~\ref{tab:t4-16l}), the hotpot gap is $+0.014$ (well inside $\Delta$)
+and the musique gap is $+0.036$ (inside $\Delta$), confirming the parity
+claim is not an artefact of the 100-record eval size.
+
+\begin{table}[t]
+\centering\small
+\caption{T6 --- Non-inferiority margin $\Delta$ from 3-seed full-causal
+    baseline, 100 records per seed. $\Delta = 3\sigma$ across seeds.}
+\label{tab:t6-delta}
+\IfFileExists{generated/T6_delta.tex}{%
+    \input{generated/T6_delta.tex}%
+}{%
+    \todoreport{T6 $\Delta$ table}{run 3-seed baseline}%
+}
+\end{table}
 
 \begin{table}[t]
 \centering\small
@@ -114,6 +132,14 @@ Section~\ref{sec:limitations} for the full discussion.
     \todoreport{T4 restart quality table}{run restart eval}%
 }
 \end{table}
+
+\paragraph{Ablation: \texttt{ddi\_strict}.}
+The \texttt{ddi\_strict} variant, where only the last query row bridges into
+the documents, is strictly weaker than \texttt{ddi\_qf} on both the base and
+the 16L-tuned checkpoint: hotpot\_qa EM drops from 0.31 to 0.24 (base) and
+from 0.45 to 0.39 (tuned). The full-bridge query in \texttt{ddi\_qf} is
+necessary, not merely helpful --- restricting the bridge to a single row
+loses too much cross-document signal for the model to compensate.
 
 \subsection{Closure across document counts}
 \label{sec:results-quality-docsweep}

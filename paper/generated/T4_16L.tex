@@ -1,13 +1,13 @@
-% 16L finetune quality. Source: results/eval_16L.jsonl
-\begin{tabular}{llcccc}
+% 16L finetune quality. Source: results/sprint_a_16L_500.jsonl, results/sprint_a_baseline.jsonl
+\begin{tabular}{llcc cc}
 \toprule
- & & \multicolumn{2}{c}{8-layer (1.86B)} & \multicolumn{2}{c}{16-layer (3.73B)} \\
-dataset & mask & EM & $\Delta$ & EM & $\Delta$ \\
+ & & \multicolumn{2}{c}{100 records} & \multicolumn{2}{c}{500 records} \\
+dataset & mask & EM & $\Delta$ & EM & gap \\
 \midrule
-\multirow{2}{*}{hotpot} & full & 0.46 & \multirow{2}{*}{0.00} & 0.45 & \multirow{2}{*}{0.00} \\
- & ddi\_qf & 0.46 & & 0.45 & \\
+\multirow{2}{*}{hotpot} & full & 0.45 & \multirow{2}{*}{0.00} & 0.472 & \multirow{2}{*}{0.014} \\
+ & ddi\_qf & 0.45 & & 0.458 & \\
 \midrule
-\multirow{2}{*}{musique} & full & 0.23 & \multirow{2}{*}{+0.10} & 0.23 & \multirow{2}{*}{\textbf{+0.04}} \\
- & ddi\_qf & 0.13 & & 0.19 & \\
+\multirow{2}{*}{musique} & full & 0.23 & \multirow{2}{*}{+0.04} & 0.216 & \multirow{2}{*}{0.036} \\
+ & ddi\_qf & 0.19 & & 0.180 & \\
 \bottomrule
 \end{tabular}
