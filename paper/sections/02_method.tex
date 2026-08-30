@@ -73,16 +73,19 @@ tokens:
           document content hash, order-independent, and reusable across
           requests.
 \end{itemize}
-The restart layout is what turns DDI's structural sparsity into a caching
-mechanism. It is untested in the prior work and is the axis that unlocks
-the load-bearing efficiency result of Section~\ref{sec:results-caching}.
-When paired with \texttt{ddi\_qf}, the restart layout is quality-free at
-$\Delta$ (Section~\ref{sec:results-caching-prereq}) and order-invariant to
-floating-point precision. Restart is not free under \texttt{full}: because
-full attention lets each document attend into every earlier document,
-restarting positions places RoPE relative-distance values outside the
-distribution the model was trained on, and quality collapses. This
-asymmetry is exactly what the pairing was designed to exploit.
+The restart layout is designed to turn DDI's structural sparsity into a
+caching mechanism: under a block-diagonal mask, a document's KV block
+would be a function of that document alone, making blocks keyable by
+content hash, order-independent, and reusable across requests.
+However, as reported in Section~\ref{sec:results-caching-prereq}, the
+restart layout degrades generation quality and this design goal is not
+achieved. The cache throughput result (Section~\ref{sec:results-caching})
+is therefore reported on the \emph{sequential} layout, where caching
+is position-dependent (a document's KV is reusable only when it appears
+at the same position in the same prefix), which is weaker than the
+order-independent caching the restart layout was designed to enable.
+The restart layout's quality failure is documented as a negative
+finding (Section~\ref{sec:limitations}).
 
 \subsection{Non-inferiority margin \texorpdfstring{$\Delta$}{Delta}}
 \label{sec:method-delta}

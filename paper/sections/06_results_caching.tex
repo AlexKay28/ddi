@@ -8,10 +8,16 @@ Per-document caching is the second half of the paper's contribution.
 Under full causal attention, no document's KV block is reusable across
 requests: $\mathrm{doc}_2$'s keys and values depend on $\mathrm{doc}_1$,
 so changing any earlier document invalidates the prefix. Under a
-block-diagonal mask with the restart position layout
-(Section~\ref{sec:method-positions}), a document's KV block is a function
-of that document alone. Blocks become keyable by document content hash,
-order-independent, and reusable across requests.
+block-diagonal mask with the \emph{restart} position layout
+(Section~\ref{sec:method-positions}), a document's KV block would be
+a function of that document alone --- order-independent and reusable
+across requests. However, the restart layout degrades generation quality
+(Section~\ref{sec:results-caching-prereq}), so the throughput result
+below is reported on the \emph{sequential} layout, where a document's
+KV is reusable only at the same position in the same prefix. This is
+weaker than the order-independent caching the restart layout was
+designed to enable, but still yields measurable throughput gains over
+full-causal recompute.
 
 A cache hit skips prefill entirely. This is the sense in which the
 caching result is co-headline with the compute result: no kernel

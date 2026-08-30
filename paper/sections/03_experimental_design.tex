@@ -16,20 +16,18 @@ single-lab artifact; and public reproducibility for every primary claim.
 
 \begin{table}[t]
 \centering
-\caption{Models. Both base and instruct variants of each primary model
-    are evaluated. The third family (YandexGPT-5-Lite-8B) is not
-    externally reproducible and appears only in the appendix as a
-    supplementary confirmation.}
+\caption{Models. The current preprint reports results on Qwen2.5-7B-Instruct
+    only. Llama-3.1-8B and the scale ablations are planned for the next
+    revision (Sprint~C).}
 \label{tab:models}
 \begin{tabular}{@{}llll@{}}
 \toprule
-Model & Role & Reproducible & Notes \\
+Model & Role & Status & Notes \\
 \midrule
-Qwen2.5-7B (base, instruct)     & Primary   & yes & Comparable to prior hypothesis runs \\
-Llama-3.1-8B (base, instruct)   & Primary   & yes & Independent training family \\
-Qwen2.5-1.5B                    & Ablation  & yes & Full mask $\times N \times \ell$ grid \\
-Qwen2.5-14B (or 32B)            & Scale     & yes & Scale trend on affordability \\
-YandexGPT-5-Lite-8B             & Appendix  & no  & Third-family confirmation \\
+Qwen2.5-7B-Instruct     & Primary   & \textbf{done}   & All reported results \\
+Llama-3.1-8B-Instruct   & Primary   & planned        & Cross-family validation \\
+Qwen2.5-1.5B-Instruct   & Ablation & planned        & Scale trend \\
+Qwen2.5-14B/32B         & Scale     & planned        & Scale trend at larger size \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -48,17 +46,17 @@ must not be mixed.
 
 \begin{table}[t]
 \centering
-\caption{Datasets. Every parity-detection dataset has its seed variance
-    measured under \texttt{full} in Phase 1 and is admitted only if the
-    variance is smaller than $\Delta$.}
+\caption{Datasets. Three datasets are used in this preprint. Hotpot\_qa
+    and musique carry the parity and finetuning claims; synthetic\_qa
+    is a 20-record control.}
 \label{tab:datasets}
 \begin{tabular}{@{}p{0.32\linewidth}p{0.36\linewidth}p{0.24\linewidth}@{}}
 \toprule
 Function & Dataset & Notes \\
 \midrule
-Parity detection & NQ, TriviaQA & Low seed variance, well-known headroom \\
-Controllable $N$ + gold position & LitM-style multi-doc QA~\citep{liu2023lostmiddle} & Synthesized locally \\
-General RAG-native               & Open RAG Bench                       & End-to-end sanity \\
+Parity detection (primary) & hotpot\_qa & 10 real paragraphs, 3702 val records \\
+Parity detection (multi-hop) & musique & 20 paragraphs, multi-hop reasoning \\
+Control / synthetic & synthetic\_qa & 20 val records, planted answers \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -86,11 +84,13 @@ enumerate their cross product.
           $\ell$ probes the per-block launch overhead where the varlen
           kernel is expected to lose to a dense one; long $\ell$ is where
           DDI's compute win is largest.
-    \item[Axis K --- kernel backend.] Dense SDPA with an explicit $-\infty$
-          mask (reference semantics), FlashAttention-2 varlen, and a
-          Triton block-diagonal implementation. Three implementations of
-          one mathematical object, so they double as each other's
-          correctness tests.
+    \item[Axis K --- kernel backend.] \texttt{sdpa} with an explicit
+          $-\infty$ mask (reference semantics, the standard PyTorch
+          path) and \texttt{flex\_attention} (PyTorch 2.13's compiled
+          block-sparse kernel). FlashAttention-2 varlen was scoped but
+          could not be compiled on the test platform (system \texttt{nvcc}
+          12.2 cannot compile torch 2.13 headers; no prebuilt wheel
+          exists for Python 3.13).
 \end{description}
 
 \subsection{Ground rules}
