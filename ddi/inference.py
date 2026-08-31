@@ -58,6 +58,7 @@ def load(
     dtype: str = "bf16",
     backend: str = "sdpa",
     checkpoint_dir: str | None = None,
+    rope_theta: float | None = None,
 ) -> tuple[PreTrainedModel, PreTrainedTokenizerBase]:
     """Load an HF causal-LM + tokenizer with the chosen attention backend.
 
@@ -70,13 +71,22 @@ def load(
     ``model_id`` hub repo. The `model_id` is still surfaced for provenance so a
     downstream reader knows which base architecture the checkpoint was trained
     from.
+
+    ``rope_theta`` (Sprint D, VIBEQUEUE-28) overrides the RoPE base frequency
+    before weights load — the ABF position scheme. ``None`` keeps the model
+    default.
     """
     torch_dtype = _resolve_dtype(dtype)
     attn_impl = "flash_attention_2" if backend == "fa2" else backend
     if backend == "flex":
         attn_impl = "flex"
     load_name = checkpoint_dir if checkpoint_dir is not None else model_id
-    return load_model(load_name, dtype=torch_dtype, attn_implementation=attn_impl)
+    return load_model(
+        load_name,
+        dtype=torch_dtype,
+        attn_implementation=attn_impl,
+        rope_theta=rope_theta,
+    )
 
 
 def encode(

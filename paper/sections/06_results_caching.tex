@@ -51,8 +51,40 @@ position-dependent caching still yields 1.76$\times$ QPS but does not
 achieve the order-independence that the restart layout was designed to
 enable. See Section~\ref{sec:limitations} for the full discussion.
 
+\paragraph{RoPE base frequency ablation.}
+To test whether the restart quality gap is attributable to RoPE's
+position sensitivity, we swept the RoPE base frequency
+($\theta_{\text{base}}$) on the 16-layer finetuned checkpoint under both
+sequential and restart layouts (Table~\ref{tab:t7-rope-theta}).
+Qwen2.5-7B's default is $\theta_{\text{base}} = 1{,}000{,}000$.
+Increasing $\theta_{\text{base}}$ tenfold (to 10M) --- which makes
+rotations more gradual, reducing the model's sensitivity to exact
+position IDs --- reduces the restart gap on hotpot\_qa from $-$0.39~EM
+to $-$0.28~EM and on musique from $-$0.19 to $-$0.16. Decreasing
+$\theta_{\text{base}}$ tenfold (to 100k) worsens the gap to $-$0.49 on
+hotpot\_qa. The direction is consistent: less position sensitivity
+mitigates the restart wall. However, even at 10$\times$ the default,
+the gap persists ($-$0.28~EM on hotpot\_qa), confirming that repeated
+position IDs cannot be fully solved by frequency scaling alone. This
+supports the paper's decision to scope the caching claim to the
+sequential layout.
+
 \subsection{Throughput under document reuse}
 \label{sec:results-caching-throughput}
+
+\begin{table}[t]
+\centering
+\caption{T7 --- RoPE base frequency ablation on the 16L finetuned
+checkpoint. Gap = restart EM $-$ sequential EM (negative = restart
+worse). Increasing $\theta_{\text{base}}$ reduces the gap but does not
+eliminate it. Source: \texttt{results/sprint\_d\_restart\_*.jsonl}.}
+\label{tab:t7-rope-theta}
+\IfFileExists{generated/T7_rope_theta.tex}{%
+    \input{generated/T7_rope_theta.tex}%
+}{%
+    \todoreport{T7 rope\_theta table}{run sprint\_d\_restart}%
+}
+\end{table}
 
 Figure~\ref{fig:f5} reports end-to-end throughput as a function of the
 document reuse rate --- the fraction of retrieved documents in the

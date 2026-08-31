@@ -48,8 +48,13 @@ persists unchanged. This is exposure bias amplified by position perturbation:
 teacher-forced next-token prediction is stable under restart positions, but
 greedy autoregressive decoding compounds small errors that cascade under
 shifted positional encodings. The cache throughput claim (1.76$\times$ QPS)
-is therefore scoped to the sequential layout. Future work: position-agnostic
-attention architectures or contrastive layout-invariant training objectives.
+is therefore scoped to the sequential layout. A RoPE base frequency
+ablation (Table~\ref{tab:t7-rope-theta}) confirms that the gap is
+partially attributable to position sensitivity: increasing
+$\theta_{\text{base}}$ tenfold reduces the hotpot\_qa restart gap from
+$-$0.39 to $-$0.28~EM, but does not eliminate it. Future work:
+position-agnostic attention architectures or contrastive
+layout-invariant training objectives.
 
 \section{Conclusion}
 \label{sec:conclusion}

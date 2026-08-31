@@ -393,11 +393,16 @@ def run_quality(cfg: dict[str, Any], cfg_hash: str, seed: int) -> None:
         raise ValueError("quality: 'metrics' must be a non-empty list")
 
     checkpoint = cfg.get("checkpoint")
+    rope_theta = cfg.get("rope_theta")
     if checkpoint is not None:
         _log(f"quality: loading model {model_name!r} from checkpoint {checkpoint!r}")
     else:
         _log(f"quality: loading model {model_name!r}")
-    model, tokenizer = inference.load(model_name, checkpoint_dir=checkpoint)
+    if rope_theta is not None:
+        _log(f"quality: rope_theta override -> {rope_theta}")
+    model, tokenizer = inference.load(
+        model_name, checkpoint_dir=checkpoint, rope_theta=rope_theta
+    )
     model.eval()
     if torch.cuda.is_available():
         model = model.to("cuda")
@@ -1256,7 +1261,12 @@ def _cache_restart_quality(
     max_new_tokens = int(cfg.get("max_new_tokens", 64))
 
     checkpoint = cfg.get("checkpoint")
-    model, tokenizer = inference.load(model_name, checkpoint_dir=checkpoint)
+    rope_theta = cfg.get("rope_theta")
+    if rope_theta is not None:
+        _log(f"cache/restart_quality: rope_theta override -> {rope_theta}")
+    model, tokenizer = inference.load(
+        model_name, checkpoint_dir=checkpoint, rope_theta=rope_theta
+    )
     model.eval()
     if torch.cuda.is_available():
         model = model.to("cuda")
@@ -1561,7 +1571,7 @@ _SET_KEYS_COMMON = frozenset(
 
 _SET_KEYS: dict[str, frozenset[str]] = {
     "quality": _SET_KEYS_COMMON
-    | {"datasets", "masks", "max_records", "max_new_tokens", "checkpoint"},
+    | {"datasets", "masks", "max_records", "max_new_tokens", "checkpoint", "rope_theta"},
     "timing": _SET_KEYS_COMMON
     | {
         "Ns",
@@ -1606,6 +1616,7 @@ _SET_KEYS: dict[str, frozenset[str]] = {
         "layouts",
         "max_records",
         "max_new_tokens",
+        "rope_theta",
     },
     "finetune": _SET_KEYS_COMMON
     | {
