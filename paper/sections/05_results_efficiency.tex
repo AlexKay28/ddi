@@ -98,17 +98,22 @@ is patched to use the compiled \texttt{flex\_attention} kernel with a
 \texttt{BlockMask} built from the DDI document boundaries, while decode
 (Q\textsubscript{LEN}=1, memory-bound) falls back to \texttt{sdpa}.
 
-Table~\ref{tab:t3-flex} reports the realized prefill speedup under
-\texttt{flex\_attention} alongside the \texttt{sdpa} baseline at
-matching shapes. Two findings stand out:
+Table~\ref{tab:t3-flex} retains archived batch-1 prefill timing observations
+under \texttt{flex\_attention} alongside the \texttt{sdpa} baseline at
+matching shapes. They are not an admitted end-to-end throughput result: the
+current full-model parity gate fails at the smaller proxy shape
+$N{=}2$, $\ell{=}128$, $Q{=}64$ (cosine similarity $0.9989066 < 0.999$ and
+token-argmax agreement $92.5\%$). In particular, they cannot support a
+batched-serving claim. Two implementation observations remain:
 
 \begin{enumerate}
 \item \textbf{\texttt{sdpa} confirms the regression.} DDI speedup
   (full\,/\,ddi\_qf) under \texttt{sdpa} is flat at 0.98--1.01$\times$
   across all shapes --- the 4D mask penalty exactly cancels the sparsity
   benefit.
-\item \textbf{\texttt{flex\_attention} realizes a modest, validated
-  prefill win.} DDI speedup under \texttt{flex} grows with $N$ and
+\item \textbf{Archived \texttt{flex\_attention} timing shows a prefill
+  signal, not a validated model result.} The batch-1 DDI timing ratio under
+  \texttt{flex} grows with $N$ and
   $\ell$: from 1.05$\times$ at $N{=}9$, $\ell{=}512$ to
   \textbf{1.29$\times$} at $N{=}9$, $\ell{=}2048$ (88\% sparsity).
   The total system speedup --- \texttt{flex+ddi\_qf} versus
@@ -116,19 +121,20 @@ matching shapes. Two findings stand out:
    The original \texttt{create\_block\_mask} implementation exhausts A100
    memory while constructing the $N{=}25$, $\ell{=}2048$ mask representation.
    A direct sparse \texttt{BlockMask} construction removes that allocation,
-   but it is not reported as a model-scale result: its current full-model
-   parity gate fails in the available CUDA/Dynamo runtime, so no correctness,
-   memory, or speed claim is made for that cell.
+   but its full-model parity gate fails in the available CUDA/Dynamo runtime.
+   That failure occurs before any batched timing can be admitted, so neither
+   the target cell nor a smaller-shape batch-throughput claim is reported.
 \end{enumerate}
 
 \begin{table}[t]
 \centering
-\caption{T3-flex --- realized prefill speedup: \texttt{sdpa} vs
+\caption{T3-flex --- archived batch-1 prefill timings: \texttt{sdpa} vs
     \texttt{flex\_attention}. DDI ratio = full\,/\,ddi\_qf within each
     backend. System speedup = \texttt{sdpa+full}\,/\,\texttt{flex+ddi\_qf}.
     $Q=64$, Qwen2.5-7B-Instruct, A100 80GB. The largest DDI cell is
-    reported as OOM for the original mask-construction implementation; the
-    direct sparse replacement has no admitted model-scale result.}
+    reported as OOM for the original mask-construction implementation. The
+    current full-model parity failure means these rows are not admitted as
+    end-to-end or batched throughput results.}
 \label{tab:t3-flex}
 \IfFileExists{generated/T3_flex.tex}{%
     \input{generated/T3_flex.tex}%

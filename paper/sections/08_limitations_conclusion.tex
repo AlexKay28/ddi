@@ -22,9 +22,14 @@ the build environment (nvcc~12.2 / Python~3.13). The
 objects is the path forward, but requires per-sample block masks for
 variable-length documents across the batch --- non-trivial because
 \texttt{create\_block\_mask} produces a single pattern, not a batched
-one. As stated, the reported efficiency numbers are for the
-single-request setting; server-side throughput at higher batch sizes
-is left to future work.
+one. More importantly, the current full-model flex parity gate fails even at
+the smaller proxy shape $N{=}2$, $\ell{=}128$, $Q{=}64$: cosine similarity is
+0.9989066 against a required 0.999 and token-argmax agreement is 92.5\%.
+Thus the raw batched-kernel checks and archived batch-1 prefill timings do not
+support an end-to-end batch-throughput claim at any shape. As stated, the
+reported efficiency numbers are for the single-request setting; server-side
+throughput at higher batch sizes is left to future work after exact batched
+model parity passes.
 
 \paragraph{Preprint scope.}
 This preprint covers retrieval quality (C1) on Qwen2.5-7B-Instruct, including

@@ -8,8 +8,9 @@ restart-layout quality on the cache path.
 - C1 quality: **PARTIALLY CLOSED** on 7B. Sequential finetune achieves
   ddi_qf approximately equal to full on hotpot (0.46=0.46). Mixed finetune
   maintains parity (ddi_qf=0.39, full=0.40) at a lower level.
-- C3 compute: **SOLVED with flex_attention** - 1.77x model-level speedup at
-  97.9% sparsity (N=25, L=2048). See VIBEQUEUE-21.
+- C3 compute: archived batch-1 flex prefill timings show a speed signal, but
+  no current flex model-throughput claim is admitted: the full-model parity
+  gate fails at `N=2,L=128` before the direct sparse or batched path is timed.
 - C4 cache correctness: PASSES (ddi_cache equals ddi_recompute).
 - C4 cache throughput: 1.72x QPS (2.53 vs 1.47) remains a separate throughput
   result.

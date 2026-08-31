@@ -64,3 +64,14 @@ remaining dense-reference parity gate does not pass: cosine similarity is
 0.9989066 and token-argmax agreement is 92.5%. Consequently no N=25, L=2048
 prefill/generation, memory, or speed result is admitted; raw kernel results
 remain distinct from model validation.
+
+## VIBEQUEUE-44 Resolution
+
+No separate batched end-to-end flex throughput result is admitted. The
+full-model gate fails at the smaller proxy shape `N=2, L=128, Q=64` before a
+batch-8 shape can be considered: maximum logit error is `2.953125`, mean error
+is `0.0753116`, cosine similarity is `0.9989066` (below the `0.999` gate), and
+token-argmax agreement is `92.5%`. The batched `BlockMask` unit and raw-kernel
+checks establish mask and kernel behavior only; they do not establish model
+parity. Consequently no batch-throughput number is reported, including for a
+smaller shape, until full-model parity passes for the exact batched path.
