@@ -9,12 +9,22 @@
 Three limitations bound the interpretation of every result in this paper.
 
 \paragraph{Batch size.}
-The current harness runs with batch size~1. Batched prefill with
-per-sample block-diagonal masks is what FlashAttention varlen is
-designed for, and lifting the constraint would materially cut the cost
-of the quality and efficiency sweeps. As stated, however, the reported
-efficiency numbers are for the single-request setting; server-side
-throughput at higher batch sizes is out of scope.
+The current harness runs with batch size~1. We implemented batched
+prefill with per-sample block-diagonal 4D additive masks
+(\texttt{ddi.batch}), but measured it to be \emph{slower} than batch=1:
+7.03~QPS at $B{=}1$ versus 4.76~QPS at $B{=}8$ on Qwen2.5-7B. The
+cause is that SDPA falls back to its slow-math path when a 4D float
+additive mask is passed (the DDI mask patch bypasses HF's own mask
+builder), so the kernel that would benefit from batching is never
+selected. FlashAttention~2 varlen would solve this but is blocked by
+the build environment (nvcc~12.2 / Python~3.13). The
+\texttt{flex\_attention} backend with compiled \texttt{BlockMask}
+objects is the path forward, but requires per-sample block masks for
+variable-length documents across the batch --- non-trivial because
+\texttt{create\_block\_mask} produces a single pattern, not a batched
+one. As stated, the reported efficiency numbers are for the
+single-request setting; server-side throughput at higher batch sizes
+is left to future work.
 
 \paragraph{Preprint scope.}
 This preprint covers retrieval quality (C1) on Qwen2.5-7B-Instruct, including
