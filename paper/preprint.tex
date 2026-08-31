@@ -108,6 +108,10 @@ degrades on single-hop parity benchmarks, and what removing it actually buys
 in terms of prefill cost and per-document key/value cache reuse. A 16-layer
 self-distillation recipe closes the train-free quality gap on Qwen2.5-7B;
 cross-family transfer to Llama-3.1-8B is reported as a negative finding.
+With a semantically equivalent \texttt{flex\_attention} backend, DDI reaches
+1.29$\times$ within-backend prefill speedup and 2.13$\times$ speedup over
+the dense SDPA baseline at 88\% mask sparsity; SDPA itself realizes no
+sparsity benefit from a 4D additive mask.
 The restart position layout, designed to make KV blocks position-independent
 for order-free caching, degrades generation quality even after finetuning;
 a RoPE base frequency ablation partially mitigates but does not solve this.
