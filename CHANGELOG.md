@@ -2,6 +2,27 @@
 
 Chronological log of experiments and project decisions. **Newest first.**
 
+## 2026-08-31 — VIBEQUEUE-33 bounded Llama 16L diagnostic
+
+The 16-layer Llama-3.1-8B-Instruct self-distillation diagnostic completed on
+one A100: 19,000 training records, 4,750 optimizer steps, 3.49B trainable
+parameters, and 3h 29m 58.5s elapsed.  Holdout student DDI perplexity fell
+from 3.355 to 2.118; CUDA allocator retry warnings were recoverable and the
+finite-weight gate passed before the checkpoint was saved.
+
+Matched 100-record EM evaluation:
+
+| checkpoint | hotpot full | hotpot ddi_qf | gap | musique full | musique ddi_qf | gap |
+|---|---:|---:|---:|---:|---:|---:|
+| Llama 8L | 0.47 | 0.31 | 0.16 | 0.33 | 0.15 | 0.18 |
+| Llama 16L, 20k records | 0.45 | 0.40 | 0.05 | 0.36 | 0.18 | 0.18 |
+
+The bounded 16L run raises hotpot `ddi_qf` EM by 0.09 and narrows its gap by
+0.11, but leaves the musique gap unchanged.  This is a single-seed,
+20k-record diagnostic with no valid three-seed Llama `full` baseline for the
+repository's Delta criterion.  It is therefore evidence of capacity-sensitive
+improvement, not a Llama parity claim or a reason to revise the paper result.
+
 ## 2026-08-28 — flex_attention production integration: 54/54 timing grid passed
 
 ### flex_attention integrated into production timing harness
