@@ -123,7 +123,7 @@ remain out of scope per [#82](https://github.com/AlexKay28/ddi/issues/82).
 
 | claim | what | evidence |
 |---|---|---|
-| **C1** | `ddi_qf` matches `full` within `Δ` on retrieval Q&A | measured on Qwen + Llama instruct grids ([#74](https://github.com/AlexKay28/ddi/issues/74), [#75](https://github.com/AlexKay28/ddi/issues/75)) |
+| **C1** | `ddi_qf` matches `full` within `Δ` on the reported Qwen retrieval-QA cells | Qwen checkpoint/evaluation rows; the single-seed Llama diagnostic is a bounded negative result, not cross-architecture evidence |
 | **C3** | Speed: analytical ≠ realized — the gap is the story | measured on both instruct models; realization ratio 0.05–0.4 on `sdpa` |
 | **C4** | Per-document KV cache reuse under restart layout preserves quality and improves throughput | measured on Qwen; restart-vs-sequential parity within `Δ` |
 

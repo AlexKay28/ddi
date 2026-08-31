@@ -39,6 +39,15 @@ restart position layout enables position-independent KV blocks for caching;
 its generation evaluation must propagate the same explicit positions through
 cached decoding as through prefill.
 
+\paragraph{Cross-architecture evidence.}
+The Llama-3.1-8B diagnostic is one 100-example, single-seed evaluation of
+available checkpoints. Its evaluation seed also selects the validation split,
+and the repository has neither a fixed held-out manifest nor independently
+trained Llama seeds matched to the Qwen recipe. Consequently, its 0.05 hotpot
+and 0.18 musique full-to-\texttt{ddi\_qf} gaps at 16 layers are a bounded,
+architecture- and task-dependent negative result, not evidence of universal
+transfer or a cross-architecture variance estimate.
+
 \paragraph{Realization gap.}
 If the analytical/realized gap of Section~\ref{sec:results-efficiency-gap}
 does not close under the Phase~3 diagnostics --- if it is a structural
@@ -52,9 +61,9 @@ sections rather than only here, so a reader cannot miss the constraint.
 \label{sec:conclusion}
 
 We present a characterization of block-diagonal attention over retrieved
-documents in decoder-only language models. On retrieval benchmarks we show
-that \texttt{ddi\_qf} matches full-causal quality within the
-non-inferiority margin after self-distillation finetuning
+documents in decoder-only language models. On the reported Qwen
+checkpoint/evaluation cells, \texttt{ddi\_qf} matches full-causal quality
+within the non-inferiority margin after self-distillation finetuning
 (Section~\ref{sec:results-quality}), report the realized versus analytical
 prefill speedup at matched shapes (Section~\ref{sec:results-efficiency}),
 and measure per-document KV-cache reuse throughput
@@ -67,6 +76,7 @@ blocks, yielding 1.76$\times$ throughput on the sequential layout. On the
 explicit tail is propagated through cached decoding (0.47 versus 0.45 EM on
 the 100-record hotpot\_qa control).
 
-The value of the paper does not depend on any variant beating a
-baseline; it depends on the parity, efficiency, and caching axes being
-measured honestly and reported with variance.
+The value of the paper does not depend on any variant beating a baseline; it
+depends on the parity, efficiency, and caching axes being measured honestly
+and reported with variance. The current Llama evidence bounds the claim rather
+than generalizing it across architectures.

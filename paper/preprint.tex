@@ -106,8 +106,10 @@ We frame the study as a characterization rather than a method-wins result:
 we ask how much cross-document attention can be removed before answer quality
 degrades on single-hop parity benchmarks, and what removing it actually buys
 in terms of prefill cost and per-document key/value cache reuse. A 16-layer
-self-distillation recipe closes the train-free quality gap on Qwen2.5-7B;
-cross-family transfer to Llama-3.1-8B is reported as a negative finding.
+self-distillation recipe closes the train-free quality gap on the reported
+Qwen2.5-7B cells; a bounded single-seed Llama-3.1-8B diagnostic is reported
+as an architecture- and task-dependent negative finding, not cross-family
+transfer.
 With a semantically equivalent \texttt{flex\_attention} backend, DDI reaches
 1.29$\times$ within-backend prefill speedup and 2.13$\times$ speedup over
 the dense SDPA baseline at 88\% mask sparsity; SDPA itself realizes no

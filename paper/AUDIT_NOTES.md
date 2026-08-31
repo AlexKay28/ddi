@@ -82,3 +82,16 @@ that forces retention beyond what #81 already lists as in-scope
 fine-tuning entry points are all cleared to delete). No sections
 survived that require any of the dropped code to keep compiling; #89
 can proceed on the plan in #81 without paper-side blockers.
+
+## VIBEQUEUE-43: bounded Llama result
+
+The available Llama-3.1-8B checkpoints support only a single-seed diagnostic:
+the 16-layer, 20k-record checkpoint scored full/DDI-QF EM of 0.45/0.40 on
+100 hotpot examples and 0.36/0.18 on 100 musique examples. The earlier 8-layer
+hotpot diagnostic had a 0.16 gap. The runner uses `seed` to select the
+validation split and no fixed-ID manifest or independently trained Llama seeds
+is stored, so a seed sweep from the current artifacts would not be a controlled
+fixed-set cross-architecture evaluation. `04_results_quality.tex`,
+`08_limitations_conclusion.tex`, `00_intro.tex`, and `preprint.tex` now state
+this as an architecture- and task-dependent negative result rather than a
+universal transfer claim.
