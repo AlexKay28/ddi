@@ -113,9 +113,12 @@ matching shapes. Two findings stand out:
   \textbf{1.29$\times$} at $N{=}9$, $\ell{=}2048$ (88\% sparsity).
   The total system speedup --- \texttt{flex+ddi\_qf} versus
   \texttt{sdpa+full} --- reaches \textbf{2.13$\times$} at that shape.
-  At $N{=}25$, $\ell{=}2048$, \texttt{create\_block\_mask} exhausts
-  A100 memory while constructing its mask representation, so we report
-  that cell as OOM rather than extrapolating from the analytical count.
+   The original \texttt{create\_block\_mask} implementation exhausts A100
+   memory while constructing the $N{=}25$, $\ell{=}2048$ mask representation.
+   A direct sparse \texttt{BlockMask} construction removes that allocation,
+   but it is not reported as a model-scale result: its current full-model
+   parity gate fails in the available CUDA/Dynamo runtime, so no correctness,
+   memory, or speed claim is made for that cell.
 \end{enumerate}
 
 \begin{table}[t]
@@ -124,7 +127,8 @@ matching shapes. Two findings stand out:
     \texttt{flex\_attention}. DDI ratio = full\,/\,ddi\_qf within each
     backend. System speedup = \texttt{sdpa+full}\,/\,\texttt{flex+ddi\_qf}.
     $Q=64$, Qwen2.5-7B-Instruct, A100 80GB. The largest DDI cell is
-    reported as OOM when block-mask construction exhausts memory.}
+    reported as OOM for the original mask-construction implementation; the
+    direct sparse replacement has no admitted model-scale result.}
 \label{tab:t3-flex}
 \IfFileExists{generated/T3_flex.tex}{%
     \input{generated/T3_flex.tex}%

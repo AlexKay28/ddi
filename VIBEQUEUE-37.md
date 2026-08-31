@@ -53,3 +53,14 @@ the project lock and the project dependencies. Provision a reproducible Python
 source, then run the actual patched model's batch=8 versus batch=1 prefill QPS
 benchmark. Until then the ticket is an environment-blocked negative result,
 not an end-to-end throughput delivery.
+
+## VIBEQUEUE-40 Follow-up
+
+The local Python 3.10 CUDA/Dynamo runtime can now load the cached Qwen2.5-7B
+checkpoint after a process-local torchvision import shim. A full-model proxy
+at N=2, L=128, Q=64 uncovered and fixed direct-mask shape cropping and the
+Transformers 4.57 `past_key_values` spelling for cached flex prefill. The
+remaining dense-reference parity gate does not pass: cosine similarity is
+0.9989066 and token-argmax agreement is 92.5%. Consequently no N=25, L=2048
+prefill/generation, memory, or speed result is admitted; raw kernel results
+remain distinct from model validation.

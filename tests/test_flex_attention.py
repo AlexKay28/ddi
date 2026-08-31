@@ -37,3 +37,19 @@ def test_batched_flex_block_masks_match_each_sample_allow_matrix(variant: str) -
         assert torch.equal(actual, expected)
         actual_blocks = dense[batch, 0, : expected.shape[0], : expected.shape[0]]
         assert torch.all(actual_blocks[expected])
+
+
+@pytest.mark.parametrize("batched", [False, True])
+def test_flex_block_mask_adjusts_non_aligned_sequence_length_when_supported(batched: bool) -> None:
+    if batched:
+        block_mask = make_batched_block_mask(
+            [[3, 2], [2, 1]], [2, 1], "ddi_qf", device=torch.device("cpu"), block_size=4
+        )
+        expected = 7
+    else:
+        block_mask = make_block_mask(
+            [3, 2], 2, "ddi_qf", device=torch.device("cpu"), block_size=4
+        )
+        expected = 7
+    if hasattr(block_mask, "_adjust"):
+        assert block_mask.shape[-2:] == (expected, expected)

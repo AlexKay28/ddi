@@ -138,12 +138,15 @@ def make_block_mask(
     )
     for block, row in enumerate(candidates):
         kv_indices[0, 0, block, : len(row)] = torch.tensor(row, device=device)
-    return BlockMask.from_kv_blocks(
+    block_mask = BlockMask.from_kv_blocks(
         kv_num_blocks,
         kv_indices,
         BLOCK_SIZE=(q_block, kv_block),
         mask_mod=mask_mod,
     )
+    # torch 2.13 validates the exact sequence shape at flex invocation; 2.5
+    # lacks this method but cannot compile flex under the locked Python 3.13 runtime.
+    return block_mask._adjust(T, T) if hasattr(block_mask, "_adjust") else block_mask
 
 
 def make_batched_block_mask(
@@ -234,12 +237,13 @@ def make_batched_block_mask(
             kv_indices[b, 0, q_block_idx, : len(candidates)] = torch.tensor(
                 candidates, dtype=torch.int32, device=device
             )
-    return BlockMask.from_kv_blocks(
+    block_mask = BlockMask.from_kv_blocks(
         kv_num_blocks,
         kv_indices,
         BLOCK_SIZE=(q_block, kv_block),
         mask_mod=mask_mod,
     )
+    return block_mask._adjust(T, T) if hasattr(block_mask, "_adjust") else block_mask
 
 
 def patch_model_for_flex(model: torch.nn.Module) -> torch.nn.Module:
@@ -278,6 +282,10 @@ def patch_model_for_flex(model: torch.nn.Module) -> torch.nn.Module:
                 cache_position=None,
                 **kwargs,
             ):
+                # Transformers >=4.57 passes the layer cache under the plural
+                # spelling; retain the older singular argument for compatibility.
+                if past_key_value is None:
+                    past_key_value = kwargs.get("past_key_values")
                 input_shape = hidden_states.shape[:-1]
                 hidden_shape = (*input_shape, -1, attn_module.head_dim)
 
