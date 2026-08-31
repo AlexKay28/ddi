@@ -112,9 +112,10 @@ With a semantically equivalent \texttt{flex\_attention} backend, DDI reaches
 1.29$\times$ within-backend prefill speedup and 2.13$\times$ speedup over
 the dense SDPA baseline at 88\% mask sparsity; SDPA itself realizes no
 sparsity benefit from a 4D additive mask.
-The restart position layout, designed to make KV blocks position-independent
-for order-free caching, degrades generation quality even after finetuning;
-a RoPE base frequency ablation partially mitigates but does not solve this.
+On the 100-record hotpot_qa control, the restart position layout preserves
+generation parity when explicit positions are propagated through cached decode
+(0.47 restart versus 0.45 sequential EM). The legacy evaluator omitted those
+decode positions, so it does not support a RoPE-base conclusion.
 All tables and figures are regenerated from the results store; empty cells
 are surfaced as explicit TODOs.
 \end{abstract}

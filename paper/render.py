@@ -221,8 +221,8 @@ def render_t4() -> None:
     restart_rows = [
         # (evaluator, layout, dataset, EM). The legacy path omitted explicit
         # decode positions and is retained only to quantify the fixed defect.
-        ("legacy", "sequential", "hotpot", 0.45),
-        ("legacy", "restart", "hotpot", 0.06),
+        ("legacy (invalid)", "sequential", "hotpot", 0.45),
+        ("legacy (invalid)", "restart", "hotpot", 0.06),
         ("corrected", "sequential", "hotpot", 0.45),
         ("corrected", "restart", "hotpot", 0.47),
     ]
@@ -270,21 +270,39 @@ def render_t4() -> None:
 
     # Restart quality table
     def lookup_restart(ckpt, layout):
-        for c, l, d, em in restart_rows:
-            if c == ckpt and l == layout and d == "hotpot":
+        for checkpoint, layout_name, dataset, em in restart_rows:
+            if checkpoint == ckpt and layout_name == layout and dataset == "hotpot":
                 return f"{em:.2f}"
         return "—"
 
     rlines = [
-        r"\begin{tabular}{l|cc|c}",
-        r" & \multicolumn{2}{c|}{hotpot EM} & \\",
-        r" checkpoint & sequential & restart & $\Delta$ \\",
-        r"\hline",
+        r"\begin{tabular}{lccc}",
+        r"\toprule",
+        r" & \multicolumn{2}{c}{hotpot EM} & \\",
+        r"evaluator & sequential & restart & restart - sequential \\",
+        r"\midrule",
     ]
-    for ckpt in ("legacy", "corrected"):
-        seq_v = next((em for c,l,d,em in restart_rows if c==ckpt and l=="sequential" and d=="hotpot"), None)
-        rst_v = next((em for c,l,d,em in restart_rows if c==ckpt and l=="restart" and d=="hotpot"), None)
-        rlines.append(f"{ckpt} & {lookup_restart(ckpt,'sequential')} & {lookup_restart(ckpt,'restart')} & {f'{seq_v-rst_v:+.2f}' if seq_v is not None and rst_v is not None else '—'}" + r" \\")
+    for ckpt in ("legacy (invalid)", "corrected"):
+        seq_v = next(
+            (
+                em
+                for checkpoint, layout_name, dataset, em in restart_rows
+                if checkpoint == ckpt and layout_name == "sequential" and dataset == "hotpot"
+            ),
+            None,
+        )
+        rst_v = next(
+            (
+                em
+                for checkpoint, layout_name, dataset, em in restart_rows
+                if checkpoint == ckpt and layout_name == "restart" and dataset == "hotpot"
+            ),
+            None,
+        )
+        delta = f"{rst_v - seq_v:+.2f}" if seq_v is not None and rst_v is not None else "—"
+        rlines.append(f"{ckpt} & {lookup_restart(ckpt, 'sequential')} & "
+                      f"{lookup_restart(ckpt, 'restart')} & {delta}" + r" \\")
+    rlines.append(r"\bottomrule")
     rlines.append(r"\end{tabular}")
     (GEN / "T4_restart.tex").write_text("\n".join(rlines))
     print("[render] T4_restart.tex written")

@@ -129,6 +129,11 @@ Tracker: VIBEQUEUE-21 (steps 1, 2, 2b documented)
 
 ## 2026-08-28 — Restart-only finetune: HARD WALL DEFINITIVE
 
+**Superseded by VIBEQUEUE-35.** Every restart EM result in this entry used the
+cached-decode evaluator that omitted explicit `position_ids`. The values and
+the derived hard-wall/exposure-bias conclusion are retained only as chronology,
+not as model evidence.
+
 ### Restart-only finetune results (Step 6)
 
 Restart-only finetune: 13.8hr, 26,231 steps, trainable_layers=8, layout=restart
@@ -163,6 +168,10 @@ Paper stands with acknowledged limitation. Cache throughput claim (1.72x QPS)
 scoped to sequential layout only.
 
 ## 2026-08-27 — 7B resolution chain COMPLETE
+
+**Superseded by VIBEQUEUE-35 for restart quality.** The restart EM values and
+the derived generation-gap and RoPE interpretations below used the invalid
+cached-decode evaluator; they are historical chronology only.
 
 ### Paper framing decision
 
