@@ -71,7 +71,10 @@ def make_block_mask(
             k_doc = doc_id[kv_idx]
             q_is_query = q_doc == N
             k_is_query = k_doc == N
-            same_doc = (q_doc == k_doc) & ~q_is_query & ~k_is_query
+            # Documents remain causal internally. Omitting this predicate made
+            # the flex path bidirectional within each document, unlike the
+            # canonical `ddi.masks.build_mask` semantics.
+            same_doc = (q_doc == k_doc) & ~q_is_query & ~k_is_query & (q_idx >= kv_idx)
             q_sees_k = q_is_query & ~k_is_query
             q_query_causal = q_is_query & k_is_query & (q_idx >= kv_idx)
             return same_doc | q_sees_k | q_query_causal
@@ -83,7 +86,7 @@ def make_block_mask(
             k_doc = doc_id[kv_idx]
             q_is_query = q_doc == N
             k_is_query = k_doc == N
-            same_doc = (q_doc == k_doc) & ~q_is_query & ~k_is_query
+            same_doc = (q_doc == k_doc) & ~q_is_query & ~k_is_query & (q_idx >= kv_idx)
             q_query_causal = q_is_query & k_is_query & (q_idx >= kv_idx)
             return same_doc | q_query_causal
         return create_block_mask(mask_mod, B=1, H=None, Q_LEN=T, KV_LEN=T, device=device)
