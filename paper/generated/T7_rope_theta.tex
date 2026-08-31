@@ -1,14 +1,4 @@
-% rope_theta ablation on restart layout. Source: results/sprint_d_restart_*.jsonl
-% 16L finetuned checkpoint, 100 records, Qwen2.5-7B-Instruct (default rope_theta=1M).
-% Gap = restart EM - sequential EM (negative = restart worse).
-\begin{tabular}{lcc cc cc}
-\toprule
- & \multicolumn{2}{c}{hotpot\_qa} & \multicolumn{2}{c}{musique} & \multicolumn{2}{c}{synthetic\_qa} \\
-rope\_theta & seq EM & gap & seq EM & gap & seq EM & gap \\
-\midrule
-100k (0.1$\times$) & 0.50 & $-$0.49 & 0.21 & $-$0.20 & 1.00 & $-$0.15 \\
-500k (0.5$\times$) & 0.49 & $-$0.44 & 0.19 & $-$0.19 & 1.00 & $-$0.05 \\
-1M (default) & 0.45 & $-$0.39 & 0.19 & $-$0.19 & 1.00 & 0.00 \\
-10M (10$\times$) & 0.45 & $-$0.28 & 0.19 & $-$0.16 & 1.00 & $-$0.05 \\
-\bottomrule
-\end{tabular}
+% OBSOLETE: Sprint D's rope_theta rows used an evaluator that omitted explicit
+% cached-decode position_ids. The corrected 100-record hotpot_qa control is
+% 0.47 restart EM versus 0.45 sequential EM, so there is no restart gap to
+% extrapolate to 100M/1B. See CHANGELOG.md (VIBEQUEUE-39).

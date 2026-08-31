@@ -2,6 +2,19 @@
 
 Chronological log of experiments and project decisions. **Newest first.**
 
+## 2026-08-31 — VIBEQUEUE-39 RoPE-theta sweep retired
+
+The proposed 100M/1B RoPE-base extension is not run. Sprint D's apparent
+restart gap, including its smaller gap at 10M, was measured by the evaluator
+that omitted explicit cached-decode positions. The corrected control on the
+same 100 hotpot_qa records is 0.47 restart EM versus 0.45 sequential EM, so
+there is no gap for a larger `rope_theta` to close. This control reaches a
+maximum prompt position of 4,720, below Qwen's 32,768 configured context.
+
+The Sprint D rows remain provenance for the defect but are not a
+RoPE-sensitivity curve. A new sweep would require a new question and a
+pre-registered corrected-code protocol; it is not a continuation of VIBEQUEUE-39.
+
 ## 2026-08-31 — VIBEQUEUE-35 restart decode-position control
 
 The restart-layout evaluator passed explicit position IDs for prefill but not
