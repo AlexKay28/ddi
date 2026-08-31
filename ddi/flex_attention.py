@@ -141,7 +141,6 @@ def make_block_mask(
         kv_indices,
         BLOCK_SIZE=(q_block, kv_block),
         mask_mod=mask_mod,
-        seq_lengths=(T, T),
     )
 
 
