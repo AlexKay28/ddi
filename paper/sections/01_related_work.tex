@@ -62,3 +62,31 @@ and \texttt{ddi\_strict} rather than a binary work/does-not-work test of
 a single independent-context design; and (iii) an explicit report of the
 gap between analytical and realized prefill speedup, which prior work
 does not quantify.
+
+\paragraph{RoPE position schemes.}
+Rotary Position Embeddings~\citep{su2021roformer} encode position as
+rotations applied to query and key vectors, with the rotation frequency
+controlled by a base parameter $\theta_{\text{base}}$.
+NTK-aware scaling~\citep{bloc97k2023ntk} and YaRN~\citep{peng2023yarn}
+interpolate or extrapolate the frequency spectrum to extend context
+length beyond the training range. Position Interpolation
+(PI)~\citep{chen2023pi} linearly rescales position indices. All three
+target \emph{out-of-range} positions; the restart layout in this work
+targets a different problem --- \emph{repeated} positions across
+documents --- and our rope\_theta ablation
+(Section~\ref{sec:results-caching-prereq}) shows that frequency scaling
+partially mitigates but does not solve it.
+
+\paragraph{Knowledge distillation for attention.}
+Self-distillation from a teacher with full context to a student under a
+restricted attention pattern has been used to train efficient
+encoders~\citep{sanh2020distilbert} and to compress decoder-only models
+with sparse attention~\citep{wang2020linformer}. Our 16-layer
+self-distillation recipe
+(Section~\ref{sec:results-quality-finetune}) applies the same principle
+to block-diagonal attention: the teacher runs full-causal, the student
+runs \texttt{ddi\_qf}, and the KL divergence on logits drives the
+student toward the teacher's output distribution under the masked path.
+The finding that this recipe transfers across layers within Qwen2.5-7B
+but fails on Llama-3.1-8B (Section~\ref{sec:results-quality}) is an
+honest negative result about architecture sensitivity.

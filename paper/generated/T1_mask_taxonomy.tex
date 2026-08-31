@@ -1,0 +1,12 @@
+% Mask taxonomy (T1). Source: ddi/masks.py
+\begin{tabular}{lcccc}
+\toprule
+Variant & Doc$\leftrightarrow$Doc & Query$\leftrightarrow$Doc & Answer$\leftrightarrow$Doc & Causal \\
+\midrule
+\texttt{full} & yes & yes & yes & yes \\
+\texttt{ddi\_qf} & no & yes (all rows) & yes & within block \\
+\texttt{ddi\_strict} & no & yes (last row) & yes & within block \\
+\texttt{ddi\_bridge\_k} & no & yes ($k$ rows) & yes & within block \\
+\texttt{blind} & no & no & no & within block \\
+\bottomrule
+\end{tabular}

@@ -105,11 +105,14 @@ to every other document, while the query and answer regions bridge the blocks.
 We frame the study as a characterization rather than a method-wins result:
 we ask how much cross-document attention can be removed before answer quality
 degrades on single-hop parity benchmarks, and what removing it actually buys
-in terms of prefill cost and per-document key/value cache reuse. Multi-hop
-failure characterization, PCW comparison, and fine-tuning are out of scope
-for this preprint. All tables and figures in this preprint are regenerated
-from the results store by \texttt{paper/build.sh}; empty cells are surfaced
-as explicit TODOs.
+in terms of prefill cost and per-document key/value cache reuse. A 16-layer
+self-distillation recipe closes the train-free quality gap on Qwen2.5-7B;
+cross-family transfer to Llama-3.1-8B is reported as a negative finding.
+The restart position layout, designed to make KV blocks position-independent
+for order-free caching, degrades generation quality even after finetuning;
+a RoPE base frequency ablation partially mitigates but does not solve this.
+All tables and figures are regenerated from the results store; empty cells
+are surfaced as explicit TODOs.
 \end{abstract}
 
 % ---------------------------------------------------------------------
