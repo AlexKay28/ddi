@@ -46,6 +46,7 @@ def make_block_mask(
     query_len: int,
     variant: str,
     device: torch.device = torch.device("cuda"),
+    block_size: int | tuple[int, int] = 128,
 ) -> Any:
     """Create a flex_attention BlockMask for the DDI mask variant.
 
@@ -60,7 +61,9 @@ def make_block_mask(
     if variant == "full":
         def mask_mod(b, h, q_idx, kv_idx):
             return q_idx >= kv_idx
-        return create_block_mask(mask_mod, B=1, H=None, Q_LEN=T, KV_LEN=T, device=device)
+        return create_block_mask(
+            mask_mod, B=1, H=None, Q_LEN=T, KV_LEN=T, device=device, BLOCK_SIZE=block_size
+        )
 
     doc_id = _make_doc_id_tensor(doc_lengths, query_len, T, device)
     N = len(doc_lengths)
@@ -78,7 +81,9 @@ def make_block_mask(
             q_sees_k = q_is_query & ~k_is_query
             q_query_causal = q_is_query & k_is_query & (q_idx >= kv_idx)
             return same_doc | q_sees_k | q_query_causal
-        return create_block_mask(mask_mod, B=1, H=None, Q_LEN=T, KV_LEN=T, device=device)
+        return create_block_mask(
+            mask_mod, B=1, H=None, Q_LEN=T, KV_LEN=T, device=device, BLOCK_SIZE=block_size
+        )
 
     if variant == "blind":
         def mask_mod(b, h, q_idx, kv_idx):
@@ -89,7 +94,9 @@ def make_block_mask(
             same_doc = (q_doc == k_doc) & ~q_is_query & ~k_is_query & (q_idx >= kv_idx)
             q_query_causal = q_is_query & k_is_query & (q_idx >= kv_idx)
             return same_doc | q_query_causal
-        return create_block_mask(mask_mod, B=1, H=None, Q_LEN=T, KV_LEN=T, device=device)
+        return create_block_mask(
+            mask_mod, B=1, H=None, Q_LEN=T, KV_LEN=T, device=device, BLOCK_SIZE=block_size
+        )
 
     raise ValueError(f"flex backend: unknown mask variant {variant!r}")
 
