@@ -126,18 +126,20 @@ claim is not an artefact of the 100-record eval size.
 \end{table}
 
 The restart-quality result is reported separately
-(Table~\ref{tab:t4_restart}): despite closing the perplexity gap under
-restart-only training (restart 1.629 $<$ sequential 1.638), the generation
-gap under restart positions persists across all three finetuning strategies
-(0.07 vs 0.42 EM on hotpot\_qa). See
-Section~\ref{sec:limitations} for the full discussion.
+(Table~\ref{tab:t4_restart}). The original evaluator supplied restart
+positions at prefill but omitted them during cached decoding, causing HF to
+infer a discontinuous cache-length position for each answer token. With the
+explicit restart tail propagated at every decode step, the 16-layer checkpoint
+has 0.47 restart versus 0.45 sequential EM on the fixed 100-record hotpot\_qa
+subset. The legacy 0.06 restart result is retained only as a defect comparison,
+not as a model result.
 
 \begin{table}[t]
 \centering\small
-\caption{T4 (restart) --- generation quality under sequential vs restart
-    position layout, 100 records per cell. All three finetuning strategies
-    fail to close the generation gap despite restart-only training closing
-    the perplexity gap.}
+\caption{T4 (restart) --- 16-layer checkpoint generation quality under
+    sequential versus restart positions, 100 hotpot\_qa records per cell.
+    Explicit decode positions close the restart gap; the legacy evaluator
+    omitted them during cached decoding.}
 \label{tab:t4_restart}
 \IfFileExists{generated/T4_restart.tex}{%
     \input{generated/T4_restart.tex}%

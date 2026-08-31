@@ -321,6 +321,16 @@ def _batch(BatchEncoding):  # noqa: N803 — it is a class
     )
 
 
+def _batch_for_layout(BatchEncoding, layout: str):  # noqa: N803 — it is a class
+    return BatchEncoding(
+        input_ids=_prompt_ids(),
+        position_ids=build_positions(DOC_LENGTHS, QUERY_LEN, 0, layout).unsqueeze(0),  # type: ignore[arg-type]
+        doc_lengths=list(DOC_LENGTHS),
+        query_len=QUERY_LEN,
+        layout=layout,
+    )
+
+
 def _run_generate(variant: str) -> RecordingCausalLM:
     BatchEncoding, generate = _generate()
     model = RecordingCausalLM()
@@ -353,6 +363,20 @@ def test_generate_blind_never_lets_the_answer_see_a_document() -> None:
         assert call.attention_mask is not None
         row = call.attention_mask.values.flatten()
         assert torch.isinf(row[:doc_total]).all(), "blind decode step can read the documents"
+
+
+@pytest.mark.parametrize("layout", ["sequential", "restart"])
+def test_generate_forwards_the_right_position_per_step(layout: str) -> None:
+    BatchEncoding, generate = _generate()
+    model = RecordingCausalLM()
+    batch = _batch_for_layout(BatchEncoding, layout)
+    generate(model, RecordingTokenizer(), batch, "ddi_qf", max_new_tokens=BUDGET)
+
+    expected = build_positions(DOC_LENGTHS, QUERY_LEN, BUDGET, layout)  # type: ignore[arg-type]
+    for i, call in enumerate(model.decode_calls):
+        assert call.position_ids is not None, f"decode step {i} got no position_ids"
+        want = expected[PREFIX_LEN + i].reshape(1, 1)
+        assert torch.equal(call.position_ids.values, want), f"wrong position at decode step {i}"
 
 
 @pytest.mark.parametrize("variant", VARIANTS)

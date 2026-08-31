@@ -259,6 +259,15 @@ def generate(
     # pointer.
     additive = additive_full[:prefix_len, :prefix_len].clone().unsqueeze(0).unsqueeze(0)
 
+    # Cached decode must continue the explicit layout. Letting HF infer positions
+    # from cache length makes restart's answer tail jump past the intended offset.
+    decode_positions = torch.arange(
+        int(positions[0, -1].item()) + 1,
+        int(positions[0, -1].item()) + 1 + max_new_tokens,
+        dtype=torch.long,
+        device=model.device,
+    ).unsqueeze(0)
+
     eos_id = tokenizer.eos_token_id
     generated: list[int] = []
 
@@ -291,6 +300,7 @@ def generate(
             step = model(
                 input_ids=next_token,
                 attention_mask=step_mask,
+                position_ids=decode_positions[:, i : i + 1].clone(),
                 past_key_values=past,
                 use_cache=True,
             )

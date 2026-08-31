@@ -37,54 +37,20 @@ test is the correctness gate that makes any throughput number meaningful.
 document list produces identical outputs under \texttt{ddi\_qf + restart},
 which the mask family alone predicts and prior work does not.
 
-\textbf{Quality under restart} (Phase~4.1) was tested as a prerequisite but
-does \emph{not} hold on the 7B model. Restarting RoPE positions per document
-degrades generation quality (EM) relative to a sequential layout, even
-after three finetuning strategies: sequential training (0.06 vs 0.46),
-mixed-layout training (0.07 vs 0.39), and restart-only training (0.07 vs
-0.42) on hotpot\_qa. The perplexity gap closes under restart-only training
-(restart 1.629 $<$ sequential 1.638) but the generation gap persists,
-indicating exposure bias amplified by position perturbation
-(Section~\ref{sec:results-quality-finetune}). The cache throughput
-result below is therefore reported on the sequential layout, where
-position-dependent caching still yields 1.76$\times$ QPS but does not
-achieve the order-independence that the restart layout was designed to
-enable. See Section~\ref{sec:limitations} for the full discussion.
-
-\paragraph{RoPE base frequency ablation.}
-To test whether the restart quality gap is attributable to RoPE's
-position sensitivity, we swept the RoPE base frequency
-($\theta_{\text{base}}$) on the 16-layer finetuned checkpoint under both
-sequential and restart layouts (Table~\ref{tab:t7-rope-theta}).
-Qwen2.5-7B's default is $\theta_{\text{base}} = 1{,}000{,}000$.
-Increasing $\theta_{\text{base}}$ tenfold (to 10M) --- which makes
-rotations more gradual, reducing the model's sensitivity to exact
-position IDs --- reduces the restart gap on hotpot\_qa from $-$0.39~EM
-to $-$0.28~EM and on musique from $-$0.19 to $-$0.16. Decreasing
-$\theta_{\text{base}}$ tenfold (to 100k) worsens the gap to $-$0.49 on
-hotpot\_qa. The direction is consistent: less position sensitivity
-mitigates the restart wall. However, even at 10$\times$ the default,
-the gap persists ($-$0.28~EM on hotpot\_qa), confirming that repeated
-position IDs cannot be fully solved by frequency scaling alone. This
-supports the paper's decision to scope the caching claim to the
-sequential layout.
+\textbf{Quality under restart} (Phase~4.1) is a prerequisite for reusable
+per-document KV blocks. The initial evaluation was invalid because it used
+restart positions for prefill but let cached decoding infer positions from the
+cache length. Propagating the explicit query-tail position on every decode
+step restores parity on the 16-layer checkpoint: 0.47 restart versus 0.45
+sequential EM on 100 hotpot\_qa records (Table~\ref{tab:t4_restart}). The
+earlier RoPE-base sweep used the invalid evaluator and is not interpreted as
+evidence about RoPE sensitivity. Standard dynamic NTK scaling is also a no-op
+on this subset: its maximum prompt position is 4,720, below Qwen's 32,768
+configured context where the implementation preserves the original
+frequencies.
 
 \subsection{Throughput under document reuse}
 \label{sec:results-caching-throughput}
-
-\begin{table}[t]
-\centering
-\caption{T7 --- RoPE base frequency ablation on the 16L finetuned
-checkpoint. Gap = restart EM $-$ sequential EM (negative = restart
-worse). Increasing $\theta_{\text{base}}$ reduces the gap but does not
-eliminate it. Source: \texttt{results/sprint\_d\_restart\_*.jsonl}.}
-\label{tab:t7-rope-theta}
-\IfFileExists{generated/T7_rope_theta.tex}{%
-    \input{generated/T7_rope_theta.tex}%
-}{%
-    \todoreport{T7 rope\_theta table}{run sprint\_d\_restart}%
-}
-\end{table}
 
 Figure~\ref{fig:f5} reports end-to-end throughput as a function of the
 document reuse rate --- the fraction of retrieved documents in the

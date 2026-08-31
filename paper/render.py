@@ -219,13 +219,12 @@ def render_t4() -> None:
     ]
 
     restart_rows = [
-        # (checkpoint, layout, dataset, EM)
-        ("base",        "sequential", "hotpot", 0.31),
-        ("base",        "restart",    "hotpot", 0.07),
-        ("seq-tuned",   "sequential", "hotpot", 0.46),
-        ("seq-tuned",   "restart",    "hotpot", 0.06),
-        ("mixed-tuned", "sequential", "hotpot", 0.39),
-        ("mixed-tuned", "restart",    "hotpot", 0.07),
+        # (evaluator, layout, dataset, EM). The legacy path omitted explicit
+        # decode positions and is retained only to quantify the fixed defect.
+        ("legacy", "sequential", "hotpot", 0.45),
+        ("legacy", "restart", "hotpot", 0.06),
+        ("corrected", "sequential", "hotpot", 0.45),
+        ("corrected", "restart", "hotpot", 0.47),
     ]
 
     checkpoints = ["base", "seq-tuned", "mixed-tuned"]
@@ -282,7 +281,7 @@ def render_t4() -> None:
         r" checkpoint & sequential & restart & $\Delta$ \\",
         r"\hline",
     ]
-    for ckpt in checkpoints:
+    for ckpt in ("legacy", "corrected"):
         seq_v = next((em for c,l,d,em in restart_rows if c==ckpt and l=="sequential" and d=="hotpot"), None)
         rst_v = next((em for c,l,d,em in restart_rows if c==ckpt and l=="restart" and d=="hotpot"), None)
         rlines.append(f"{ckpt} & {lookup_restart(ckpt,'sequential')} & {lookup_restart(ckpt,'restart')} & {f'{seq_v-rst_v:+.2f}' if seq_v is not None and rst_v is not None else '—'}" + r" \\")

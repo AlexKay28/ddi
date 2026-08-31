@@ -77,15 +77,10 @@ The restart layout is designed to turn DDI's structural sparsity into a
 caching mechanism: under a block-diagonal mask, a document's KV block
 would be a function of that document alone, making blocks keyable by
 content hash, order-independent, and reusable across requests.
-However, as reported in Section~\ref{sec:results-caching-prereq}, the
-restart layout degrades generation quality and this design goal is not
-achieved. The cache throughput result (Section~\ref{sec:results-caching})
-is therefore reported on the \emph{sequential} layout, where caching
-is position-dependent (a document's KV is reusable only when it appears
-at the same position in the same prefix), which is weaker than the
-order-independent caching the restart layout was designed to enable.
-The restart layout's quality failure is documented as a negative
-finding (Section~\ref{sec:limitations}).
+The generated answer positions continue the query tail in either layout.
+This is required for a cached decode to preserve the position scheme used for
+prefill; Section~\ref{sec:results-caching-prereq} validates restart parity
+under that contract.
 
 \subsection{Non-inferiority margin \texorpdfstring{$\Delta$}{Delta}}
 \label{sec:method-delta}

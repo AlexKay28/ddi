@@ -2,6 +2,25 @@
 
 Chronological log of experiments and project decisions. **Newest first.**
 
+## 2026-08-31 — VIBEQUEUE-35 restart decode-position control
+
+The restart-layout evaluator passed explicit position IDs for prefill but not
+for cached decode. HF then inferred answer positions from the cache length,
+which discontinuously changed the position scheme after a restart-layout
+prefill. Propagating the explicit tail position on every decode step fixes the
+evaluation contract.
+
+| evaluator | hotpot sequential EM | hotpot restart EM | restart - sequential |
+|---|---:|---:|---:|
+| legacy implicit decode positions | 0.45 | 0.06 | -0.39 |
+| corrected explicit decode positions | 0.45 | 0.47 | +0.02 |
+
+The corrected 100-record control uses the local 16-layer Qwen2.5-7B checkpoint
+on an A100 80 GB with torch 2.5.1+cu121 and transformers 4.52.4. Restart
+parity is restored; the prior RoPE-theta sweep used the invalid evaluator and
+is not interpreted. Dynamic NTK scaling is an exact no-op here because prompt
+positions peak at 4,720, below the configured 32,768 context.
+
 ## 2026-08-31 — VIBEQUEUE-33 bounded Llama 16L diagnostic
 
 The 16-layer Llama-3.1-8B-Instruct self-distillation diagnostic completed on
