@@ -43,6 +43,7 @@ import yaml
 
 from ddi import inference
 from ddi.data import load as load_dataset
+from ddi.data.manifest import select_or_write
 from ddi.masks import build_mask, to_additive
 from ddi.metrics import (
     answer_presence,
@@ -50,6 +51,7 @@ from ddi.metrics import (
     make_answer_labels,
     token_f1,
 )
+from ddi.predictions import append as append_prediction
 from ddi.prompt import build_query_text, encode_segments
 from ddi.provenance import capture
 from ddi.store import DEFAULT_STORE, append
@@ -241,6 +243,8 @@ def _quality_cell(
     metrics: list[str],
     cfg_hash: str,
     store_path: Path,
+    heldout_manifest: Path | None,
+    predictions_store: Path | None,
 ) -> None:
     """One (dataset, mask) cell of the quality sweep.
 
@@ -267,8 +271,21 @@ def _quality_cell(
 
     coerced_full = 0
 
-    for i, record in enumerate(load_dataset(dataset, "val", seed)):
-        if max_records is not None and i >= max_records:
+    records = list(load_dataset(dataset, "val", seed))
+    if heldout_manifest is not None:
+        eligible = [record for record in records if record["possible_answers"]]
+        manifest_name = f"{dataset}__seed{seed}__val"
+        selected_ids = select_or_write(
+            manifest_name,
+            [record["id"] for record in eligible],
+            max_records,
+            heldout_manifest,
+        )
+        records_by_id = {record["id"]: record for record in eligible}
+        records = [records_by_id[record_id] for record_id in selected_ids]
+
+    for i, record in enumerate(records):
+        if heldout_manifest is None and max_records is not None and i >= max_records:
             break
         if not record["possible_answers"]:
             print(
@@ -351,19 +368,31 @@ def _quality_cell(
         pred = preds[0]
 
         rid = f"{run_id_prefix}:{record['id']}"
+        result_metrics: dict[str, float] = {}
         if want_loss and loss_val is not None:
             append(rid, "loss", loss_val, prov, store=store_path)
+            result_metrics["loss"] = loss_val
         if want_em:
-            append(rid, "em", exact_match(pred, record["possible_answers"]), prov, store=store_path)
+            em = exact_match(pred, record["possible_answers"])
+            append(rid, "em", em, prov, store=store_path)
+            result_metrics["em"] = em
         if want_f1:
-            append(rid, "f1", token_f1(pred, record["possible_answers"]), prov, store=store_path)
+            f1 = token_f1(pred, record["possible_answers"])
+            append(rid, "f1", f1, prov, store=store_path)
+            result_metrics["f1"] = f1
         if want_presence:
-            append(
+            presence = answer_presence(pred, record["possible_answers"])
+            append(rid, "presence", presence, prov, store=store_path)
+            result_metrics["presence"] = presence
+        if predictions_store is not None:
+            append_prediction(
                 rid,
-                "presence",
-                answer_presence(pred, record["possible_answers"]),
+                record["id"],
+                pred,
+                list(record["possible_answers"]),
+                result_metrics,
                 prov,
-                store=store_path,
+                predictions_store,
             )
 
     if coerced_full > 0:
@@ -384,6 +413,12 @@ def run_quality(cfg: dict[str, Any], cfg_hash: str, seed: int) -> None:
     max_records = cfg.get("max_records")
     max_new_tokens = int(cfg.get("max_new_tokens", 64))
     store_path = _store_path_for(cfg)
+    heldout_manifest = (
+        Path(cfg["heldout_manifest"]) if cfg.get("heldout_manifest") is not None else None
+    )
+    predictions_store = (
+        Path(cfg["predictions_store"]) if cfg.get("predictions_store") is not None else None
+    )
 
     if not isinstance(datasets, list) or not datasets:
         raise ValueError("quality: 'datasets' must be a non-empty list")
@@ -427,6 +462,8 @@ def run_quality(cfg: dict[str, Any], cfg_hash: str, seed: int) -> None:
                     metrics=metrics,
                     cfg_hash=cfg_hash,
                     store_path=store_path,
+                    heldout_manifest=heldout_manifest,
+                    predictions_store=predictions_store,
                 )
                 tracker.ok(t)
             except Exception as exc:  # per-cell isolation
@@ -482,7 +519,7 @@ def _measure_prefill_flex(
     before the timed repeats — the compilation cost must not land in a
     measurement.
     """
-    from ddi.timing import measure, _cuda_events_for
+    from ddi.timing import _cuda_events_for, measure
 
     model._flex_block_mask = block_mask
 
@@ -1571,7 +1608,16 @@ _SET_KEYS_COMMON = frozenset(
 
 _SET_KEYS: dict[str, frozenset[str]] = {
     "quality": _SET_KEYS_COMMON
-    | {"datasets", "masks", "max_records", "max_new_tokens", "checkpoint", "rope_theta"},
+    | {
+        "datasets",
+        "masks",
+        "max_records",
+        "max_new_tokens",
+        "checkpoint",
+        "rope_theta",
+        "heldout_manifest",
+        "predictions_store",
+    },
     "timing": _SET_KEYS_COMMON
     | {
         "Ns",

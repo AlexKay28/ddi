@@ -191,6 +191,22 @@ def test_manifest_default_root_monkeypatched(manifest_root: Path) -> None:
     assert not Path("results/splits/probe.json").exists()
 
 
+def test_heldout_manifest_selects_stable_sorted_ids(tmp_path: Path) -> None:
+    root = tmp_path / "heldout"
+    selected = manifest.select_or_write(
+        "toy__seed0__val", ["id-c", "id-a", "id-b"], limit=2, root=root
+    )
+    assert selected == ["id-a", "id-b"]
+
+    # A different loader yield order cannot change a committed held-out selection.
+    assert manifest.select_or_write(
+        "toy__seed0__val", ["id-b", "id-c", "id-a"], limit=2, root=root
+    ) == ["id-a", "id-b"]
+
+    with pytest.raises(RuntimeError, match="held-out IDs absent"):
+        manifest.select_or_write("toy__seed0__val", ["id-a", "id-c"], limit=2, root=root)
+
+
 # ---------------------------------------------------------------------------
 # synthetic loader interacts with the manifest correctly
 # ---------------------------------------------------------------------------

@@ -71,3 +71,42 @@ def validate_or_write(
                 f"{dataset}/{name}: expected n={entry['n']} sha={entry['sha256']}, "
                 f"got n={n} sha={sha}"
             )
+
+
+def select_or_write(
+    dataset: str,
+    ids: list[str],
+    limit: int | None,
+    root: Path,
+) -> list[str]:
+    """Freeze a sorted held-out ID selection, then require those IDs on later runs.
+
+    Unlike the split manifest, this stores the IDs themselves.  A quality run can
+    therefore reproduce its held-out examples even when a loader changes yield order.
+    """
+    if len(ids) != len(set(ids)):
+        raise ValueError(f"{dataset}: held-out source IDs must be unique")
+    if limit is not None and limit < 1:
+        raise ValueError(f"{dataset}: held-out limit must be >= 1, got {limit}")
+
+    path = root / f"{dataset}.json"
+    available = set(ids)
+    if path.exists():
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        selected = payload.get("ids")
+        if payload.get("dataset") != dataset or not isinstance(selected, list):
+            raise RuntimeError(f"{path}: malformed held-out manifest")
+        if limit != payload.get("limit"):
+            raise RuntimeError(
+                f"{dataset}: held-out limit changed from {payload.get('limit')} to {limit}"
+            )
+        missing = sorted(set(selected) - available)
+        if missing:
+            raise RuntimeError(f"{dataset}: held-out IDs absent from loader: {missing}")
+        return selected
+
+    selected = sorted(ids) if limit is None else sorted(ids)[:limit]
+    root.mkdir(parents=True, exist_ok=True)
+    payload = {"dataset": dataset, "ids": selected, "limit": limit}
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return selected

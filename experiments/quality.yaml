@@ -23,6 +23,11 @@ max_records: 100
 max_new_tokens: 64
 metrics: [em, f1, presence, loss]
 
+# Freeze the exact validation IDs on first controlled run, then retain and reuse these
+# manifest files for every comparison. Persist one prediction/result JSON object per example.
+heldout_manifest: results/heldout
+predictions_store: results/quality_predictions.jsonl
+
 # Optional: evaluate a locally saved checkpoint (issue #120 self-distillation
 # artefacts land here) instead of the HF-hub ``model`` above. When set,
 # ``model`` is still recorded in provenance so downstream readers know which

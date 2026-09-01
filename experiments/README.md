@@ -92,6 +92,17 @@ is JSON built from the YAML's `report:` block. `ddi.aggregate` groups by model, 
 the same YAML under two `MODEL=` values against one store yields one summary with a section
 per model.
 
+### Reproducible quality comparisons
+
+`quality.yaml` sets `heldout_manifest: results/heldout` and
+`predictions_store: results/quality_predictions.jsonl`. On its first run, the runner writes
+one `results/heldout/<dataset>__seed<seed>__val.json` file containing the sorted selected
+validation IDs (limited by `max_records`). Commit those manifests before comparing models or
+mask variants. Later runs require the same limit and every recorded ID to still be available;
+they evaluate the stored IDs rather than loader yield order. The prediction store is append-only
+JSONL with `run_id`, `record_id`, decoded `prediction`, `possible_answers`, requested per-example
+`metrics`, and provenance. It is intentionally separate from aggregate metric rows.
+
 ### Keys are validated — both kinds of them
 
 Neither half of a config is a free-form dict any more, and both checks exist because a

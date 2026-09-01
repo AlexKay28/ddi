@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from ddi.predictions import append as append_prediction
 from ddi.provenance import Provenance
 from ddi.store import append
 
@@ -99,6 +100,43 @@ def test_accepts_int_float_bool_str(tmp_path: Path, prov: Provenance) -> None:
 
     values = [json.loads(line)["value"] for line in _read_lines(store)]
     assert values == [3, 3.14, True, "label"]
+
+
+def test_append_prediction_persists_one_complete_example(tmp_path: Path, prov: Provenance) -> None:
+    store = tmp_path / "quality_predictions.jsonl"
+    append_prediction(
+        "quality:full:example-1",
+        "example-1",
+        "answer",
+        ["answer", "alternate"],
+        {"em": 1.0, "f1": 1.0},
+        prov,
+        store,
+    )
+
+    rows = [json.loads(line) for line in _read_lines(store)]
+    assert rows == [
+        {
+            "run_id": "quality:full:example-1",
+            "record_id": "example-1",
+            "prediction": "answer",
+            "possible_answers": ["answer", "alternate"],
+            "metrics": {"em": 1.0, "f1": 1.0},
+            "provenance": {
+                "git_sha": "0" * 40,
+                "dirty": False,
+                "config_hash": "cfg-hash",
+                "seed": 7,
+                "model_revision": "model@rev",
+                "dataset_revision": "data@rev",
+                "gpu_model": "cpu",
+                "driver_version": "unknown",
+                "cuda_version": "cpu",
+                "torch_version": "2.4.0",
+                "timestamp_utc": "2026-07-27T14:33:12+00:00",
+            },
+        }
+    ]
 
 
 def _writer(store_path: str, run_id: str, n: int) -> None:
