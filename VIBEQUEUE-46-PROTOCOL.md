@@ -50,6 +50,11 @@ deterministic but invalid evaluation set.
 
 ## Budget And Decisions
 
+Interpret all resulting evidence under
+[`EVIDENCE_TO_CLAIM.md`](EVIDENCE_TO_CLAIM.md); it fixes the Flex,
+cross-architecture, uncertainty, and outcome-specific claim boundaries without
+asserting a result from this protocol.
+
 Budget the base feasibility stage as six sequential 1-GPU evaluations: two architectures
 times three seeds. Do not schedule a tuned run, training, multiple GPUs, or parallel jobs
 in the feasibility stage. The command below runs exactly one arm.
