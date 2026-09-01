@@ -31,6 +31,7 @@ import hashlib
 import json
 import os
 import random
+import re
 import sys
 import time
 import traceback
@@ -244,7 +245,9 @@ def _quality_cell(
     cfg_hash: str,
     store_path: Path,
     heldout_manifest: Path | None,
-    predictions_store: Path | None,
+    heldout_manifest_mode: str = "write",
+    predictions_store: Path | None = None,
+    checkpoint: str | None = None,
 ) -> None:
     """One (dataset, mask) cell of the quality sweep.
 
@@ -257,6 +260,7 @@ def _quality_cell(
         seed=seed,
         model_revision=model_name,
         dataset_revision=dataset,
+        checkpoint_revision=checkpoint,
     )
     tag = _variant_tag(mask_variant, bridge_k)
     run_id_prefix = (
@@ -280,6 +284,7 @@ def _quality_cell(
             [record["id"] for record in eligible],
             max_records,
             heldout_manifest,
+            allow_create=heldout_manifest_mode == "write",
         )
         records_by_id = {record["id"]: record for record in eligible}
         records = [records_by_id[record_id] for record_id in selected_ids]
@@ -416,6 +421,7 @@ def run_quality(cfg: dict[str, Any], cfg_hash: str, seed: int) -> None:
     heldout_manifest = (
         Path(cfg["heldout_manifest"]) if cfg.get("heldout_manifest") is not None else None
     )
+    heldout_manifest_mode = cfg.get("heldout_manifest_mode", "write")
     predictions_store = (
         Path(cfg["predictions_store"]) if cfg.get("predictions_store") is not None else None
     )
@@ -428,6 +434,34 @@ def run_quality(cfg: dict[str, Any], cfg_hash: str, seed: int) -> None:
         raise ValueError("quality: 'metrics' must be a non-empty list")
 
     checkpoint = cfg.get("checkpoint")
+    evaluation_model = cfg.get("evaluation_model", model_name)
+    if checkpoint is not None and "evaluation_model" not in cfg:
+        raise ValueError(
+            "quality: checkpoint evaluation requires a unique 'evaluation_model' label so "
+            "base and checkpoint rows cannot aggregate into one model column"
+        )
+    if not isinstance(evaluation_model, str) or not evaluation_model:
+        raise ValueError("quality: 'evaluation_model' must be a non-empty string")
+    if ":" in evaluation_model:
+        raise ValueError("quality: 'evaluation_model' must not contain ':'")
+    if re.search(r"(?:^|__)seed\d+(?:$|__)", evaluation_model):
+        raise ValueError(
+            "quality: 'evaluation_model' must identify the arm across seeds, not one seed"
+        )
+    if checkpoint is not None and evaluation_model == model_name:
+        raise ValueError(
+            "quality: checkpoint evaluation_model must differ from the base model identity"
+        )
+    if checkpoint is not None and (not isinstance(checkpoint, str) or not checkpoint):
+        raise ValueError("quality: 'checkpoint' must be a non-empty string")
+    if heldout_manifest_mode not in {"write", "verify"}:
+        raise ValueError("quality: 'heldout_manifest_mode' must be 'write' or 'verify'")
+    if heldout_manifest_mode == "verify" and heldout_manifest is None:
+        raise ValueError("quality: verify-only manifests require 'heldout_manifest'")
+    if checkpoint is not None and heldout_manifest_mode != "verify":
+        raise ValueError(
+            "quality: checkpoint evaluation requires heldout_manifest_mode='verify'"
+        )
     rope_theta = cfg.get("rope_theta")
     if checkpoint is not None:
         _log(f"quality: loading model {model_name!r} from checkpoint {checkpoint!r}")
@@ -455,7 +489,7 @@ def run_quality(cfg: dict[str, Any], cfg_hash: str, seed: int) -> None:
                     dataset=dataset,
                     mask_variant=mask_variant,
                     bridge_k=bridge_k,
-                    model_name=model_name,
+                    model_name=evaluation_model,
                     seed=seed,
                     max_records=max_records,
                     max_new_tokens=max_new_tokens,
@@ -463,7 +497,9 @@ def run_quality(cfg: dict[str, Any], cfg_hash: str, seed: int) -> None:
                     cfg_hash=cfg_hash,
                     store_path=store_path,
                     heldout_manifest=heldout_manifest,
+                    heldout_manifest_mode=heldout_manifest_mode,
                     predictions_store=predictions_store,
+                    checkpoint=checkpoint,
                 )
                 tracker.ok(t)
             except Exception as exc:  # per-cell isolation
@@ -1614,6 +1650,8 @@ _SET_KEYS: dict[str, frozenset[str]] = {
         "max_records",
         "max_new_tokens",
         "checkpoint",
+        "evaluation_model",
+        "heldout_manifest_mode",
         "rope_theta",
         "heldout_manifest",
         "predictions_store",

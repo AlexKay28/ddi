@@ -27,6 +27,7 @@ class Provenance:
     cuda_version: str
     torch_version: str
     timestamp_utc: str
+    checkpoint_revision: str | None = None
 
 
 def _run(cmd: list[str]) -> str:
@@ -57,6 +58,7 @@ def capture(
     seed: int,
     model_revision: str,
     dataset_revision: str,
+    checkpoint_revision: str | None = None,
 ) -> Provenance:
     git_sha, dirty = _git_or("not-a-git-repo")
 
@@ -85,4 +87,5 @@ def capture(
         cuda_version=torch.version.cuda or "cpu",
         torch_version=torch.__version__,
         timestamp_utc=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        checkpoint_revision=checkpoint_revision,
     )

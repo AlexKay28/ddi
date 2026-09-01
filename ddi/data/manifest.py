@@ -78,11 +78,14 @@ def select_or_write(
     ids: list[str],
     limit: int | None,
     root: Path,
+    *,
+    allow_create: bool = True,
 ) -> list[str]:
     """Freeze a sorted held-out ID selection, then require those IDs on later runs.
 
     Unlike the split manifest, this stores the IDs themselves.  A quality run can
-    therefore reproduce its held-out examples even when a loader changes yield order.
+    therefore reproduce its held-out examples even when a loader changes yield order. Set
+    ``allow_create=False`` to verify an existing manifest without creating one.
     """
     if len(ids) != len(set(ids)):
         raise ValueError(f"{dataset}: held-out source IDs must be unique")
@@ -105,6 +108,8 @@ def select_or_write(
             raise RuntimeError(f"{dataset}: held-out IDs absent from loader: {missing}")
         return selected
 
+    if not allow_create:
+        raise FileNotFoundError(f"{path}: held-out manifest is required in verify-only mode")
     selected = sorted(ids) if limit is None else sorted(ids)[:limit]
     root.mkdir(parents=True, exist_ok=True)
     payload = {"dataset": dataset, "ids": selected, "limit": limit}

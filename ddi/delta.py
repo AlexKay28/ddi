@@ -39,6 +39,7 @@ _BASELINE_METRICS = ("loss", "em", "f1", "presence")
 
 # Ground rule 9: Δ comes from the `full` baseline's seed-to-seed variance alone.
 _BASELINE_VARIANT = "full"
+_UNSET = object()
 
 
 @dataclass(frozen=True)
@@ -86,6 +87,7 @@ def compute_delta(
         )
 
     by_seed: dict[int, list[float]] = {}
+    checkpoint_revision: str | None | object = _UNSET
     with open(store, encoding="utf-8") as f:
         for raw in f:
             line = raw.strip()
@@ -106,6 +108,15 @@ def compute_delta(
             if row.get("metric") != metric:
                 continue
             prov = row.get("provenance") or {}
+            row_checkpoint = prov.get("checkpoint_revision")
+            if row_checkpoint is not None and not isinstance(row_checkpoint, str):
+                continue
+            if checkpoint_revision is not _UNSET and checkpoint_revision != row_checkpoint:
+                raise ValueError(
+                    "compute_delta found multiple checkpoint identities for "
+                    f"evaluation_model={model!r}"
+                )
+            checkpoint_revision = row_checkpoint
             seed = prov.get("seed")
             value = row.get("value")
             if seed is None or not isinstance(value, (int, float)) or isinstance(value, bool):
