@@ -14,7 +14,7 @@ a function of that document alone --- order-independent and reusable
 across requests. The throughput result below is reported on the \emph{sequential}
 layout, where a document's KV is reusable only at the same position in the
 same prefix. The corrected restart control in
-Section~\ref{sec:results-caching-prereq} validates the generation prerequisite
+Section~\ref{sec:results-caching-prereq} reports a bounded generation control
 for the order-independent layout, but does not itself remeasure throughput.
 
 A cache hit skips prefill entirely. This is the sense in which the
@@ -39,8 +39,9 @@ which the mask family alone predicts and prior work does not.
 per-document KV blocks. The initial evaluation was invalid because it used
 restart positions for prefill but let cached decoding infer positions from the
 cache length. Propagating the explicit query-tail position on every decode
-step restores parity on the 16-layer checkpoint: 0.47 restart versus 0.45
-sequential EM on 100 hotpot\_qa records (Table~\ref{tab:t4_restart}). The
+step yields a single-run estimate of 0.47 restart versus 0.45 sequential EM
+on 100 hotpot\_qa records (Table~\ref{tab:t4_restart}). This bounded control
+does not provide a parity or comparison-confidence conclusion. The
 earlier RoPE-base sweep used the invalid evaluator and is not interpreted as
 evidence about RoPE sensitivity. Standard dynamic NTK scaling is also a no-op
 on this subset: its maximum prompt position is 4,720, below Qwen's 32,768
@@ -56,7 +57,7 @@ current request that also appeared in a previous request and are
 therefore cache hits. The comparison lines are full-causal recompute
 (the status quo), prefix caching (the practical alternative when exact
 prefix matches happen), and DDI with a per-document cache. At any
-non-trivial reuse rate the per-document line is expected to dominate the
+non-trivial reuse rate the per-document line is expected to exceed the
 prefix-caching line, because document-level cache hits do not require
 exact prefix matches; the position layout (\texttt{restart}) removes the
 position dependence that would otherwise break the hit.

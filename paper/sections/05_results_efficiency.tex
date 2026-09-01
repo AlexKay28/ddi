@@ -107,7 +107,7 @@ token-argmax agreement $92.5\%$). In particular, they cannot support a
 batched-serving claim. Two implementation observations remain:
 
 \begin{enumerate}
-\item \textbf{\texttt{sdpa} confirms the regression.} DDI speedup
+\item \textbf{\texttt{sdpa} timing shows the regression.} DDI speedup
   (full\,/\,ddi\_qf) under \texttt{sdpa} is flat at 0.98--1.01$\times$
   across all shapes --- the 4D mask penalty exactly cancels the sparsity
   benefit.

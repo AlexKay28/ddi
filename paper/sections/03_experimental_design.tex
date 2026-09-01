@@ -11,7 +11,7 @@
 
 Model selection follows three criteria: a shared architectural family
 (decoder-only, RoPE, GQA) so the mask logic transfers unchanged; two
-independently-trained families so parity claims cannot rest on a
+independently-trained families so quality comparisons do not rest on a
 single-lab artifact; and public reproducibility for every primary claim.
 
 \begin{table}[t]
@@ -47,7 +47,7 @@ must not be mixed.
 \begin{table}[t]
 \centering
 \caption{Datasets. Three datasets are used in this preprint. Hotpot\_qa
-    and musique carry the parity and finetuning claims; synthetic\_qa
+    and musique carry the quality and finetuning estimates; synthetic\_qa
     is a 20-record control.}
 \label{tab:datasets}
 \begin{tabular}{@{}p{0.32\linewidth}p{0.36\linewidth}p{0.24\linewidth}@{}}
@@ -71,7 +71,7 @@ enumerate their cross product.
 \begin{description}
     \item[Axis M --- mask.] \texttt{full}, \texttt{ddi\_qf},
           \texttt{ddi\_strict}, \texttt{blind}. The \texttt{ddi\_qf}
-          variant carries the parity claim; \texttt{ddi\_strict} is
+           variant is the primary quality comparison; \texttt{ddi\_strict} is
           retained as an ablation; \texttt{blind} is a control.
     \item[Axis P --- position layout.] \texttt{sequential} versus
           \texttt{restart}, per Section~\ref{sec:method-positions}. The

@@ -48,6 +48,17 @@ and 0.18 musique full-to-\texttt{ddi\_qf} gaps at 16 layers are a bounded,
 architecture- and task-dependent negative result, not evidence of universal
 transfer or a cross-architecture variance estimate.
 
+\paragraph{Uncertainty of quality comparisons.}
+Only the Qwen full-causal baseline has enough recorded seed-selected splits
+for descriptive intervals: three 100-record splits yield 95\% t-intervals of
+[0.328, 0.659] and [0.550, 0.755] for hotpot EM and F1, and [0.135, 0.359]
+and [0.260, 0.443] for musique EM and F1. These intervals describe the mean
+full-baseline score across those splits only. The remaining quality cells are
+single-run estimates: their artifacts do not record fixed held-out IDs,
+paired per-example outcomes, or independently trained and evaluated checkpoint
+replications. They therefore do not support comparison confidence intervals,
+parity conclusions, or statistical-certainty claims.
+
 \paragraph{Realization gap.}
 If the analytical/realized gap of Section~\ref{sec:results-efficiency-gap}
 does not close under the Phase~3 diagnostics --- if it is a structural
@@ -61,22 +72,17 @@ sections rather than only here, so a reader cannot miss the constraint.
 \label{sec:conclusion}
 
 We present a characterization of block-diagonal attention over retrieved
-documents in decoder-only language models. On the reported Qwen
-checkpoint/evaluation cells, \texttt{ddi\_qf} matches full-causal quality
-within the non-inferiority margin after self-distillation finetuning
-(Section~\ref{sec:results-quality}), report the realized versus analytical
-prefill speedup at matched shapes (Section~\ref{sec:results-efficiency}),
-and measure per-document KV-cache reuse throughput
-(Section~\ref{sec:results-caching}). Quality parity holds on hotpot\_qa
-($\Delta$=0.00 EM) and nearly holds on musique ($\Delta$=+0.04 EM with
-16-layer finetuning). The caching path turns the
-structural sparsity of the mask into a reusability property of KV
-blocks, yielding 1.76$\times$ throughput on the sequential layout. On the
-16-layer checkpoint, restart positions preserve generation parity when their
-explicit tail is propagated through cached decoding (0.47 versus 0.45 EM on
-the 100-record hotpot\_qa control).
+documents in decoder-only language models. The paper reports Qwen quality
+estimates after self-distillation finetuning (Section~\ref{sec:results-quality}),
+realized versus analytical prefill speedups at matched shapes
+(Section~\ref{sec:results-efficiency}), and per-document KV-cache reuse
+throughput (Section~\ref{sec:results-caching}). The quality comparisons outside
+the descriptive baseline intervals remain single-run estimates. The caching
+path makes KV blocks reusable under the stated position-layout assumptions,
+with a reported 1.76$\times$ throughput estimate on the sequential layout. The
+corrected restart control reports 0.47 versus 0.45 EM on 100 hotpot\_qa
+records; it is not a statistical comparison.
 
 The value of the paper does not depend on any variant beating a baseline; it
-depends on the parity, efficiency, and caching axes being measured honestly
-and reported with variance. The current Llama evidence bounds the claim rather
-than generalizing it across architectures.
+depends on uncertainty and scope being reported honestly. The current Llama
+evidence bounds the claim rather than generalizing it across architectures.
