@@ -10,22 +10,22 @@
 \label{sec:design-models}
 
 Model selection follows three criteria: a shared architectural family
-(decoder-only, RoPE, GQA) so the mask logic transfers unchanged; two
-independently-trained families so quality comparisons do not rest on a
-single-lab artifact; and public reproducibility for every primary claim.
+(decoder-only, RoPE, GQA) so the mask implementation is comparable; and a
+primary Qwen study plus a bounded Llama diagnostic whose limits are reported
+explicitly.
 
 \begin{table}[t]
 \centering
-\caption{Models. The current preprint reports results on Qwen2.5-7B-Instruct
-    only. Llama-3.1-8B and the scale ablations are planned for the next
-    revision (Sprint~C).}
+\caption{Models. Qwen2.5-7B-Instruct is the primary study. Llama-3.1-8B is a
+    bounded single-run diagnostic, not cross-family validation. Scale
+    ablations are not reported.}
 \label{tab:models}
 \begin{tabular}{@{}llll@{}}
 \toprule
 Model & Role & Status & Notes \\
 \midrule
 Qwen2.5-7B-Instruct     & Primary   & \textbf{done}   & All reported results \\
-Llama-3.1-8B-Instruct   & Primary   & planned        & Cross-family validation \\
+Llama-3.1-8B-Instruct   & Diagnostic & bounded      & Single-run, task-dependent \\
 Qwen2.5-1.5B-Instruct   & Ablation & planned        & Scale trend \\
 Qwen2.5-14B/32B         & Scale     & planned        & Scale trend at larger size \\
 \bottomrule
@@ -75,7 +75,8 @@ enumerate their cross product.
           retained as an ablation; \texttt{blind} is a control.
     \item[Axis P --- position layout.] \texttt{sequential} versus
           \texttt{restart}, per Section~\ref{sec:method-positions}. The
-          restart layout unlocks the caching co-headline.
+          restart layout is evaluated with an explicit cached-decode position
+          control.
     \item[Axis N --- document count.] $\{1, 3, 5, 9, 13, 25\}$. $N=1$ is
           the correctness gate: any DDI variant must be numerically
           identical to \texttt{full} at $N=1$, and any divergence is a
@@ -87,7 +88,9 @@ enumerate their cross product.
     \item[Axis K --- kernel backend.] \texttt{sdpa} with an explicit
           $-\infty$ mask (reference semantics, the standard PyTorch
           path) and \texttt{flex\_attention} (PyTorch 2.13's compiled
-          block-sparse kernel). FlashAttention-2 varlen was scoped but
+           block-sparse kernel with raw semantic tests). Its full-model parity
+           gate currently fails, so it is not a validated model backend.
+           FlashAttention-2 varlen was scoped but
           could not be compiled on the test platform (system \texttt{nvcc}
           12.2 cannot compile torch 2.13 headers; no prebuilt wheel
           exists for Python 3.13).

@@ -12,11 +12,9 @@ documents followed by the dialog:
 \; [\mathrm{query}]\;[\mathrm{answer}].
 \end{equation*}
 Standard causal attention makes prefill quadratic in the length of the
-entire concatenation, but the retrieved documents are mutually independent
-artifacts: they were selected by a retriever, they share no discourse
-relationship, and $\mathrm{doc}_7$ attending into $\mathrm{doc}_2$ encodes
-a dependency that does not exist in the data. The prefill step pays $O(T^2)$
-to model interactions that are largely spurious.
+entire concatenation. Retrieved documents are often selected independently,
+but whether cross-document interactions matter is an empirical question. The
+prefill step still pays $O(T^2)$ for all such interactions.
 
 Two costs follow, and the second dominates in production:
 \begin{enumerate}
@@ -44,18 +42,17 @@ retrieval. Concretely:
 \begin{itemize}
     \item We formalize the mask family (Section~\ref{sec:method}) and its
           cost model.
-    \item We fix a non-inferiority margin $\Delta$ from the seed variance of
-          the full-causal baseline (Section~\ref{sec:method}) so parity
-          claims are falsifiable rather than eyeballed.
-    \item We measure how much cross-document attention can be removed on
-          single-hop parity-detection benchmarks
+    \item We report descriptive full-baseline seed intervals and use their
+          spread as context rather than as mask-comparison inference
+          (Section~\ref{sec:method}).
+    \item We measure quality changes after removing cross-document attention
+          on the reported retrieval-QA cells
           (Section~\ref{sec:results-quality}) and report the realized
           prefill speedup on the same axes
           (Section~\ref{sec:results-efficiency}).
-    \item We measure per-document KV-cache reuse under a position-restart
-          layout (Section~\ref{sec:results-caching}). This is co-headline: a
-          cache hit skips prefill entirely, which no kernel improvement under
-          full causal attention can match.
+    \item We characterize cache correctness and a sequential-layout cache
+          throughput estimate, and report a bounded restart-layout generation
+          control (Section~\ref{sec:results-caching}).
 \end{itemize}
 The framing throughout is a characterization study rather than a benchmark
 win. Self-distillation finetuning is evaluated for the train-free quality

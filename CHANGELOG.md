@@ -2,6 +2,20 @@
 
 Chronological log of experiments and project decisions. **Newest first.**
 
+## 2026-09-01 — VIBEQUEUE-42 evidence-to-claim audit
+
+Current framing retains four bounded findings: canonical mask semantic tests;
+raw direct-sparse construction at N=25,L=2048; archived batch-1 flex timing
+observations (1.29x within flex and 2.13x versus dense SDPA at N=9,L=2048); and
+the corrected single-run restart control (0.45 sequential, 0.47 restart).
+
+The flex observations are not full-model parity, end-to-end, or batched
+throughput evidence. The corrected control invalidates the apparent restart
+wall and its RoPE interpretation, but is not a parity conclusion. Only the
+four Qwen full-baseline descriptive t-intervals are CIs; all other quality
+values are single-run estimates. Older entries remain chronology and must be
+read through this boundary.
+
 ## 2026-08-31 — VIBEQUEUE-39 RoPE-theta sweep retired
 
 The proposed 100M/1B RoPE-base extension is not run. Sprint D's apparent
@@ -29,9 +43,10 @@ evaluation contract.
 | corrected explicit decode positions | 0.45 | 0.47 | +0.02 |
 
 The corrected 100-record control uses the local 16-layer Qwen2.5-7B checkpoint
-on an A100 80 GB with torch 2.5.1+cu121 and transformers 4.52.4. Restart
-parity is restored; the prior RoPE-theta sweep used the invalid evaluator and
-is not interpreted. Dynamic NTK scaling is an exact no-op here because prompt
+on an A100 80 GB with torch 2.5.1+cu121 and transformers 4.52.4. It does not
+show a restart deficit, but is not a parity comparison; the prior RoPE-theta
+sweep used the invalid evaluator and is not interpreted. Dynamic NTK scaling is
+an exact no-op here because prompt
 positions peak at 4,720, below the configured 32,768 context.
 
 ## 2026-08-31 — VIBEQUEUE-33 bounded Llama 16L diagnostic
@@ -56,6 +71,10 @@ repository's Delta criterion.  It is therefore evidence of capacity-sensitive
 improvement, not a Llama parity claim or a reason to revise the paper result.
 
 ## 2026-08-28 — flex_attention production integration: 54/54 timing grid passed
+
+**Superseded as a model-level claim by VIBEQUEUE-40 and VIBEQUEUE-44.** The
+timing rows below are archived batch-1 observations only: current full-model
+flex parity fails, so they do not establish model throughput or batched serving.
 
 ### flex_attention integrated into production timing harness
 
@@ -84,7 +103,7 @@ Key findings:
 
 ## 2026-08-28 — flex_attention: C3 speedup breakthrough
 
-### C3 prefill speedup — SOLVED with flex_attention
+### Historical C3 prefill-speedup interpretation — superseded
 
 Three approaches tested to realize the analytical speedup from block-diagonal mask sparsity:
 

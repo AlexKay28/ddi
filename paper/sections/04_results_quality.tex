@@ -9,8 +9,8 @@
 
 This section reports the quality axis of the study on the single-hop
 parity benchmarks in scope for this preprint (C1): how much
-cross-document attention can be removed before answer quality drops
-below the parity band.
+cross-document attention can be removed and how the reported single-run
+quality estimates change.
 
 \subsection{Train-free mask sweep}
 \label{sec:results-quality-sweep}
@@ -58,7 +58,7 @@ needed for comparative conclusions.
 
 The train-free sweep shows a quality gap between \texttt{ddi\_qf} and
 \texttt{full} (Table~\ref{tab:t2}): on hotpot\_qa, EM drops from 0.57
-(full) to 0.31 (ddi\_qf). We close this gap via self-distillation: the
+(full) to 0.31 (ddi\_qf). We attempt to reduce this gap via self-distillation: the
 student model runs under \texttt{ddi\_qf} and is trained to match the
 teacher's answer-position logits under \texttt{full}, using KL divergence
 on the answer tokens. Only the top 8 of 28 decoder layers are trainable

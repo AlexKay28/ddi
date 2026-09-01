@@ -95,3 +95,15 @@ fixed-set cross-architecture evaluation. `04_results_quality.tex`,
 `08_limitations_conclusion.tex`, `00_intro.tex`, and `preprint.tex` now state
 this as an architecture- and task-dependent negative result rather than a
 universal transfer claim.
+
+## VIBEQUEUE-42: evidence-to-claim boundary
+
+The paper and repository-facing documentation now distinguish four retained
+findings from model-level conclusions: canonical mask semantic tests; raw direct
+sparse construction at N=25,L=2048; archived batch-1 flex timing observations
+(1.29x within flex and 2.13x versus dense SDPA at N=9,L=2048); and the corrected
+single-run restart control (0.45 sequential, 0.47 restart). The flex observations
+are not full-model parity, end-to-end, or batched-throughput evidence. The restart
+control invalidates the earlier restart-wall and RoPE interpretations but does not
+establish parity. Only the four Qwen full-baseline descriptive t-intervals are CIs;
+all other quality values remain single-run estimates.

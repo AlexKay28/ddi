@@ -1,4 +1,5 @@
 % OBSOLETE: Sprint D's rope_theta rows used an evaluator that omitted explicit
 % cached-decode position_ids. The corrected 100-record hotpot_qa control is
-% 0.47 restart EM versus 0.45 sequential EM, so there is no restart gap to
-% extrapolate to 100M/1B. See CHANGELOG.md (VIBEQUEUE-39).
+% 0.47 restart EM versus 0.45 sequential EM. This single-run control invalidates
+% the legacy evaluator's apparent gap but does not establish restart parity or a
+% RoPE conclusion. See CHANGELOG.md (VIBEQUEUE-39).

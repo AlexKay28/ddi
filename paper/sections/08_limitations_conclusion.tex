@@ -33,9 +33,10 @@ model parity passes.
 
 \paragraph{Preprint scope.}
 This preprint covers retrieval quality (C1) on Qwen2.5-7B-Instruct, including
-self-distillation finetuning to close the mask quality gap. TTFT / realized
-speedup (C3) and KV-cache reuse (C4) are measured on the same model. The
-restart position layout enables position-independent KV blocks for caching;
+self-distillation finetuning to reduce the mask quality gap. TTFT / archived
+timing observations (C3) and sequential-layout KV-cache measurements (C4) are
+reported on the same model. The restart position layout is intended to enable
+position-independent KV blocks for caching;
 its generation evaluation must propagate the same explicit positions through
 cached decoding as through prefill.
 
@@ -63,10 +64,10 @@ parity conclusions, or statistical-certainty claims.
 If the analytical/realized gap of Section~\ref{sec:results-efficiency-gap}
 does not close under the Phase~3 diagnostics --- if it is a structural
 property of small-block varlen kernels on current hardware --- the
-compute headline of DDI is smaller than the arithmetic suggests, and
-the co-headline caching result of Section~\ref{sec:results-caching}
-carries proportionally more of the paper. We flag this in the results
-sections rather than only here, so a reader cannot miss the constraint.
+compute implications of DDI are smaller than the arithmetic suggests. The
+sequential cache estimate is reported separately rather than compensating for
+that limitation. We flag this in the results sections rather than only here,
+so a reader cannot miss the constraint.
 
 \section{Conclusion}
 \label{sec:conclusion}
@@ -74,12 +75,12 @@ sections rather than only here, so a reader cannot miss the constraint.
 We present a characterization of block-diagonal attention over retrieved
 documents in decoder-only language models. The paper reports Qwen quality
 estimates after self-distillation finetuning (Section~\ref{sec:results-quality}),
-realized versus analytical prefill speedups at matched shapes
-(Section~\ref{sec:results-efficiency}), and per-document KV-cache reuse
-throughput (Section~\ref{sec:results-caching}). The quality comparisons outside
-the descriptive baseline intervals remain single-run estimates. The caching
-path makes KV blocks reusable under the stated position-layout assumptions,
-with a reported 1.76$\times$ throughput estimate on the sequential layout. The
+archived prefill timing observations at matched shapes
+(Section~\ref{sec:results-efficiency}), and a sequential-layout per-document
+KV-cache throughput estimate (Section~\ref{sec:results-caching}). The quality
+comparisons outside the descriptive baseline intervals remain single-run
+estimates. Under the cache harness assumptions, the sequential path has a
+reported 1.76$\times$ throughput estimate. The
 corrected restart control reports 0.47 versus 0.45 EM on 100 hotpot\_qa
 records; it is not a statistical comparison.
 

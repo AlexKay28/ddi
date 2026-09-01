@@ -5,8 +5,9 @@ Research code for **DDI (Decoupled Document Inference)**: making RAG-style prefi
 
 > **Status: preprint in progress.** Core code + experiment pipeline in place after the
 > [#81 refactor](https://github.com/AlexKay28/ddi/issues/81). The preprint focuses on
-> three claims — **C1** (quality parity), **C3** (speed / realized-vs-analytical),
-> **C4** (KV-cache reuse under restart layout). See
+> three evidence areas — **C1** (single-run quality estimates), **C3**
+> (analytical cost and qualified timing observations), **C4** (cache tests and
+> a sequential-layout throughput estimate). See
 > [`paper/RESEARCH_PLAN.md`](paper/RESEARCH_PLAN.md) for the research design and
 > [`experiments/README.md`](experiments/README.md) for what runs.
 
@@ -43,12 +44,10 @@ d3 ██████                  d3     ██                  d3     █
 
 Two properties make this attractive:
 
-- **Sparsity → speed.** The block-diagonal mask over documents removes most of the prefill's
-  quadratic term; the realized speedup vs. the analytical arithmetic is what Phase 3 measures.
-- **Cacheability.** Because a document's KV block does not depend on its neighbours, each
-  document's KV cache is position-shiftable and reusable across requests — a per-document cache
-  hit skips prefill entirely, which no prefill-kernel improvement under `full` causal attention
-  can match.
+- **Sparsity → cost model.** The block-diagonal mask removes attended pairs from the analytical
+  prefill count. Archived batch-1 flex timings are not validated model-throughput results.
+- **Cacheability hypothesis.** Under the restart-layout assumptions, document KV blocks can be
+  content-addressable. The reported throughput estimate is limited to the sequential cache harness.
 
 ### Mask variants
 
@@ -123,9 +122,9 @@ remain out of scope per [#82](https://github.com/AlexKay28/ddi/issues/82).
 
 | claim | what | evidence |
 |---|---|---|
-| **C1** | `ddi_qf` matches `full` within `Δ` on the reported Qwen retrieval-QA cells | Qwen checkpoint/evaluation rows; the single-seed Llama diagnostic is a bounded negative result, not cross-architecture evidence |
-| **C3** | Speed: analytical ≠ realized — the gap is the story | measured on both instruct models; realization ratio 0.05–0.4 on `sdpa` |
-| **C4** | Per-document KV cache reuse under restart layout preserves quality and improves throughput | measured on Qwen; restart-vs-sequential parity within `Δ` |
+| **C1** | Quality estimates under `ddi_qf` and `full` | All non-baseline quality rows are single-run estimates; the Llama diagnostic is bounded and not cross-architecture evidence |
+| **C3** | Analytical cost versus qualified timing observations | SDPA has no sparsity benefit from a 4D mask; archived batch-1 flex observations are not model-level or batched-throughput evidence |
+| **C4** | Cache correctness, sequential cache throughput, and a restart control | The corrected restart control is single-run and not a parity conclusion |
 
 ### Fine-tuning is in scope, and is the current campaign
 
@@ -321,6 +320,6 @@ reproduction, with `MODEL=` and any `--set` overrides taken from the stamp and t
 | **TTFT** | time to first token; prefill latency (also called `FTT` in some older code paths) |
 | **TPOT** | time per output token; decode latency |
 | **SEP trick** | forcing the last prefix row of an otherwise-isolated mask to attend to everything, so a single token bridges the blocks |
-| **`Δ`** | non-inferiority margin — the maximum quality loss vs `full` still called parity. Fixed from `full`'s seed-to-seed variance in Phase 1.4 before any DDI number is interpreted |
+| **`Δ`** | descriptive full-baseline spread. The available artifacts do not support using it as a mask-comparison parity threshold |
 | **PCW** | Parallel Context Windows (Ratner et al., ACL 2023) — training-free independent context windows; closest prior work |
 | **FiD** | Fusion-in-Decoder (Izacard & Grave, 2021) — encode passages independently, fuse in the decoder |

@@ -68,15 +68,15 @@ tokens:
           then a function of both its content and its position in the
           retrieved set; changing either invalidates the cache.
     \item \textbf{Restart.} Each document's positions restart at zero.
-          Under a block-diagonal mask, a document's KV block is now a
-          function of that document alone. Blocks become keyable by
-          document content hash, order-independent, and reusable across
-          requests.
+           Under a block-diagonal mask, a document's KV block can be a
+           function of that document alone under the stated model and cache
+           assumptions. This can make blocks keyable by document content hash,
+           order-independent, and reusable across requests.
 \end{itemize}
 The restart layout is designed to turn DDI's structural sparsity into a
 caching mechanism: under a block-diagonal mask, a document's KV block
-would be a function of that document alone, making blocks keyable by
-content hash, order-independent, and reusable across requests.
+can be a function of that document alone, making content-hash cache keys a
+testable design consequence rather than a universal serving result.
 The generated answer positions continue the query tail in either layout.
 This is required for a cached decode to preserve the position scheme used for
 prefill; Section~\ref{sec:results-caching-prereq} reports the corrected
@@ -85,18 +85,15 @@ restart control without a parity conclusion.
 \subsection{Non-inferiority margin \texorpdfstring{$\Delta$}{Delta}}
 \label{sec:method-delta}
 
-The claim ``DDI matches full-causal quality on parity benchmarks'' has no
-falsifier without a threshold. Any real gap smaller than the seed-to-seed
-noise of the full baseline hides inside ``we could not detect a
-difference,'' which is not a claim. Before any DDI number is interpreted we
-fix a non-inferiority margin $\Delta$ from the full baseline's own seed
-variance, on the same metric and the same evaluation set. A DDI candidate
-satisfies the parity claim iff its gap to full is smaller than $\Delta$ at
-the seed count used. Any benchmark whose noise floor exceeds $\Delta$
-cannot support the parity claim and is excluded from the parity table.
+The original design proposed a non-inferiority margin $\Delta$ derived from
+full-baseline seed variation. The available artifacts do not provide fixed
+held-out IDs, paired outcomes, or independent checkpoint replications for the
+mask comparisons, so this paper does not use $\Delta$ to make parity claims.
+Instead, the baseline spread is reported as descriptive context for the
+single-run quality estimates.
 
 Concretely, $\Delta$ is computed as $k\cdot \sigma_{\text{full}}$ for a
 fixed $k$ committed alongside the baseline it was derived from, using the
-in-repo \texttt{ddi-delta} tool. Every parity-side table in
-Section~\ref{sec:results-quality} carries $\Delta$ as an explicit column
-so the reader can locate the parity band directly.
+in-repo \texttt{ddi-delta} tool. Table~\ref{tab:t6-delta} reports the
+resulting baseline summaries. They are not comparison confidence intervals or
+a parity band for the other rows.

@@ -2,10 +2,10 @@
 % Decoupled Document Inference — arXiv preprint scaffold.
 %
 % Ground rules (paper/RESEARCH_PLAN.md, issue #1):
-%   1. Every empirical claim is backed by an artifact rendered from
-%      ddi/reports/ into paper/generated/. No hand-typed numbers.
-%   2. If the store is empty for a given renderer, paper/build.sh emits a
-%      \todoreport stub so the document still compiles.
+%   1. Every empirical number names its artifact source. Generated tables are
+%      currently hand-audited rather than renderer-produced; see paper/build.sh.
+%   2. Missing generated inputs are surfaced as \todoreport stubs so the
+%      document still compiles.
 %   3. Framing throughout is a *characterization study*: how much
 %      cross-document attention can be removed, and what does removing it
 %      buy? (RESEARCH_PLAN §12.)
@@ -103,23 +103,25 @@ quadratic prefill cost to model the resulting cross-document interactions.
 mask with a block-diagonal one: each document is causal within itself and blind
 to every other document, while the query and answer regions bridge the blocks.
 We frame the study as a characterization rather than a method-wins result:
-we ask how much cross-document attention can be removed before answer quality
-degrades on single-hop parity benchmarks, and what removing it actually buys
+we ask how answer quality changes when cross-document attention is removed on
+the reported retrieval-QA cells, and what removing it can buy
 in terms of prefill cost and per-document key/value cache reuse. A 16-layer
 self-distillation recipe yields the reported Qwen2.5-7B quality estimates; a
 bounded single-seed Llama-3.1-8B diagnostic is reported
 as an architecture- and task-dependent negative finding, not cross-family
 transfer.
-With a semantically equivalent \texttt{flex\_attention} backend, DDI reaches
-1.29$\times$ within-backend prefill speedup and 2.13$\times$ speedup over
-the dense SDPA baseline at 88\% mask sparsity; SDPA itself realizes no
-sparsity benefit from a 4D additive mask.
+Canonical mask tests validate the intended attention semantics. Archived
+batch-1 timings from a \texttt{flex\_attention} implementation show
+1.29$\times$ within-backend prefill and 2.13$\times$ versus dense SDPA at
+88\% mask sparsity, but the current full-model parity gate fails and these
+are not validated model-throughput results. SDPA itself realizes no sparsity
+benefit from a 4D additive mask.
 On the 100-record hotpot_qa control, explicit positions propagated through
 cached decode yield a single-run estimate of 0.47 restart versus 0.45
-sequential EM. The legacy evaluator omitted those
-decode positions, so it does not support a RoPE-base conclusion.
-All tables and figures are regenerated from the results store; empty cells
-are surfaced as explicit TODOs.
+sequential EM. The legacy evaluator omitted those decode positions, so neither
+its apparent restart wall nor its RoPE-base interpretation is evidence.
+Table sources are identified in their generated artifacts; missing inputs are
+surfaced as explicit TODOs.
 \end{abstract}
 
 % ---------------------------------------------------------------------

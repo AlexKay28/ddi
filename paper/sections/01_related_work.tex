@@ -25,9 +25,9 @@ BigBird~\citep{zaheer2020bigbird} sparsify attention using patterns fixed by
 position: local windows, strided offsets, random blocks, and global tokens.
 These patterns are agnostic to the document boundaries in a RAG prompt: a
 Longformer window straddles two retrieved documents just as readily as it
-sits inside one. Decoupled Document Inference sparsifies along the boundary
-the retriever already knows about, which yields cache reuse rather than only
-compute reduction.
+sits inside one. DDI sparsifies along the boundary the retriever already knows
+about, which can enable cache reuse under the position-layout assumptions
+studied here.
 
 \paragraph{Attention sinks.}
 StreamingLLM~\citep{xiao2024streamingllm} shows that transformer language
@@ -72,10 +72,9 @@ interpolate or extrapolate the frequency spectrum to extend context
 length beyond the training range. Position Interpolation
 (PI)~\citep{chen2023pi} linearly rescales position indices. All three
 target \emph{out-of-range} positions; the restart layout in this work
-targets a different problem --- \emph{repeated} positions across
-documents --- and our rope\_theta ablation
-(Section~\ref{sec:results-caching-prereq}) shows that frequency scaling
-partially mitigates but does not solve it.
+targets a different problem --- \emph{repeated} positions across documents.
+The prior rope\_theta sweep used an invalid cached-decode evaluator and is not
+interpreted as evidence.
 
 \paragraph{Knowledge distillation for attention.}
 Self-distillation from a teacher with full context to a student under a
@@ -87,6 +86,6 @@ self-distillation recipe
 to block-diagonal attention: the teacher runs full-causal, the student
 runs \texttt{ddi\_qf}, and the KL divergence on logits drives the
 student toward the teacher's output distribution under the masked path.
-The finding that this recipe transfers across layers within Qwen2.5-7B
-but fails on Llama-3.1-8B (Section~\ref{sec:results-quality}) is an
-honest negative result about architecture sensitivity.
+The available Qwen and Llama estimates are reported separately
+(Section~\ref{sec:results-quality}); the bounded Llama diagnostic does not
+establish a cross-architecture transfer conclusion.

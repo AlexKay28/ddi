@@ -4,24 +4,22 @@
 \section{Results: Per-Document Caching}
 \label{sec:results-caching}
 
-Per-document caching is the second half of the paper's contribution.
+Per-document caching is a design consequence evaluated in this paper.
 Under full causal attention, no document's KV block is reusable across
 requests: $\mathrm{doc}_2$'s keys and values depend on $\mathrm{doc}_1$,
 so changing any earlier document invalidates the prefix. Under a
 block-diagonal mask with the \emph{restart} position layout
-(Section~\ref{sec:method-positions}), a document's KV block would be
-a function of that document alone --- order-independent and reusable
-across requests. The throughput result below is reported on the \emph{sequential}
-layout, where a document's KV is reusable only at the same position in the
-same prefix. The corrected restart control in
+(Section~\ref{sec:method-positions}), a document's KV block can be a function
+of that document alone, subject to the implementation and position assumptions.
+The throughput estimate below is reported on the \emph{sequential} layout,
+where a document's KV is reusable only at the same position in the same prefix.
+The corrected restart control in
 Section~\ref{sec:results-caching-prereq} reports a bounded generation control
 for the order-independent layout, but does not itself remeasure throughput.
 
-A cache hit skips prefill entirely. This is the sense in which the
-caching result is co-headline with the compute result: no kernel
-improvement to full-causal prefill can match ``skip prefill'', so this
-speedup floor survives even if the realization gap of
-Section~\ref{sec:results-efficiency} is structural rather than fixable.
+In the sequential cache harness, a cache hit skips the cached document's
+prefill work. This mechanism should not be read as a general restart-layout or
+serving-throughput conclusion.
 
 \subsection{Prerequisites}
 \label{sec:results-caching-prereq}
@@ -31,9 +29,8 @@ Three conditions must hold before the throughput measurement is trusted.
 computed from a cache hit are numerically identical (within bf16 tolerance)
 to logits computed from a cold prefill of the same input; the round-trip
 test is the correctness gate that makes any throughput number meaningful.
-\emph{Order invariance} (Phase~4.3) verifies that permuting the retrieved
-document list produces identical outputs under \texttt{ddi\_qf + restart},
-which the mask family alone predicts and prior work does not.
+\emph{Order invariance} (Phase~4.3) tests whether permuting the retrieved
+document list produces identical outputs under \texttt{ddi\_qf + restart}.
 
 \textbf{Quality under restart} (Phase~4.1) is a prerequisite for reusable
 per-document KV blocks. The initial evaluation was invalid because it used
@@ -51,24 +48,20 @@ frequencies.
 \subsection{Throughput under document reuse}
 \label{sec:results-caching-throughput}
 
-Figure~\ref{fig:f5} reports end-to-end throughput as a function of the
+The sequential cache harness defines end-to-end throughput as a function of the
 document reuse rate --- the fraction of retrieved documents in the
 current request that also appeared in a previous request and are
 therefore cache hits. The comparison lines are full-causal recompute
 (the status quo), prefix caching (the practical alternative when exact
-prefix matches happen), and DDI with a per-document cache. At any
-non-trivial reuse rate the per-document line is expected to exceed the
-prefix-caching line, because document-level cache hits do not require
-exact prefix matches; the position layout (\texttt{restart}) removes the
-position dependence that would otherwise break the hit.
+prefix matches happen), and DDI with a per-document cache. The figure, when
+generated from matching rows, is a sequential-layout synthetic-harness estimate
+rather than a serving result. It does not validate restart-layout reuse or
+establish dominance over prefix caching.
 
 \figureifexists{generated/F5.pdf}{%
     F5 --- throughput versus document reuse rate. One line per mode:
     full-causal recompute, prefix caching, DDI per-document cache.%
 }{fig:f5}
 
-We frame this as the co-headline result because it survives failure
-modes elsewhere in the paper. If the realization gap of
-Section~\ref{sec:results-efficiency-gap} does not close, cache hits
-still skip prefill entirely, so the throughput floor at any positive
-reuse rate is independent of the kernel's realization efficiency.
+The sequential cache estimate is kept separate from the archived flex timing
+observations. Neither result establishes a general serving-throughput claim.
