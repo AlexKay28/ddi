@@ -15,9 +15,9 @@ CPU handoff and to GPU work that follows it.
 - R4/R5a establish reproducibility plumbing, not a quality or transfer result:
   frozen held-out manifests, per-example outputs, checkpoint revision
   provenance, and seed-independent aggregation identities.
-- Tracker was unavailable from this workspace while preparing this handoff.
-  This project document records the decision rules; it does not close or
-  update a Tracker issue.
+- Tracker MCP was checked for this R6a handoff and was disconnected with
+  `Failed to connect to tracker`. This project document records the decision
+  rules; it does not close or update a Tracker issue.
 
 ## Evidence Required For Any Gate
 
