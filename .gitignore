@@ -224,6 +224,10 @@ __marimo__/
 /cache/
 
 # Runtime artefacts (added #83) — never commit runs, logs, HF cache, or venvs.
-results/
+# Frozen transfer manifests are protocol inputs, not regenerated run outputs.
+!results/
+results/*
+!results/transfer_heldout/
+!results/transfer_heldout/*.json
 logs/
 hf_cache/
