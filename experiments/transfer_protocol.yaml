@@ -2,7 +2,7 @@
 #
 # This is intentionally a non-runnable template: pass --model and, for a tuned arm,
 # --set checkpoint=... plus a unique, seed-independent --set evaluation_model=... . Do not change the
-# fixed manifests after the first base-arm bootstrap; commit them before comparisons.
+# fixed manifests after each seed's one-time base-arm bootstrap; commit them before comparisons.
 kind: quality
 seed: 0
 datasets: [hotpot_qa, musique, synthetic_qa]
@@ -23,7 +23,8 @@ predictions_store: results/transfer_predictions.jsonl
 #   Qwen2.5-7B-Instruct__base
 #   Qwen2.5-7B-Instruct__ddi_qf_tuned
 # A checkpoint without evaluation_model, or with a seed-qualified label, is rejected.
-# Bootstrap a base seed with --set heldout_manifest_mode=write; checkpoint arms must verify.
+# For each new seed, bootstrap its base arm with --set heldout_manifest_mode=write exactly once,
+# then commit that seed's manifests. Matched controls and checkpoint arms must verify.
 
 report:
   tables:

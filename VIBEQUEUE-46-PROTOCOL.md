@@ -35,12 +35,13 @@ not as the matched `{base,tuned} x {0,1,2}` matrix below.
 ## Manifest Procedure
 
 1. Restore or verify the seed-specific record caches for all three datasets.
-2. Run each architecture's base arm for seed 0 with `transfer_protocol.yaml` plus
-   `--set heldout_manifest_mode=write`; inspect
-   `results/transfer_heldout/*__seed0__val.json` and commit the files before any tuned arm.
-3. Repeat the base-arm bootstrap for seeds 1 and 2. Never delete, regenerate, or change a
-   manifest limit after a comparison starts.
-4. Run the same manifests for the paired tuned checkpoint in verify-only mode. `ddi.run`
+2. For each new seed, run that architecture's base arm once with `transfer_protocol.yaml` plus
+   `--set heldout_manifest_mode=write`; inspect that seed's
+   `results/transfer_heldout/*__seed<seed>__val.json` and commit the files before any matched
+   control or tuned arm for that seed. Never delete, regenerate, or change a manifest limit
+   after a comparison starts.
+3. Run the committed manifests for matched controls and the paired tuned checkpoint in
+   verify-only mode. `ddi.run`
    rejects a checkpoint arm unless `heldout_manifest_mode=verify`, so it cannot create a
    first manifest. Preserve the append-only metric
    and per-example prediction stores, then join candidate outputs by `record_id`.
