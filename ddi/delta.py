@@ -39,7 +39,6 @@ _BASELINE_METRICS = ("loss", "em", "f1", "presence")
 
 # Ground rule 9: Δ comes from the `full` baseline's seed-to-seed variance alone.
 _BASELINE_VARIANT = "full"
-_UNSET = object()
 
 
 @dataclass(frozen=True)
@@ -87,7 +86,7 @@ def compute_delta(
         )
 
     by_seed: dict[int, list[float]] = {}
-    checkpoint_revision: str | None | object = _UNSET
+    checkpoint_revisions: dict[int, str | None] = {}
     with open(store, encoding="utf-8") as f:
         for raw in f:
             line = raw.strip()
@@ -111,16 +110,17 @@ def compute_delta(
             row_checkpoint = prov.get("checkpoint_revision")
             if row_checkpoint is not None and not isinstance(row_checkpoint, str):
                 continue
-            if checkpoint_revision is not _UNSET and checkpoint_revision != row_checkpoint:
-                raise ValueError(
-                    "compute_delta found multiple checkpoint identities for "
-                    f"evaluation_model={model!r}"
-                )
-            checkpoint_revision = row_checkpoint
             seed = prov.get("seed")
             value = row.get("value")
             if seed is None or not isinstance(value, (int, float)) or isinstance(value, bool):
                 continue
+            seed = int(seed)
+            previous_checkpoint = checkpoint_revisions.setdefault(seed, row_checkpoint)
+            if previous_checkpoint != row_checkpoint:
+                raise ValueError(
+                    "compute_delta found multiple checkpoint identities for "
+                    f"evaluation_model={model!r} seed={seed}"
+                )
             # The docstring's promise, enforced. `provenance.seed` is the seed of record,
             # so a row whose run_id names a different one is not merely mislabelled — its
             # identity is unresolvable, and counting it under either seed would move a
@@ -128,9 +128,9 @@ def compute_delta(
             # so an unresolvable row is dropped rather than guessed at. This was documented
             # here for a long time while the code only ever parsed the seed segment to
             # satisfy a length check and compared it to nothing.
-            if parsed.seed != int(seed):
+            if parsed.seed != seed:
                 continue
-            by_seed.setdefault(int(seed), []).append(float(value))
+            by_seed.setdefault(seed, []).append(float(value))
 
     if len(by_seed) < _MIN_SEEDS:
         raise ValueError(

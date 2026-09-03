@@ -147,7 +147,12 @@ def test_loss_orientation_treats_lower_as_better() -> None:
 
 def test_missing_mask_raises() -> None:
     with pytest.raises(ValueError, match="missing mask"):
-        compute_cell("d", "f1", {"full": 1.0, "blind": 0.0}, {"full": 1.0, "ddi_qf": 1.0, "blind": 0.0})
+        compute_cell(
+            "d",
+            "f1",
+            {"full": 1.0, "blind": 0.0},
+            {"full": 1.0, "ddi_qf": 1.0, "blind": 0.0},
+        )
 
 
 def _write_store(path, rows):
@@ -168,11 +173,46 @@ def test_read_means_averages_per_record_rows(tmp_path) -> None:
     assert ("M", "hotpot_qa", "full", "loss") not in means
 
 
+def test_read_means_allows_one_checkpoint_per_seed(tmp_path) -> None:
+    store = tmp_path / "runs.jsonl"
+    with open(store, "w", encoding="utf-8") as f:
+        for seed, value in enumerate((0.4, 0.5, 0.6)):
+            row = {
+                "run_id": f"phase2_train_free:TUNED:hotpot_qa:full:seed={seed}:abc:r1",
+                "metric": "f1",
+                "value": value,
+                "provenance": {
+                    "seed": seed,
+                    "checkpoint_revision": f"results/checkpoints/tuned-seed-{seed}",
+                },
+            }
+            f.write(json.dumps(row) + "\n")
+
+    means = read_means(store)
+    assert means[("TUNED", "hotpot_qa", "full", "f1")] == pytest.approx(0.5)
+
+
+def test_read_means_rejects_conflicting_checkpoint_within_seed(tmp_path) -> None:
+    store = tmp_path / "runs.jsonl"
+    with open(store, "w", encoding="utf-8") as f:
+        for checkpoint in ("checkpoint-a", "checkpoint-b"):
+            row = {
+                "run_id": "phase2_train_free:TUNED:hotpot_qa:full:seed=0:abc:r1",
+                "metric": "f1",
+                "value": 0.5,
+                "provenance": {"seed": 0, "checkpoint_revision": checkpoint},
+            }
+            f.write(json.dumps(row) + "\n")
+
+    with pytest.raises(ValueError, match="seed=0"):
+        read_means(store)
+
+
 def test_compute_parity_end_to_end(tmp_path) -> None:
     store = tmp_path / "runs.jsonl"
     rows = []
     for model, vals in (("BASE", (0.6, 0.4, 0.2)), ("TUNED", (0.6, 0.6, 0.2))):
-        for mask, v in zip(("full", "ddi_qf", "blind"), vals):
+        for mask, v in zip(("full", "ddi_qf", "blind"), vals, strict=True):
             rows.append((f"phase2_train_free:{model}:hotpot_qa:{mask}:seed=0:abc:r1", "f1", v))
     _write_store(store, rows)
 

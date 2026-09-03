@@ -107,6 +107,46 @@ def test_compute_delta_basic(tmp_path: Path, prov: Provenance) -> None:
     assert delta.k == 2.0
 
 
+def test_compute_delta_allows_one_checkpoint_per_seed(tmp_path: Path, prov: Provenance) -> None:
+    store = tmp_path / "runs.jsonl"
+    for seed, value in enumerate((0.6, 0.65, 0.7)):
+        seed_prov = dataclasses.replace(
+            prov,
+            seed=seed,
+            checkpoint_revision=f"results/checkpoints/tuned-seed-{seed}",
+        )
+        _write_row(
+            store,
+            f"phase2_train_free:TUNED:nq:full:seed={seed}:abcd1234:rec0",
+            "em",
+            value,
+            seed_prov,
+            seed=seed,
+        )
+
+    delta = compute_delta(store, model="TUNED", dataset="nq", metric="em")
+    assert delta.n_seeds == 3
+
+
+def test_compute_delta_rejects_conflicting_checkpoint_within_seed(
+    tmp_path: Path, prov: Provenance
+) -> None:
+    store = tmp_path / "runs.jsonl"
+    for checkpoint in ("checkpoint-a", "checkpoint-b"):
+        seed_prov = dataclasses.replace(prov, checkpoint_revision=checkpoint)
+        _write_row(
+            store,
+            "phase2_train_free:TUNED:nq:full:seed=0:abcd1234:rec0",
+            "em",
+            0.6,
+            seed_prov,
+            seed=0,
+        )
+
+    with pytest.raises(ValueError, match="seed=0"):
+        compute_delta(store, model="TUNED", dataset="nq", metric="em")
+
+
 def test_compute_delta_requires_min_seeds(tmp_path: Path, prov: Provenance) -> None:
     store = tmp_path / "runs.jsonl"
     _seed_baseline(
@@ -236,7 +276,11 @@ def test_only_full_variant_feeds_delta(tmp_path: Path, prov: Provenance) -> None
     delta = compute_delta(store, model="Qwen/Qwen2.5-7B", dataset="nq", metric="em")
 
     assert delta.n_seeds == 3
-    assert delta.per_seed_means == {0: pytest.approx(0.6), 1: pytest.approx(0.65), 2: pytest.approx(0.7)}
+    assert delta.per_seed_means == {
+        0: pytest.approx(0.6),
+        1: pytest.approx(0.65),
+        2: pytest.approx(0.7),
+    }
     assert delta.std == pytest.approx(math.sqrt(0.005 / 2), abs=1e-9)
 
 

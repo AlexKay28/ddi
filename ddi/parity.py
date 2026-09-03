@@ -268,7 +268,7 @@ def read_means(store: Path) -> dict[tuple[str, str, str, str], float]:
     """
     sums: dict[tuple[str, str, str, str], float] = defaultdict(float)
     counts: dict[tuple[str, str, str, str], int] = defaultdict(int)
-    checkpoints: dict[str, str | None] = {}
+    checkpoints: dict[tuple[str, int], str | None] = {}
     with open(store, encoding="utf-8") as f:
         for raw in f:
             line = raw.strip()
@@ -290,10 +290,12 @@ def read_means(store: Path) -> dict[tuple[str, str, str, str], float]:
             checkpoint = (row.get("provenance") or {}).get("checkpoint_revision")
             if checkpoint is not None and not isinstance(checkpoint, str):
                 continue
-            previous = checkpoints.setdefault(parsed.model, checkpoint)
+            checkpoint_key = (parsed.model, parsed.seed)
+            previous = checkpoints.setdefault(checkpoint_key, checkpoint)
             if previous != checkpoint:
                 raise ValueError(
-                    f"parity: multiple checkpoint identities for evaluation_model={parsed.model!r}"
+                    "parity: multiple checkpoint identities for "
+                    f"evaluation_model={parsed.model!r} seed={parsed.seed}"
                 )
             key = (parsed.model, parsed.dataset, parsed.variant, metric)
             sums[key] += float(value)

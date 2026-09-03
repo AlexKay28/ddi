@@ -266,7 +266,7 @@ def test_shared_evaluation_identity_aggregates_three_seed_rows(tmp_path: Path) -
             cuda_version="cpu",
             torch_version="test",
             timestamp_utc="2026-01-01T00:00:00+00:00",
-            checkpoint_revision="results/checkpoints/tuned",
+            checkpoint_revision=f"results/checkpoints/tuned-seed-{seed}",
         )
         append(
             f"phase2_train_free:{evaluation_model}:ds:full:seed={seed}:deadbeef:record-{seed}",
@@ -282,7 +282,9 @@ def test_shared_evaluation_identity_aggregates_three_seed_rows(tmp_path: Path) -
     assert read_means(store)[(evaluation_model, "ds", "full", "f1")] == pytest.approx(0.2)
     rows = _read_rows(store)
     assert {row["provenance"]["checkpoint_revision"] for row in rows} == {
-        "results/checkpoints/tuned"
+        "results/checkpoints/tuned-seed-0",
+        "results/checkpoints/tuned-seed-1",
+        "results/checkpoints/tuned-seed-2",
     }
 
 
@@ -708,7 +710,7 @@ def test_finetune_dispatch_missing_output_dir_raises(tmp_path: Path) -> None:
 
 @_INTEG
 def test_cache_restart_quality_dispatch_writes_expected_rows(tmp_path: Path) -> None:
-    """End-to-end: kind: cache task: restart_quality → phase4_restart rows for each dataset x layout."""
+    """Dispatch restart quality and write rows for every dataset and layout."""
     from ddi.data import register_loader
 
     ds_name = "tiny_restart_run85"
