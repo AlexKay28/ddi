@@ -1,0 +1,27 @@
+# Immutable VIBEQUEUE-46 Llama transfer checkpoint identity. Do not reuse this
+# output directory or store for later seeds or retries.
+kind: finetune
+seed: 1
+datasets: [hotpot_qa, musique, synthetic_qa]
+output_dir: results/checkpoints/meta-llama__Llama-3.1-8B-Instruct__ddi_qf__r5b_seed1
+output_store: results/finetune_llama_r5b_seed1.jsonl
+
+# Match the bounded Qwen transfer contract while training the top 8 Llama
+# decoder layers.
+max_records: 20000
+held_out_frac: 0.05
+holdout_eval_records: 500
+epochs: 1
+lr: 1.0e-5
+kl_temperature: 1.0
+grad_accum_steps: 4
+warmup_steps: 100
+log_every: 50
+max_steps: null
+num_gpus: 1
+trainable_layers: 8
+
+report:
+  tables:
+    - kind: finetune_loss
+    - kind: perplexity
