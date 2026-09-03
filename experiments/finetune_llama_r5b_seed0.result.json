@@ -1,0 +1,61 @@
+{
+  "ticket": "VIBEQUEUE-46",
+  "gate": "R5 Llama seed-0 completion",
+  "status": "pass",
+  "verified_utc": "2026-09-03T17:48:43Z",
+  "config": {
+    "path": "experiments/finetune_llama_r5b_seed0.yaml",
+    "sha256": "3aa68a943495882dbaa19062ed91deaf620d1a3a5b8df833a08048756126fe82",
+    "recorded_hash": "3aa68a943495882d"
+  },
+  "run": {
+    "source_git_sha": "c045ef327749dd6a2aca06dd09f66aeb624b5f2b",
+    "dirty_at_run": true,
+    "seed": 0,
+    "model": "meta-llama/Llama-3.1-8B-Instruct",
+    "datasets": ["hotpot_qa", "musique", "synthetic_qa"],
+    "train_records": 19000,
+    "holdout_records": 1000,
+    "optimizer_steps": 4750,
+    "trainable_layers": 8,
+    "decoder_layers": 32,
+    "elapsed_seconds": 11197.1,
+    "peak_gpu_memory_bytes": null,
+    "peak_gpu_memory_note": "Not recorded; steady-state monitoring observed 48599 MiB."
+  },
+  "metrics": {
+    "student_ddi_qf_perplexity_pre": 3.3554859370255623,
+    "student_ddi_qf_perplexity_post": 2.4307206856145034,
+    "teacher_full_perplexity": 2.2321122830894105
+  },
+  "store": {
+    "path": "results/finetune_llama_r5b_seed0.jsonl",
+    "sha256": "8dc4215cf669286591536c3f7f4b3e80628c849cb3aadc6b83223198994c845e",
+    "rows": 195,
+    "all_metric_values_finite": true
+  },
+  "checkpoint": {
+    "path": "results/checkpoints/meta-llama__Llama-3.1-8B-Instruct__ddi_qf__r5b_seed0",
+    "config_sha256": "85fcb054712f0d98e38a0a37e60a6667fe75d2158bae9a2fdf93546f0ce1f496",
+    "tokenizer_sha256": "6b9e4e7fb171f92fd137b777cc2714bf87d11576700a1dcd7a399e7bbe39537b",
+    "index_sha256": "146776fce3f6db1103aa6f249e65ee5544c5923ce6f971b092eee79aa6e5d37b",
+    "index_entries": 291,
+    "tensor_count": 291,
+    "element_count": 8030261248,
+    "all_tensors_finite": true,
+    "all_indexed_tensors_present": true,
+    "shards": [
+      {"name": "model-00001-of-00004.safetensors", "bytes": 4976698672, "sha256": "2b1879f356aed350030bb40eb45ad362c89d9891096f79a3ab323d3ba5607668"},
+      {"name": "model-00002-of-00004.safetensors", "bytes": 4999802720, "sha256": "09d433f650646834a83c580877bd60c6d1f88f7755305c12576b5c7058f9af15"},
+      {"name": "model-00003-of-00004.safetensors", "bytes": 4915916176, "sha256": "7d1986ab58fb88a2abdc6e5b16d38a0386677fafd4bd67907849d5263216ab50"},
+      {"name": "model-00004-of-00004.safetensors", "bytes": 1168138808, "sha256": "14d90ca6a1d0d3a4e54909d4db3ac00a3bfe9a929e7c6499aeb7b6a5ae7ea63d"}
+    ]
+  },
+  "runtime_log": {
+    "path": "logs/finetune_llama_r5b_seed0.log",
+    "sha256": "5862f1f23c37ff19a021c8c2c6530e01331f1339d12ec15f3cd6dc638da83366",
+    "completed": true,
+    "passed_cells": 1,
+    "failed_cells": 0
+  }
+}
