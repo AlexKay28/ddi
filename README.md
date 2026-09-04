@@ -5,7 +5,8 @@ Research code for **DDI (Decoupled Document Inference)**: making RAG-style prefi
 
 > **Status: preprint in progress.** Core code + experiment pipeline in place after the
 > [#81 refactor](https://github.com/AlexKay28/ddi/issues/81). The preprint focuses on
-> three evidence areas — **C1** (single-run quality estimates), **C3**
+> three evidence areas — **C1** (quality estimates, including a fixed-manifest
+> three-seed transfer study), **C3**
 > (analytical cost and qualified timing observations), **C4** (cache tests and
 > a sequential-layout throughput estimate). See
 > [`paper/RESEARCH_PLAN.md`](paper/RESEARCH_PLAN.md) for the research design and
@@ -122,7 +123,7 @@ remain out of scope per [#82](https://github.com/AlexKay28/ddi/issues/82).
 
 | claim | what | evidence |
 |---|---|---|
-| **C1** | Quality estimates under `ddi_qf` and `full` | All non-baseline quality rows are single-run estimates; the Llama diagnostic is bounded and not cross-architecture evidence |
+| **C1** | Quality estimates under `ddi_qf` and `full` | The matched Qwen/Llama study uses three trained seeds and frozen manifests; neither architecture reaches natural-QA parity, and the sole valid architecture contrast establishes no practical difference. Other legacy rows remain single-run estimates |
 | **C3** | Analytical cost versus qualified timing observations | SDPA has no sparsity benefit from a 4D mask; archived batch-1 flex observations are not model-level or batched-throughput evidence |
 | **C4** | Cache correctness, sequential cache throughput, and a restart control | The corrected restart control is single-run and not a parity conclusion |
 

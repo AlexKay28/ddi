@@ -7,7 +7,7 @@
 \section{Results: Quality}
 \label{sec:results-quality}
 
-This section reports the quality axis of the study on the single-hop
+This section reports the quality axis of the study on the retrieval-QA
 parity benchmarks in scope for this preprint (C1): how much
 cross-document attention can be removed and how the reported single-run
 quality estimates change.
@@ -26,18 +26,35 @@ Table~\ref{tab:t2} reports train-free quality on the available model
 families and datasets. These single-run rows characterize the listed cells;
 they do not establish a model-family-wide property of the mask.
 
-\paragraph{Bounded Llama diagnostic.}
-The available Llama-3.1-8B-Instruct evidence is a single bounded run, not a
-controlled cross-architecture comparison. On the 16-layer, 20k-record
-checkpoint and its 100-example evaluation, full versus \texttt{ddi\_qf} EM
-is 0.45 versus 0.40 on hotpot (gap 0.05) and 0.36 versus 0.18 on musique
-(gap 0.18). The earlier 8-layer hotpot diagnostic had a 0.16 gap. These
-observations differ across the two tasks, but they do not estimate seed
-variance or establish architecture dependence: the stored evaluations use the run seed to select
-the validation split, and no fixed held-out manifest or independently trained
-Llama seeds are available. The Qwen cells and Llama diagnostic are therefore
-reported as bounded estimates, with a controlled fixed-set multi-seed study
-needed for comparative conclusions.
+\paragraph{Matched three-seed transfer study.}
+The transfer protocol trains three top-8-layer \texttt{ddi\_qf} checkpoints
+per architecture and evaluates base and tuned \texttt{full},
+\texttt{ddi\_qf}, and \texttt{blind} arms on seed-specific frozen manifests.
+Each natural-QA manifest contains 100 records. Within each architecture,
+normalized closure measures the recovered fraction of base
+\texttt{full}-to-\texttt{ddi\_qf} headroom. Both Qwen and Llama fail the
+preregistered parity gate on musique F1, with mean closure 0.452 and 0.480,
+respectively. Hotpot F1 is also below parity for Qwen, while Llama hotpot is
+invalidated by movement of the blind control. Both EM cross-architecture
+contrasts are unavailable because at least one architecture fails
+admissibility or control stability.
+
+Table~\ref{tab:t7-transfer} reports the cross-architecture decision. The only
+valid natural-QA contrast is musique F1: Llama minus Qwen closure is 0.028,
+with a 95\% equal-seed bootstrap interval of $[-0.085, 0.179]$. The point
+estimate is below the preregistered 0.10-headroom practical threshold and the
+interval crosses zero. Thus no practical architecture difference is
+established; this is not evidence that the architectures are equivalent.
+
+\begin{table}[t]
+\centering\small
+\caption{T7 --- matched three-seed transfer decisions. The contrast is
+    Llama-3.1-8B minus Qwen2.5-7B normalized closure. ``Unavailable'' means
+    that an admissibility or blind-control gate failed; no architecture
+    conclusion is drawn for that cell.}
+\label{tab:t7-transfer}
+\input{generated/T7_transfer.tex}
+\end{table}
 
 \begin{table}[t]
 \centering

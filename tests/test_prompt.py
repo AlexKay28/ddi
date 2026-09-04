@@ -277,6 +277,7 @@ def test_every_path_encodes_a_record_identically(
         metrics=["loss"],
         cfg_hash="deadbeef",
         store_path=tmp_path / "quality.jsonl",
+        heldout_manifest=None,
     )
     quality_loss_ids, quality_gen_ids = quality_model.prefills
 

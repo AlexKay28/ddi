@@ -105,11 +105,13 @@ to every other document, while the query and answer regions bridge the blocks.
 We frame the study as a characterization rather than a method-wins result:
 we ask how answer quality changes when cross-document attention is removed on
 the reported retrieval-QA cells, and what removing it can buy
-in terms of prefill cost and per-document key/value cache reuse. A 16-layer
-self-distillation recipe yields the reported Qwen2.5-7B quality estimates; a
-bounded single-seed Llama-3.1-8B diagnostic is reported
-as an architecture- and task-dependent negative finding, not cross-family
-transfer.
+in terms of prefill cost and per-document key/value cache reuse. A top-8-layer
+self-distillation recipe is evaluated on Qwen2.5-7B and Llama-3.1-8B with
+three independently trained seeds and fixed held-out manifests. Neither model
+reaches the preregistered natural-QA parity gate. Only musique F1 admits a
+cross-architecture contrast: Llama minus Qwen normalized closure is 0.028
+with a three-seed bootstrap interval of $[-0.085, 0.179]$, so no practical
+architecture difference is established.
 Canonical mask tests validate the intended attention semantics. Archived
 batch-1 timings from a \texttt{flex\_attention} implementation show
 1.29$\times$ within-backend prefill and 2.13$\times$ versus dense SDPA at

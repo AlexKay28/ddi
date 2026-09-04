@@ -11,21 +11,21 @@
 
 Model selection follows three criteria: a shared architectural family
 (decoder-only, RoPE, GQA) so the mask implementation is comparable; and a
-primary Qwen study plus a bounded Llama diagnostic whose limits are reported
+primary Qwen study plus a matched Llama replication whose limits are reported
 explicitly.
 
 \begin{table}[t]
 \centering
-\caption{Models. Qwen2.5-7B-Instruct is the primary study. Llama-3.1-8B is a
-    bounded single-run diagnostic, not cross-family validation. Scale
+\caption{Models. Qwen2.5-7B-Instruct is the primary study. Llama-3.1-8B uses
+    the matched three-seed transfer protocol. Scale
     ablations are not reported.}
 \label{tab:models}
 \begin{tabular}{@{}llll@{}}
 \toprule
 Model & Role & Status & Notes \\
 \midrule
-Qwen2.5-7B-Instruct     & Primary   & \textbf{done}   & All reported results \\
-Llama-3.1-8B-Instruct   & Diagnostic & bounded      & Single-run, task-dependent \\
+Qwen2.5-7B-Instruct     & Primary   & \textbf{done}   & Three-seed transfer study \\
+Llama-3.1-8B-Instruct   & Replication & \textbf{done} & Matched three-seed study \\
 Qwen2.5-1.5B-Instruct   & Ablation & planned        & Scale trend \\
 Qwen2.5-14B/32B         & Scale     & planned        & Scale trend at larger size \\
 \bottomrule

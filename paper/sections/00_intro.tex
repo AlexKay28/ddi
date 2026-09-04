@@ -56,8 +56,9 @@ retrieval. Concretely:
 \end{itemize}
 The framing throughout is a characterization study rather than a benchmark
 win. Self-distillation finetuning is evaluated for the train-free quality
-gap on the primary model (Qwen2.5-7B); a bounded single-seed Llama-3.1-8B
-diagnostic is reported as an architecture- and task-dependent negative
-finding, not as a cross-family generalization. Direct comparison against PCW and
-multi-hop evaluation are out of scope for this preprint
+gap on Qwen2.5-7B and Llama-3.1-8B using fixed held-out manifests and three
+independently trained seeds per architecture. The sole admissible natural-QA
+cross-architecture contrast does not establish a practical architecture
+difference; unavailable cells are not interpreted as null effects. Direct comparison against PCW and
+broader failure-envelope evaluation are out of scope for this preprint
 (Section~\ref{sec:limitations}).

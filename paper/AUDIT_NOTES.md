@@ -83,7 +83,17 @@ fine-tuning entry points are all cleared to delete). No sections
 survived that require any of the dropped code to keep compiling; #89
 can proceed on the plan in #81 without paper-side blockers.
 
-## VIBEQUEUE-43: bounded Llama result
+## VIBEQUEUE-46: matched transfer result
+
+VIBEQUEUE-46 supersedes the single-seed evidence boundary below. Qwen2.5-7B
+and Llama-3.1-8B now each have three independently trained top-8-layer
+checkpoints, fixed seed-specific manifests, paired per-example outputs, and
+matched base/tuned controls. Neither reaches natural-QA parity. Only musique F1
+admits a cross-architecture contrast: Llama minus Qwen normalized closure is
++0.028 with a 95% equal-seed bootstrap interval of [-0.085, +0.179]. This does
+not establish a practical architecture difference or architecture equivalence.
+
+## VIBEQUEUE-43: bounded Llama result (superseded)
 
 The available Llama-3.1-8B checkpoints support only a single-seed diagnostic:
 the 16-layer, 20k-record checkpoint scored full/DDI-QF EM of 0.45/0.40 on

@@ -2,6 +2,23 @@
 
 Chronological log of experiments and project decisions. **Newest first.**
 
+## 2026-09-04 — VIBEQUEUE-46 matched cross-architecture transfer
+
+Completed the preregistered fixed-manifest transfer protocol for Qwen2.5-7B
+and Llama-3.1-8B: three independently trained top-8-layer DDI-QF checkpoints
+per architecture, with matched base/tuned `full`, `ddi_qf`, and `blind` arms
+on 100-record natural-QA manifests per seed. Neither architecture reaches the
+natural-QA parity gate. Qwen normalized closure is 0.781 on hotpot F1 and 0.452
+on musique F1; Llama musique F1 closure is 0.480, while Llama hotpot is
+invalidated by blind-control movement. EM architecture contrasts are
+unavailable because at least one side is inadmissible.
+
+Only musique F1 permits an architecture comparison. Llama minus Qwen closure
+is +0.028 with a three-seed bootstrap interval of [-0.085, +0.179], below the
+preregistered 0.10 practical threshold and crossing zero. Therefore no
+practical architecture difference is established; this is not evidence of
+equivalence. Synthetic QA is saturated and remains a control.
+
 ## 2026-09-01 — VIBEQUEUE-42 evidence-to-claim audit
 
 Current framing retains four bounded findings: canonical mask semantic tests;

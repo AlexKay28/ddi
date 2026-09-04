@@ -61,6 +61,7 @@ def test_append_writes_one_line(tmp_path: Path, prov: Provenance) -> None:
         "cuda_version",
         "torch_version",
         "timestamp_utc",
+        "checkpoint_revision",
     }
 
 
@@ -134,6 +135,7 @@ def test_append_prediction_persists_one_complete_example(tmp_path: Path, prov: P
                 "cuda_version": "cpu",
                 "torch_version": "2.4.0",
                 "timestamp_utc": "2026-07-27T14:33:12+00:00",
+                "checkpoint_revision": None,
             },
         }
     ]

@@ -41,23 +41,27 @@ its generation evaluation must propagate the same explicit positions through
 cached decoding as through prefill.
 
 \paragraph{Cross-architecture evidence.}
-The Llama-3.1-8B diagnostic is one 100-example, single-seed evaluation of
-available checkpoints. Its evaluation seed also selects the validation split,
-and the repository has neither a fixed held-out manifest nor independently
-trained Llama seeds matched to the Qwen recipe. Consequently, its 0.05 hotpot
-and 0.18 musique full-to-\texttt{ddi\_qf} gaps at 16 layers are a bounded,
-architecture- and task-dependent negative result, not evidence of universal
-transfer or a cross-architecture variance estimate.
+The matched transfer study has only three independently trained seeds per
+architecture and 100 records per natural-QA seed manifest. Its bootstrap
+intervals are decision guards, not precise population estimates. Of four
+natural-QA dataset/metric cells, only musique F1 passes the controls in both
+architectures. Its closure contrast does not establish a practical
+architecture difference. The other three contrasts are unavailable rather
+than negative: Qwen EM lacks sufficient document-use headroom, and the Llama
+hotpot blind control moves after tuning. Synthetic QA is saturated and serves
+only as a control. These results do not establish architecture invariance or
+universal transfer.
 
 \paragraph{Uncertainty of quality comparisons.}
-Only the Qwen full-causal baseline has enough recorded seed-selected splits
-for descriptive intervals: three 100-record splits yield 95\% t-intervals of
+The legacy Qwen full-causal baseline has three seed-selected splits with
+descriptive intervals: three 100-record splits yield 95\% t-intervals of
 [0.328, 0.659] and [0.550, 0.755] for hotpot EM and F1, and [0.135, 0.359]
 and [0.260, 0.443] for musique EM and F1. These intervals describe the mean
-full-baseline score across those splits only. The remaining quality cells are
-single-run estimates: their artifacts do not record fixed held-out IDs,
-paired per-example outcomes, or independently trained and evaluated checkpoint
-replications. They therefore do not support comparison confidence intervals,
+full-baseline score across those splits only. The matched transfer study
+separately records fixed held-out IDs, paired per-example outcomes, and three
+independently trained checkpoints per architecture, and applies its
+preregistered paired-bootstrap and gate procedure. Other legacy quality cells
+remain single-run estimates and do not support comparison confidence intervals,
 parity conclusions, or statistical-certainty claims.
 
 \paragraph{Realization gap.}
@@ -77,7 +81,10 @@ documents in decoder-only language models. The paper reports Qwen quality
 estimates after self-distillation finetuning (Section~\ref{sec:results-quality}),
 archived prefill timing observations at matched shapes
 (Section~\ref{sec:results-efficiency}), and a sequential-layout per-document
-KV-cache throughput estimate (Section~\ref{sec:results-caching}). The quality
+KV-cache throughput estimate (Section~\ref{sec:results-caching}). The matched
+transfer study finds partial closure without natural-QA parity in either
+architecture; on its sole valid natural-QA cross-architecture cell, no
+practical architecture difference is established. Other legacy quality
 comparisons outside the descriptive baseline intervals remain single-run
 estimates. Under the cache harness assumptions, the sequential path has a
 reported 1.76$\times$ throughput estimate. The
@@ -85,5 +92,5 @@ corrected restart control reports 0.47 versus 0.45 EM on 100 hotpot\_qa
 records; it is not a statistical comparison.
 
 The value of the paper does not depend on any variant beating a baseline; it
-depends on uncertainty and scope being reported honestly. The current Llama
-evidence bounds the claim rather than generalizing it across architectures.
+depends on uncertainty and scope being reported honestly. The matched evidence
+bounds the claim rather than generalizing it across architectures.

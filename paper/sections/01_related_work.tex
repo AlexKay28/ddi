@@ -56,7 +56,7 @@ design as our controllable-$N$ probe, since it isolates the dimension
 
 \paragraph{Differentiators.}
 Relative to the above, DDI is (i) a decoder-only train-free
-characterization at 7--8B parameters on single-hop retrieval; (ii) a
+characterization at 7--8B parameters on retrieval QA; (ii) a
 measurement of the parity margin between \texttt{full}, \texttt{ddi\_qf},
 and \texttt{ddi\_strict} rather than a binary work/does-not-work test of
 a single independent-context design; and (iii) an explicit report of the
@@ -80,12 +80,13 @@ interpreted as evidence.
 Self-distillation from a teacher with full context to a student under a
 restricted attention pattern has been used to train efficient
 encoders~\citep{sanh2020distilbert} and to compress decoder-only models
-with sparse attention~\citep{wang2020linformer}. Our 16-layer
-self-distillation recipe
-(Section~\ref{sec:results-quality-finetune}) applies the same principle
+with sparse attention~\citep{wang2020linformer}. Our self-distillation
+recipes
+(Section~\ref{sec:results-quality-finetune}) apply the same principle
 to block-diagonal attention: the teacher runs full-causal, the student
 runs \texttt{ddi\_qf}, and the KL divergence on logits drives the
 student toward the teacher's output distribution under the masked path.
-The available Qwen and Llama estimates are reported separately
-(Section~\ref{sec:results-quality}); the bounded Llama diagnostic does not
-establish a cross-architecture transfer conclusion.
+The matched Qwen and Llama transfer estimates are reported with their
+admissibility and control gates (Section~\ref{sec:results-quality}); the sole
+valid natural-QA contrast does not establish a practical architecture
+difference.

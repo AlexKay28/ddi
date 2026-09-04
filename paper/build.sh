@@ -22,6 +22,7 @@ echo "[paper]   T4         — results/runs.jsonl (phase2_train_free rows)"
 echo "[paper]   T4_16L     — results/eval_16L.jsonl"
 echo "[paper]   T4_restart — results/runs.jsonl (phase4_restart rows)"
 echo "[paper]   T5         — results/phase3_n{2,5,10}.jsonl"
+echo "[paper]   T7         — experiments/cross_architecture_transfer_r5.result.json"
 
 if command -v pdflatex >/dev/null 2>&1; then
     pdflatex -interaction=nonstopmode preprint.tex

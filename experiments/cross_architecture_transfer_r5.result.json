@@ -1,0 +1,145 @@
+{
+  "bootstrap": {
+    "repeats": 10000,
+    "seed": 46
+  },
+  "cells": [
+    {
+      "ci95": [
+        -0.22159090909090906,
+        0.08205128205128198
+      ],
+      "dataset": "hotpot_qa",
+      "difference_direction": "Llama-3.1-8B - Qwen2.5-7B",
+      "left_verdict": "INADMISSIBLE",
+      "mean": -0.04826990642208032,
+      "metric": "em",
+      "practical_threshold": 0.1,
+      "practically_distinguished": false,
+      "right_verdict": "INVALID_BLIND_MOVED",
+      "seed_values": [
+        -0.22159090909090906,
+        0.08205128205128198,
+        -0.005270092226613898
+      ],
+      "valid": false,
+      "verdict": "UNAVAILABLE"
+    },
+    {
+      "ci95": [
+        -0.211935586886964,
+        0.029802021987185734
+      ],
+      "dataset": "hotpot_qa",
+      "difference_direction": "Llama-3.1-8B - Qwen2.5-7B",
+      "left_verdict": "PARITY_NOT_REACHED",
+      "mean": -0.05414178714833965,
+      "metric": "f1",
+      "practical_threshold": 0.1,
+      "practically_distinguished": false,
+      "right_verdict": "INVALID_BLIND_MOVED",
+      "seed_values": [
+        -0.211935586886964,
+        0.029802021987185734,
+        0.01970820345475932
+      ],
+      "valid": false,
+      "verdict": "UNAVAILABLE"
+    },
+    {
+      "ci95": [
+        -0.2384615384615385,
+        0.09873949579831931
+      ],
+      "dataset": "musique",
+      "difference_direction": "Llama-3.1-8B - Qwen2.5-7B",
+      "left_verdict": "INADMISSIBLE",
+      "mean": -0.08332615097320979,
+      "metric": "em",
+      "practical_threshold": 0.1,
+      "practically_distinguished": false,
+      "right_verdict": "PARITY_NOT_REACHED",
+      "seed_values": [
+        -0.1102564102564102,
+        -0.2384615384615385,
+        0.09873949579831931
+      ],
+      "valid": false,
+      "verdict": "UNAVAILABLE"
+    },
+    {
+      "ci95": [
+        -0.08539211208926023,
+        0.17898315394714426
+      ],
+      "dataset": "musique",
+      "difference_direction": "Llama-3.1-8B - Qwen2.5-7B",
+      "left_verdict": "PARITY_NOT_REACHED",
+      "mean": 0.028023281514393483,
+      "metric": "f1",
+      "practical_threshold": 0.1,
+      "practically_distinguished": false,
+      "right_verdict": "PARITY_NOT_REACHED",
+      "seed_values": [
+        -0.009521197314703578,
+        -0.08539211208926023,
+        0.17898315394714426
+      ],
+      "valid": true,
+      "verdict": "NO_PRACTICAL_DIFFERENCE_ESTABLISHED"
+    },
+    {
+      "ci95": [
+        0.0,
+        0.0
+      ],
+      "dataset": "synthetic_qa",
+      "difference_direction": "Llama-3.1-8B - Qwen2.5-7B",
+      "left_verdict": "WITHIN_TOLERANCE",
+      "mean": 0.0,
+      "metric": "em",
+      "practical_threshold": 0.1,
+      "practically_distinguished": false,
+      "right_verdict": "WITHIN_TOLERANCE",
+      "seed_values": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "valid": true,
+      "verdict": "NO_PRACTICAL_DIFFERENCE_ESTABLISHED"
+    },
+    {
+      "ci95": [
+        0.0,
+        0.0
+      ],
+      "dataset": "synthetic_qa",
+      "difference_direction": "Llama-3.1-8B - Qwen2.5-7B",
+      "left_verdict": "WITHIN_TOLERANCE",
+      "mean": 0.0,
+      "metric": "f1",
+      "practical_threshold": 0.1,
+      "practically_distinguished": false,
+      "right_verdict": "WITHIN_TOLERANCE",
+      "seed_values": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "valid": true,
+      "verdict": "NO_PRACTICAL_DIFFERENCE_ESTABLISHED"
+    }
+  ],
+  "comparison": "Llama-3.1-8B - Qwen2.5-7B",
+  "inputs": {
+    "left": {
+      "path": "experiments/qwen_transfer_r5d.result.json",
+      "sha256": "1617b26798ae3e5526fbeda16dce98781ed62ba58a1927023547e78f108ee3e2"
+    },
+    "right": {
+      "path": "experiments/llama_transfer_r5d.result.json",
+      "sha256": "f1b8e839258519da78684025d8acbd4a0a3ef86c06835d771ff030c482bedea0"
+    }
+  }
+}
