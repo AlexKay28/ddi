@@ -2,6 +2,17 @@
 
 Chronological log of experiments and project decisions. **Newest first.**
 
+## 2026-09-04 — VIBEQUEUE-47 Flex parity root cause
+
+Added `python -m ddi.flex_parity`, a reproducible full-model Flex-versus-SDPA
+proxy diagnostic. On Qwen2.5-7B-Instruct at `N=2,L=128,Q=64`, bf16, torch
+2.13.0+cu126, and an A100 80GB, all required masks fail the preregistered
+model gate: token-argmax agreement is 87.19% (`full`), 95.00% (`ddi_qf`), and
+94.38% (`blind`). Divergence begins in the first attention layer on identical
+projected Q/K/V. Explicit score scaling, Flex prescaling, and FP32 do not
+repair it, identifying a compiled-kernel numerical mismatch rather than a DDI
+mask or wrapper-semantic defect. Flex model timing remains blocked.
+
 ## 2026-09-04 — VIBEQUEUE-46 matched cross-architecture transfer
 
 Completed the preregistered fixed-manifest transfer protocol for Qwen2.5-7B

@@ -7,9 +7,14 @@ CPU handoff and to GPU work that follows it.
 ## Current Boundary
 
 - The compiled Flex path currently fails its full-model proxy at `N=2`,
-  `L=128`, `Q=64`: cosine similarity is `0.9989066` (below `0.999`) and
-  token-argmax agreement is `92.5%`. Raw-kernel checks and archived timing
-  observations are therefore not Flex model-parity or throughput evidence.
+  `L=128`, `Q=64`. The reproducible `ddi.flex_parity` diagnostic on
+  Qwen2.5-7B-Instruct, bf16, torch 2.13.0+cu126, and an A100 80GB reports
+  cosine/argmax agreement of `0.993342`/`87.19%` for `full`,
+  `0.998553`/`95.00%` for `ddi_qf`, and `0.998701`/`94.38%` for `blind`.
+  Divergence begins in the first attention layer on identical projected Q/K/V;
+  explicit scale, prescaling, and FP32 do not repair it. Raw-kernel checks and
+  archived timing observations are therefore not Flex model-parity or
+  throughput evidence.
 - Existing Qwen and Llama quality values, including the legacy checkpoints,
   are descriptive diagnostics unless they satisfy the matched matrix below.
 - R4/R5a establish reproducibility plumbing, not a quality or transfer result:
