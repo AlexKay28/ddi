@@ -47,3 +47,9 @@ Both control-path conditions pass, but the required DDI F1 improvement of at lea
 run, additional seeds, altered weights, or another recipe. Three-seed paired
 bootstrap, aggregate parity, and architecture transfer are unavailable by design;
 do not extrapolate them from this pilot.
+
+After hashing all four checkpoint shards and preserving the scored predictions,
+the stopped pilot's 15GB checkpoint and its symlink were removed. The home volume
+had only 5.6GB free; retaining weights that the frozen gate forbids using would risk
+another infrastructure failure. The hashes remain in the result summary, but the
+checkpoint is intentionally unavailable.
