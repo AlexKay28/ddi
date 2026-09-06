@@ -53,10 +53,14 @@ replication unit gives mean 1.219$\times$ and a 95\% t-interval
 1.094$\times$ [1.022, 1.166]. All rows are pinned to git revision
 \texttt{4ae5750}; raw rows are in \texttt{results/cache\_v51\_throughput.jsonl}.
 
-\figureifexists{generated/F5.pdf}{%
-    F5 --- throughput at the measured restart-layout request shape. One bar per
-    mode: full-causal recompute, DDI recompute, and DDI per-document cache.%
-}{fig:f5}
+\begin{figure}[t]
+    \centering
+    \input{generated/F5.tex}
+    \caption{F5 --- throughput at the measured restart-layout request shape.
+        One deterministic source-rendered bar per mode: full-causal recompute,
+        DDI recompute, and DDI per-document cache.}
+    \label{fig:f5}
+\end{figure}
 
-The estimate is kept separate from archived Flex timing observations and does
-not establish a general serving-throughput claim across shapes or models.
+The estimate is not combined with unsupported archival Flex observations and
+does not establish a general serving-throughput claim across shapes or models.

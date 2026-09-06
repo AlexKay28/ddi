@@ -141,3 +141,21 @@ but it is not a deciding paper cell: the run used a dirty tree, its checkpoint
 was removed after hashing, and three-seed expansion and paired bootstrap did not
 run. VIBEQUEUE-48, VIBEQUEUE-49, and VIBEQUEUE-50 remain open, so the research
 program is not complete.
+
+## 2026-09-06: VIBEQUEUE-50 deterministic rendering
+
+This entry supersedes the open VIBEQUEUE-50 status in the preceding audit entry.
+`paper/evidence.json` now preserves the audited aggregates behind every retained
+paper artifact and records each raw input's full SHA-256 and byte size. The
+standard-library `paper/render.py` validates that manifest, verifies all tracked
+sources and every historical source available locally, and deterministically
+renders T1, T2, T3, T4, T4-16L, T4-restart, T5, T6-delta, T7-transfer, and F5.
+`paper/build.sh` runs that renderer before its optional TeX pass.
+
+T3-flex and its numerical claims were removed because the cited historical log
+is absent and therefore cannot receive hash provenance. F5 is now deterministic
+TeX rather than an opaque PDF. T4-restart retains only the corrected matched
+control; its old defect row combined cells from different lineages and was
+removed rather than preserved as a comparison. PDF compilation was not run on the audit host,
+which has neither `pdflatex` nor `bibtex`; cross-installation PDF byte identity
+is not claimed without a validated pinned TeX distribution.

@@ -104,10 +104,9 @@ Four discipline rules apply to every experiment
 (1)~every result row is written to the append-only store with full
 provenance (git SHA, config, seed, dataset hash, model revision);
 (2)~every empirical number must identify its evidence source and claim
-boundary. The checked-in tables are currently hand-audited artifacts rather
-than renderer output; several cited historical stores are not tracked, so a
-clean checkout cannot regenerate them. Reproducible rendering is tracked by
-VIBEQUEUE-50;
+boundary. The checked-in tables are deterministic renderer output from a
+compact evidence manifest that preserves full source hashes; ignored historical
+stores are independently verified whenever present;
 (3)~one mask definition, one implementation, no re-implementations across
 files; (4)~$\Delta$ is fixed from the full baseline before any DDI number
 is interpreted (Section~\ref{sec:method-delta}). An absent checked-in artifact

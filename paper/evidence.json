@@ -1,0 +1,204 @@
+{
+  "schema_version": 1,
+  "sources": {
+    "mask_implementation": {
+      "path": "ddi/masks.py",
+      "sha256": "94fcc2305c73aa73159417b38092eed1c11713494b22876d666560d508d38dfa",
+      "bytes": 5580,
+      "required": true
+    },
+    "historical_runs": {
+      "path": "results/runs.jsonl",
+      "sha256": "70c098a691f9c485bd8b3ce6a3304749969f3c4d3eb4f812539bdcd867a31b47",
+      "bytes": 15825888,
+      "required": false
+    },
+    "strict_base": {
+      "path": "results/sprint_a_strict_base.jsonl",
+      "sha256": "b1196a2c1f3577c3d78b75b22d47dff7e0a14c538d428d4b0a81a1c81fa6f9fc",
+      "bytes": 424776,
+      "required": false
+    },
+    "qwen_1_5b": {
+      "path": "results/sprint_c_1.5B.jsonl",
+      "sha256": "c52ef34b36b9582c88643a5a61f0ce17a87e036cfe334f23d4887808f8e23cd0",
+      "bytes": 1271659,
+      "required": false
+    },
+    "llama_8b": {
+      "path": "results/sprint_c_llama.jsonl",
+      "sha256": "c7edb5045db9479bfcdcf403b3e38daaebf28af6fd48f14b5438000d7695ff02",
+      "bytes": 1300243,
+      "required": false
+    },
+    "eval_16l_100": {
+      "path": "results/eval_16L.jsonl",
+      "sha256": "0d0db35b23811fffe37d33df5f3d55254e7439e0055e12b07a8aee68e7e408b7",
+      "bytes": 842501,
+      "required": false
+    },
+    "eval_16l_500": {
+      "path": "results/sprint_a_16L_500.jsonl",
+      "sha256": "47fc200383b63152b94a0468c6d1d80125e1404ec645d0e95d629aced11d0c82",
+      "bytes": 4211766,
+      "required": false
+    },
+    "restart_corrected": {
+      "path": "results/sprint_h_decode_positions_hotpot.jsonl",
+      "sha256": "beb80ce88852cc63b24b89399df97ba4c9648ec19cbdf67baebe214de1aee8f3",
+      "bytes": 430449,
+      "required": false
+    },
+    "doc_sweep_n2": {
+      "path": "results/phase3_n2.jsonl",
+      "sha256": "1c2d4b3068468e1f76249bb1bfdc9f579797fec06f0e45b9cc8e2ef5085407c2",
+      "bytes": 425416,
+      "required": false
+    },
+    "doc_sweep_n5": {
+      "path": "results/phase3_n5.jsonl",
+      "sha256": "6d18b180ae2df48856d304cc1184f4fbf6f76661226cd8e075eee3dea765bd34",
+      "bytes": 425309,
+      "required": false
+    },
+    "doc_sweep_n10": {
+      "path": "results/phase3_n10.jsonl",
+      "sha256": "1d0a7c012582a0af40c322e6c3b91540e083ee27b2bb5a896cc9230442470dda",
+      "bytes": 425243,
+      "required": false
+    },
+    "baseline_seeds": {
+      "path": "results/sprint_a_baseline.jsonl",
+      "sha256": "9a4aaa19b4d04155de7c35f23da1de7cc313ff4c25731ac55fe62da718b84881",
+      "bytes": 1261692,
+      "required": false
+    },
+    "transfer_comparison": {
+      "path": "experiments/cross_architecture_transfer_r5.result.json",
+      "sha256": "cec981b5e8fc9d83f56b8b9665d6854f76a3452b7cd0c1398a9f57275e56e466",
+      "bytes": 3805,
+      "required": true
+    },
+    "transfer_qwen": {
+      "path": "experiments/qwen_transfer_r5d.result.json",
+      "sha256": "1617b26798ae3e5526fbeda16dce98781ed62ba58a1927023547e78f108ee3e2",
+      "bytes": 26821,
+      "required": true
+    },
+    "transfer_llama": {
+      "path": "experiments/llama_transfer_r5d.result.json",
+      "sha256": "f1b8e839258519da78684025d8acbd4a0a3ef86c06835d771ff030c482bedea0",
+      "bytes": 26673,
+      "required": true
+    },
+    "cache_summary": {
+      "path": "results/cache_v51_throughput_summary.json",
+      "sha256": "abd0036c4684b987344c4d08cc8947900d431396ec4898851b193db768882a38",
+      "bytes": 801,
+      "required": true
+    },
+    "cache_rows": {
+      "path": "results/cache_v51_throughput.jsonl",
+      "sha256": "dbadc100ea549d6b1fb92265a960c918b9918c3d620eea1c26168839f96e68e4",
+      "bytes": 324560,
+      "required": true
+    }
+  },
+  "artifacts": {
+    "T1_mask_taxonomy": {
+      "sources": ["mask_implementation"],
+      "rows": [
+        ["full", "yes", "yes", "yes", "yes"],
+        ["ddi_qf", "no", "yes (all rows)", "yes", "within block"],
+        ["ddi_strict", "no", "yes (last row)", "yes", "within block"],
+        ["ddi_bridge_k", "no", "yes ($k$ rows)", "yes", "within block"],
+        ["blind", "no", "no", "no", "within block"]
+      ]
+    },
+    "T2": {
+      "sources": ["historical_runs", "strict_base", "qwen_1_5b", "llama_8b"],
+      "rows": [
+        ["Qwen2.5-7B", "full", 0.57, 0.29, 1.0, 0.6995339105339103, 0.3773945018267389, 1.0],
+        ["Qwen2.5-7B", "ddi_qf", 0.31, 0.05, 1.0, 0.4257904677022324, 0.14847348849980427, 1.0],
+        ["Qwen2.5-7B", "ddi_strict", 0.24, 0.1, null, 0.36449269997142336, 0.14866517556752987, null],
+        ["Qwen2.5-7B", "blind", 0.13, 0.03, 0.0, 0.2524479548229549, 0.10921745182921655, 0.0],
+        ["Qwen2.5-1.5B", "full", 0.4, 0.16, null, 0.5344486885663354, 0.3018813388554475, null],
+        ["Qwen2.5-1.5B", "ddi_qf", 0.23, 0.07, null, 0.33484407989671156, 0.1525033104150751, null],
+        ["Qwen2.5-1.5B", "blind", 0.11, 0.04, null, 0.16796581196581195, 0.10216796536796537, null],
+        ["Llama-3.1-8B", "full", 0.5, 0.3, null, 0.6719999999999997, 0.4193650793650794, null],
+        ["Llama-3.1-8B", "ddi_qf", 0.34, 0.14, null, 0.44633333333333325, 0.21887301587301586, null],
+        ["Llama-3.1-8B", "blind", 0.02, 0.0, null, 0.024714932126696832, 0.010549707602339182, null]
+      ]
+    },
+    "T3": {
+      "sources": ["historical_runs"],
+      "rows": [
+        [1, 60.35193634033203, 61.58643341064453, 61.38771057128906, 26.027301788330078, 24.44982147216797, 24.09000015258789, 0.0],
+        [3, 151.0286102294922, 154.69418334960938, 154.10140991210938, 24.425277709960938, 24.26409912109375, 24.063657760620117, 0.6140162398500937],
+        [5, 250.3086700439453, 253.0572509765625, 253.40333557128906, 26.3195743560791, 24.344966888427734, 24.305946350097656, 0.7611614401858304],
+        [9, 485.3919372558594, 486.65338134765625, 486.9530334472656, 25.623186111450195, 25.640392303466797, 25.640962600708008, 0.8645175285595772],
+        [13, 765.8882446289062, 766.2666015625, 765.4320068359375, 30.178537368774414, 30.213239669799805, 30.20541763305664, 0.9054434926775352],
+        [25, 1900.9541015625, 1891.0218505859375, 1890.7061767578125, 43.61763381958008, 43.632232666015625, 43.65692138671875, 0.9503976425683476]
+      ]
+    },
+    "T4": {
+      "sources": ["historical_runs"],
+      "rows": [
+        ["base", 0.57, 0.31, 0.29, 0.05],
+        ["seq-tuned", 0.46, 0.46, 0.23, 0.13],
+        ["mixed-tuned", 0.4, 0.39, 0.22, 0.12],
+        ["restart-tuned", 0.39, 0.42, 0.21, 0.12]
+      ]
+    },
+    "T4_16L": {
+      "sources": ["eval_16l_100", "eval_16l_500"],
+      "rows": [
+        ["hotpot", 0.45, 0.45, 0.472, 0.458],
+        ["musique", 0.23, 0.19, 0.216, 0.18]
+      ]
+    },
+    "T4_restart": {
+      "sources": ["restart_corrected"],
+      "rows": [
+        ["corrected", 0.45, 0.47]
+      ]
+    },
+    "T5": {
+      "sources": ["doc_sweep_n2", "doc_sweep_n5", "doc_sweep_n10"],
+      "rows": [
+        [2, 0.62, 0.55, 0.7956626984126984, 0.709272727272727],
+        [5, 0.59, 0.49, 0.7587167919799498, 0.6190920634920632],
+        [10, 0.46, 0.46, 0.6430450937950934, 0.6078343685300205]
+      ]
+    },
+    "T6_delta": {
+      "sources": ["baseline_seeds"],
+      "rows": [
+        ["hotpot_qa", "EM", [0.57, 0.45, 0.46]],
+        ["hotpot_qa", "F1", [0.6995339105339103, 0.6259227994227993, 0.6311053391053388]],
+        ["musique", "EM", [0.29, 0.25, 0.2]],
+        ["musique", "F1", [0.3773945018267389, 0.36770923520923526, 0.3085151459580215]]
+      ]
+    },
+    "T7_transfer": {
+      "sources": ["transfer_comparison", "transfer_qwen", "transfer_llama"],
+      "bootstrap_repeats": 10000,
+      "bootstrap_seed": 46,
+      "rows": [
+        ["hotpot_qa", "EM", "inadmissible", "blind moved", null],
+        ["hotpot_qa", "F1", "parity not reached", "blind moved", null],
+        ["musique", "EM", "inadmissible", "parity not reached", null],
+        ["musique", "F1", "parity not reached", "parity not reached", [0.028023281514393483, -0.08539211208926023, 0.17898315394714426]]
+      ]
+    },
+    "F5": {
+      "sources": ["cache_summary", "cache_rows"],
+      "shape": "zipf(a=1.5),top=32,N=5,L=500,Q=32,A=16",
+      "rows": [
+        ["full causal", [1.6647, 1.6932, 1.6579]],
+        ["DDI recompute", [1.5037, 1.5121, 1.4851]],
+        ["DDI cache", [1.8725, 1.8447, 1.7697]]
+      ]
+    }
+  }
+}

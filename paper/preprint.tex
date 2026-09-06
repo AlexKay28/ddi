@@ -2,8 +2,8 @@
 % Decoupled Document Inference — arXiv preprint scaffold.
 %
 % Ground rules (paper/RESEARCH_PLAN.md, issue #1):
-%   1. Every empirical number names its artifact source. Generated tables are
-%      currently hand-audited rather than renderer-produced; see paper/build.sh.
+%   1. Every empirical number is rendered from paper/evidence.json, which pins
+%      its raw inputs by full SHA-256; see paper/build.sh.
 %   2. Missing generated inputs are surfaced as \todoreport stubs so the
 %      document still compiles.
 %   3. Framing throughout is a *characterization study*: how much
@@ -112,19 +112,16 @@ reaches the preregistered natural-QA parity gate. Only musique F1 admits a
 cross-architecture contrast: Llama minus Qwen normalized closure is 0.028
 with a three-seed bootstrap interval of $[-0.085, 0.179]$, so no practical
 architecture difference is established.
-Canonical mask tests validate the intended attention semantics. Archived
-batch-1 timings from a \texttt{flex\_attention} implementation show
-1.29$\times$ within-backend prefill and 2.13$\times$ versus dense SDPA at
-88\% mask sparsity, but the current full-model parity gate fails and these
-are not validated model-throughput results. SDPA itself realizes no sparsity
-benefit from a 4D additive mask.
+Canonical mask tests validate the intended attention semantics. SDPA realizes
+no sparsity benefit from a 4D additive mask. Earlier numerical Flex timing
+claims are omitted because their cited historical log is unavailable; they are
+not treated as validated model-throughput evidence.
 On the 100-record hotpot_qa control, explicit positions propagated through
 cached decode yield a single-run estimate of 0.47 restart versus 0.45
 sequential EM. The legacy evaluator omitted those decode positions, so neither
 its apparent restart wall nor its RoPE-base interpretation is evidence.
-Generated artifacts identify their source paths. Several historical raw sources
-are not tracked, so reproducible rendering remains open work rather than a claim
-of this preprint.
+Generated artifacts are deterministic projections of compact preserved evidence;
+the manifest identifies every raw source by path, byte size, and full SHA-256.
 \end{abstract}
 
 % ---------------------------------------------------------------------

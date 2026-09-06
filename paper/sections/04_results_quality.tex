@@ -1,7 +1,6 @@
 % =====================================================================
 % Results — quality. Phase 2 of RESEARCH_PLAN.md.
-% Tables are checked-in, hand-audited artifacts. Missing artifacts render as
-% \todoreport stubs; paper/build.sh does not regenerate them.
+% Tables are regenerated from paper/evidence.json by paper/build.sh.
 % =====================================================================
 \section{Results: Quality}
 \label{sec:results-quality}
@@ -154,8 +153,9 @@ positions at prefill but omitted them during cached decoding, causing HF to
 infer a discontinuous cache-length position for each answer token. With the
 explicit restart tail propagated at every decode step, the 16-layer checkpoint
 has a single-run estimate of 0.47 restart versus 0.45 sequential EM on the
-100-record hotpot\_qa subset. The legacy 0.06 restart result is retained only
-as a defect comparison, not as a model result.
+100-record hotpot\_qa subset. The previous numerical defect comparison is not
+retained because its two displayed cells did not come from a hash-backed
+matched lineage.
 
 \begin{table}[t]
 \centering\small

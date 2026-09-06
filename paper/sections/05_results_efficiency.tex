@@ -1,6 +1,6 @@
 % =====================================================================
 % Results — efficiency. Phase 3 of RESEARCH_PLAN.md.
-% Tables are checked-in, hand-audited artifacts; paper/build.sh compiles them.
+% Tables are regenerated from paper/evidence.json by paper/build.sh.
 % =====================================================================
 \section{Results: Efficiency}
 \label{sec:results-efficiency}
@@ -25,7 +25,7 @@ reduction on this backend.
 \begin{table}[t]
 \centering
 \caption{T3 --- SDPA TTFT, TPOT, and DDI mask sparsity by document count $N$
-    at $\ell=512$ and $Q=64$. Values are hand-audited from the local Phase~3
+    at $\ell=512$ and $Q=64$. Values are preserved from the audited Phase~3
     timing store; no end-to-end latency is shown.}
 \label{tab:t3}
 \IfFileExists{generated/T3.tex}{%
@@ -38,9 +38,8 @@ reduction on this backend.
 \subsection{Archived realization figure}
 \label{sec:results-efficiency-realization}
 
-The checked-in F3 PDF is not included because its matching raw Flex timing log
-is absent and it does not match the output of the retired renderer. Recreating
-the figure from preserved evidence is part of VIBEQUEUE-50.
+The checked-in F3 PDF was removed because its matching raw Flex timing log is
+absent and it did not match the output of the retired renderer.
 
 \subsection{On the realization gap}
 \label{sec:results-efficiency-gap}
@@ -79,64 +78,14 @@ scoped as the kernel-fixable alternative but could not be compiled
 on the test platform (system \texttt{nvcc} 12.2 cannot compile
 torch 2.13 headers; no prebuilt wheel exists for Python 3.13).
 
-\subsection{Realized speedup via \texttt{flex\_attention}}
+\subsection{Unpreserved Flex observations}
 \label{sec:results-efficiency-flex}
 
-PyTorch 2.13's \texttt{flex\_attention}
-\cite{flex_attention} compiles a block-sparse attention kernel from a
-mask specification, skipping masked $\mathbf{Q}\mathbf{K}^\top$ blocks
-at the kernel level rather than materializing and masking the full
-matrix. We integrated it as a third backend: each Qwen2 attention layer
-is patched to use the compiled \texttt{flex\_attention} kernel with a
-\texttt{BlockMask} built from the DDI document boundaries, while decode
-(Q\textsubscript{LEN}=1, memory-bound) falls back to \texttt{sdpa}.
-
-Table~\ref{tab:t3-flex} retains archived batch-1 prefill timing observations
-under \texttt{flex\_attention} alongside the \texttt{sdpa} baseline at
-matching shapes. They are not an admitted end-to-end throughput result: the
-current full-model parity gate fails at the smaller proxy shape
-$N{=}2$, $\ell{=}128$, $Q{=}64$. Cosine similarity/token-argmax agreement is
-$0.993342/87.19\%$ for \texttt{full}, $0.998553/95.00\%$ for
-\texttt{ddi\_qf}, and $0.998701/94.38\%$ for \texttt{blind}, below the
-required 0.999 and 100\% gates. In particular, they cannot support a
-batched-serving claim. Two implementation observations remain:
-
-\begin{enumerate}
-\item \textbf{\texttt{sdpa} timing shows the regression.} DDI speedup
-  (full\,/\,ddi\_qf) under \texttt{sdpa} is flat at 0.98--1.01$\times$
-  across all shapes --- the 4D mask penalty exactly cancels the sparsity
-  benefit.
-\item \textbf{Archived \texttt{flex\_attention} timing shows a prefill
-  signal, not a validated model result.} The batch-1 DDI timing ratio under
-  \texttt{flex} grows with $N$ and
-  $\ell$: from 1.05$\times$ at $N{=}9$, $\ell{=}512$ to
-  \textbf{1.29$\times$} at $N{=}9$, $\ell{=}2048$ (88\% sparsity).
-  The total system speedup --- \texttt{flex+ddi\_qf} versus
-  \texttt{sdpa+full} --- reaches \textbf{2.13$\times$} at that shape.
-   The original \texttt{create\_block\_mask} implementation exhausts A100
-   memory while constructing the $N{=}25$, $\ell{=}2048$ mask representation.
-   A direct sparse \texttt{BlockMask} construction removes that allocation,
-   but its full-model parity gate fails in the available CUDA/Dynamo runtime.
-   That failure occurs before any batched timing can be admitted, so neither
-   the target cell nor a smaller-shape batch-throughput claim is reported.
-\end{enumerate}
-
-\begin{table}[t]
-\centering
-\caption{T3-flex --- archived batch-1 prefill timings: \texttt{sdpa} vs
-    \texttt{flex\_attention}. DDI ratio = full\,/\,ddi\_qf within each
-    backend. System speedup = \texttt{sdpa+full}\,/\,\texttt{flex+ddi\_qf}.
-    $Q=64$, Qwen2.5-7B-Instruct, A100 80GB. The largest DDI cell is
-    reported as OOM for the original mask-construction implementation. The
-    current full-model parity failure means these rows are not admitted as
-    end-to-end or batched throughput results.}
-\label{tab:t3-flex}
-\IfFileExists{generated/T3_flex.tex}{%
-    \input{generated/T3_flex.tex}%
-}{%
-    \todoreport{T3-flex table}{make timing-flex}%
-}
-\end{table}
+PyTorch's \texttt{flex\_attention} \cite{flex_attention} is a candidate
+block-sparse backend. The previous manuscript included an archived numerical
+timing table, but its cited raw log is unavailable. We therefore remove the
+table and all numerical Flex speedup claims rather than reconstructing them
+from prose or unrelated runs. No Flex model-throughput result is retained.
 
 Table~\ref{tab:t3} reports prefill and per-output-token measurements, not
 end-to-end latency. End-to-end evidence is limited to the separate corrected

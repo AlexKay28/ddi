@@ -26,16 +26,16 @@ one. More importantly, the current full-model flex parity gate fails even at
 the smaller proxy shape $N{=}2$, $\ell{=}128$, $Q{=}64$. The full/DDI/blind
 cosine similarities are 0.993342/0.998553/0.998701 against a required 0.999,
 and token-argmax agreements are 87.19\%/95.00\%/94.38\% against 100\%.
-Thus the raw batched-kernel checks and archived batch-1 prefill timings do not
-support an end-to-end batch-throughput claim at any shape. As stated, the
+Thus the raw batched-kernel checks do not support an end-to-end
+batch-throughput claim at any shape. As stated, the
 reported efficiency numbers are for the single-request setting; server-side
 throughput at higher batch sizes is left to future work after exact batched
 model parity passes.
 
 \paragraph{Preprint scope.}
 This preprint covers retrieval quality (C1) on Qwen2.5-7B-Instruct, including
-self-distillation finetuning to reduce the mask quality gap. TTFT / archived
-timing observations (C3) and restart-layout KV-cache measurements (C4) are
+self-distillation finetuning to reduce the mask quality gap. SDPA TTFT
+observations (C3) and restart-layout KV-cache measurements (C4) are
 reported on the same model. The restart position layout is intended to enable
 position-independent KV blocks for caching;
 its generation evaluation must propagate the same explicit positions through
@@ -80,7 +80,7 @@ so a reader cannot miss the constraint.
 We present a characterization of block-diagonal attention over retrieved
 documents in decoder-only language models. The paper reports Qwen quality
 estimates after self-distillation finetuning (Section~\ref{sec:results-quality}),
-archived prefill timing observations at matched shapes
+SDPA prefill timing observations at matched shapes
 (Section~\ref{sec:results-efficiency}), and a restart-layout per-document
 KV-cache throughput estimate at one request shape (Section~\ref{sec:results-caching}). The matched
 transfer study finds partial closure without natural-QA parity in either

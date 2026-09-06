@@ -10,9 +10,9 @@ raw-kernel observations into parity or serving claims.
   Llama minus Qwen normalized closure is 0.028 with a 95% equal-seed bootstrap
   interval of [-0.085, 0.179], which establishes no practical architecture
   difference. Older Qwen cells remain single-run estimates.
-- C3 compute: archived batch-1 flex prefill timings show a speed signal, but
-  no current flex model-throughput claim is admitted: the full-model parity
-  gate fails at `N=2,L=128` before the direct sparse or batched path is timed.
+- C3 compute: SDPA shows no sparsity benefit from a 4D mask. The old numerical
+  Flex timing table is removed because its cited historical log is unavailable;
+  no Flex model-throughput claim is admitted.
 - C4 cache behavior: exact 16-token greedy text matches on one A100 diagnostic for
   original, reordered, and 2-hit/1-miss partial-reuse requests. Numerical logit identity
   fails the old tolerance (`max|delta|=0.3125` at `N=2,L=32,Q=8`).
@@ -30,9 +30,10 @@ raw-kernel observations into parity or serving claims.
   the matched V46 seed-0 checkpoint. It is campaign bookkeeping, not a deciding
   quality cell: the run used a dirty working tree, the checkpoint was removed,
   and the planned three-seed expansion and paired bootstrap did not run.
-- Research completion: VIBEQUEUE-48 (quality breadth/power), VIBEQUEUE-49
-  (validated compiled timing), and VIBEQUEUE-50 (reproducible paper rendering)
-  remain open. The research program is therefore not complete.
+- Research completion: VIBEQUEUE-48 (quality breadth/power) and VIBEQUEUE-49
+  (validated compiled timing) remain open. VIBEQUEUE-50 now has deterministic
+  rendering from hash-pinned preserved evidence. The research program is still
+  not complete.
 
 ## Results summary
 
@@ -52,14 +53,14 @@ across checkpoints.
 
 | evaluator | sequential hotpot | restart hotpot | restart - sequential |
 |:---|:---|:---|:---|
-| legacy, invalid cached decode | 0.45 | 0.06 | -0.39 |
 | corrected explicit decode positions | 0.45 | 0.47 | +0.02 |
 
 The legacy evaluator supplied restart positions during prefill but let HF infer
-cached-decode positions from cache length. Its restart deficits, the claimed
-hard wall, exposure-bias explanation, and RoPE-theta interpretation are
-invalidated. The corrected control is bounded to this checkpoint, dataset, and
-100-record subset; it does not establish a broader failure, success, or parity claim.
+cached-decode positions from cache length. Its unmatched numerical row is not
+retained. The claimed hard wall, exposure-bias explanation, and RoPE-theta
+interpretation are invalidated. The corrected control is bounded to this
+checkpoint, dataset, and 100-record subset; it does not establish a broader
+failure, success, or parity claim.
 
 ## Steps
 

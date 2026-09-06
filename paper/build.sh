@@ -1,36 +1,30 @@
 #!/bin/bash
 # =====================================================================
-# paper/build.sh — compile paper/preprint.pdf.
+# paper/build.sh — validate/render paper artifacts, then compile when TeX exists.
 #
-# Tables in paper/generated/*.tex are currently hand-edited from local result
-# stores and the tracked aggregate files cited in each table's header comment.
-# The automated renderer was removed; the former paper/render.py was retired
-# because it consumed missing summaries and emitted incompatible table shapes.
-# Do NOT treat generated/*.tex as auto-generated.
-#
-# VIBEQUEUE-50 tracks preservation of raw sources and reproducible rendering.
+# paper/evidence.json is the tracked evidence boundary. paper/render.py validates
+# its schema and source hashes, then deterministically regenerates every input.
 # =====================================================================
 set -euo pipefail
 cd "$(dirname "$0")"
 
-echo "[paper] Tables are hand-audited (see VIBEQUEUE-50). Skipping regeneration."
-echo "[paper]   T2         — results/runs.jsonl (phase2_train_free rows)"
-echo "[paper]   T3         — results/runs.jsonl (phase3_timing rows)"
-echo "[paper]   T3_flex    — logs/timing_flex_grid3.log"
-echo "[paper]   T4         — results/runs.jsonl (phase2_train_free rows)"
-echo "[paper]   T4_16L     — results/eval_16L.jsonl"
-echo "[paper]   T4_restart — results/sprint_h_decode_positions_hotpot.jsonl"
-echo "[paper]   T5         — results/phase3_n{2,5,10}.jsonl"
-echo "[paper]   T6         — results/sprint_a_baseline.jsonl"
-echo "[paper]   T7         — experiments/cross_architecture_transfer_r5.result.json"
-echo "[paper]   F5         — results/cache_v51_throughput_summary.json"
+python3 render.py
 
 if command -v pdflatex >/dev/null 2>&1; then
-    pdflatex -interaction=nonstopmode preprint.tex
-    (bibtex preprint || true)
-    pdflatex -interaction=nonstopmode preprint.tex
-    pdflatex -interaction=nonstopmode preprint.tex
+    if ! command -v bibtex >/dev/null 2>&1; then
+        echo "[paper] pdflatex is present but bibtex is missing." >&2
+        exit 1
+    fi
+    # Keep TeX's clock and PDF metadata stable. Override only when intentionally
+    # dating a new manuscript snapshot.
+    export TZ=UTC
+    export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1788725843}"
+    export FORCE_SOURCE_DATE=1
+    pdflatex -halt-on-error -interaction=nonstopmode preprint.tex
+    bibtex preprint
+    pdflatex -halt-on-error -interaction=nonstopmode preprint.tex
+    pdflatex -halt-on-error -interaction=nonstopmode preprint.tex
     echo "[paper] preprint.pdf built."
 else
-    echo "[paper] pdflatex not found; skipping compile. Generated artifacts are in paper/generated/."
+    echo "[paper] pdflatex not found; artifacts rendered and validated, PDF compile skipped."
 fi
