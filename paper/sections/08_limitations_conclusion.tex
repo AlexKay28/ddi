@@ -69,7 +69,7 @@ If the analytical/realized gap of Section~\ref{sec:results-efficiency-gap}
 does not close under the Phase~3 diagnostics --- if it is a structural
 property of small-block varlen kernels on current hardware --- the
 compute implications of DDI are smaller than the arithmetic suggests. The
-sequential cache estimate is reported separately rather than compensating for
+bounded cache estimate is reported separately rather than compensating for
 that limitation. We flag this in the results sections rather than only here,
 so a reader cannot miss the constraint.
 
@@ -80,14 +80,15 @@ We present a characterization of block-diagonal attention over retrieved
 documents in decoder-only language models. The paper reports Qwen quality
 estimates after self-distillation finetuning (Section~\ref{sec:results-quality}),
 archived prefill timing observations at matched shapes
-(Section~\ref{sec:results-efficiency}), and a sequential-layout per-document
-KV-cache throughput estimate (Section~\ref{sec:results-caching}). The matched
+(Section~\ref{sec:results-efficiency}), and a restart-layout per-document
+KV-cache throughput estimate at one request shape (Section~\ref{sec:results-caching}). The matched
 transfer study finds partial closure without natural-QA parity in either
 architecture; on its sole valid natural-QA cross-architecture cell, no
 practical architecture difference is established. Other legacy quality
 comparisons outside the descriptive baseline intervals remain single-run
-estimates. Under the cache harness assumptions, the sequential path has a
-reported 1.76$\times$ throughput estimate. The
+estimates. Under the corrected cache harness assumptions, the three-seed
+cache/recompute estimate is 1.219$\times$ (95\% t-CI [1.152, 1.286]); it does
+not imply cross-shape or serving-wide dominance. The
 corrected restart control reports 0.47 versus 0.45 EM on 100 hotpot\_qa
 records; it is not a statistical comparison.
 

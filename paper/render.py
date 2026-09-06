@@ -10,8 +10,9 @@ import json
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt  # noqa: E402
 
 LOGS = Path("logs")
 GEN = Path("paper/generated")
@@ -64,7 +65,8 @@ def render_t2() -> None:
     lines = [
         r"\begin{tabular}{l|ccc|ccc|ccc}",
         r" & \multicolumn{3}{c|}{EM} & \multicolumn{3}{c|}{F1} & \multicolumn{3}{c}{Presence} \\",
-        r" mask & hotpot & musique & synth & hotpot & musique & synth & hotpot & musique & synth \\",
+        r" mask & hotpot & musique & synth & hotpot & musique & synth & "
+        r"hotpot & musique & synth \\",
         r"\hline",
     ]
     for mask in masks:
@@ -141,9 +143,9 @@ def render_f3() -> None:
                 ratios.append(ratio)
             except (KeyError, TypeError):
                 ratios.append(None)
-        valid = [(N, r) for N, r in zip(Ns, ratios) if r is not None]
+        valid = [(N, r) for N, r in zip(Ns, ratios, strict=True) if r is not None]
         if valid:
-            xs, ys = zip(*valid)
+            xs, ys = zip(*valid, strict=True)
             ax.plot(xs, ys, marker="o", label=f"L={L}")
 
     ax.set_xlabel("N (document count)")
@@ -170,12 +172,18 @@ def render_f5() -> None:
 
     modes = ["full_causal", "ddi_recompute", "ddi_cache"]
     labels = ["full causal", "ddi recompute", "ddi cache"]
+    measured_shape = "top=32,N=5,L=500,Q=32,A=16"
     values = []
     for mode in modes:
         try:
-            # Each mode has one arm
             arm_data = qps[model][mode]
-            v = list(arm_data.values())[0]
+            matching = [value for arm, value in arm_data.items() if measured_shape in arm]
+            if len(matching) != 1:
+                raise ValueError(
+                    f"F5 requires exactly one {mode} arm containing {measured_shape!r}; "
+                    f"found {len(matching)}"
+                )
+            v = matching[0]
             values.append(v)
         except (KeyError, TypeError, IndexError):
             values.append(0)
@@ -185,7 +193,7 @@ def render_f5() -> None:
     bars = ax.bar(labels, values, color=colors)
     ax.set_ylabel("QPS (queries/sec)")
     ax.set_title("F5: Throughput under document reuse (Zipf a=1.5)")
-    for bar, v in zip(bars, values):
+    for bar, v in zip(bars, values, strict=True):
         ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.05,
                 f"{v:.2f}", ha="center", va="bottom", fontsize=10)
     fig.tight_layout()

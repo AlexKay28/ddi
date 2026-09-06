@@ -16,6 +16,12 @@ partial-reuse requests. Numerical logit identity is not established: a corrected
 tiny-shape throughput sanity check measured 7.19 cache QPS versus 7.74 recompute and 8.67 full;
 it validates plumbing only and is not a speedup claim.
 
+The pinned production-shape follow-up uses three seeds, 50 measured requests per arm, Zipf
+$a=1.5$, `top=32,N=5,L=500,Q=32,A=16`, and records every row at clean git `4ae5750`.
+Cache/recompute paired speedups are 1.245, 1.220, and 1.192 (mean 1.219, 95% t-CI
+[1.152, 1.286]); cache/full-causal mean speedup is 1.094 (95% t-CI [1.022, 1.166]).
+This is evidence for that request shape, not a general serving claim.
+
 Chronological log of experiments and project decisions. **Newest first.**
 
 ## 2026-09-04 — VIBEQUEUE-47 Flex parity root cause

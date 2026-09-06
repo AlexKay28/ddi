@@ -21,7 +21,9 @@ CPU handoff and to GPU work that follows it.
   runners populated but did not consume real document K/V. The corrected Qwen2.5-7B bf16
   path exactly matches 16-token greedy text for original, reordered, and 2-hit/1-miss
   requests, but cache-vs-recompute numerical logit identity fails (`max|delta|=0.3125` at
-  `N=2,L=32,Q=8`). Production-shape repeated throughput remains unmeasured.
+  `N=2,L=32,Q=8`). At `top=32,N=5,L=500,Q=32,A=16`, three pinned seeds give a
+  cache/recompute mean speedup of 1.219x (95% t-CI [1.152, 1.286]). This supports only the
+  measured shape and implementation, not a general serving claim.
 - R4/R5a establish reproducibility plumbing, not a quality or transfer result:
   frozen held-out manifests, per-example outputs, checkpoint revision
   provenance, and seed-independent aggregation identities.

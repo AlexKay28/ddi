@@ -11,26 +11,20 @@ so changing any earlier document invalidates the prefix. Under a
 block-diagonal mask with the \emph{restart} position layout
 (Section~\ref{sec:method-positions}), a document's KV block can be a function
 of that document alone, subject to the implementation and position assumptions.
-The throughput estimate below is reported on the \emph{sequential} layout,
-where a document's KV is reusable only at the same position in the same prefix.
-The corrected restart control in
-Section~\ref{sec:results-caching-prereq} reports a bounded generation control
-for the order-independent layout, but does not itself remeasure throughput.
-
-In the sequential cache harness, a cache hit skips the cached document's
-prefill work. This mechanism should not be read as a general restart-layout or
-serving-throughput conclusion.
+The corrected harness assembles independently computed restart-layout document
+KV blocks in request order, prefills the query against those blocks, and carries
+explicit restart positions and the DDI mask through greedy decoding.
 
 \subsection{Prerequisites}
 \label{sec:results-caching-prereq}
 
-Three conditions must hold before the throughput measurement is trusted.
-\emph{Per-document cache correctness} (Phase~4.2) verifies that logits
-computed from a cache hit are numerically identical (within bf16 tolerance)
-to logits computed from a cold prefill of the same input; the round-trip
-test is the correctness gate that makes any throughput number meaningful.
-\emph{Order invariance} (Phase~4.3) tests whether permuting the retrieved
-document list produces identical outputs under \texttt{ddi\_qf + restart}.
+The historical cache runner populated but never consumed document KV; its
+exact-logit and 1.72$\times$ throughput claims are withdrawn. In the corrected
+Qwen2.5-7B bf16 A100 diagnostic, 16-token greedy outputs match exactly for the
+original request, a document permutation, and a partial-reuse request with two
+hits and one miss. Numerical logit identity is not established: cache versus
+fresh restart DDI has maximum absolute logit difference 0.3125 at
+$N=2,L=32,Q=8$.
 
 \textbf{Quality under restart} (Phase~4.1) is a prerequisite for reusable
 per-document KV blocks. The initial evaluation was invalid because it used
@@ -48,20 +42,21 @@ frequencies.
 \subsection{Throughput under document reuse}
 \label{sec:results-caching-throughput}
 
-The sequential cache harness defines end-to-end throughput as a function of the
-document reuse rate --- the fraction of retrieved documents in the
-current request that also appeared in a previous request and are
-therefore cache hits. The comparison lines are full-causal recompute
-(the status quo), prefix caching (the practical alternative when exact
-prefix matches happen), and DDI with a per-document cache. The figure, when
-generated from matching rows, is a sequential-layout synthetic-harness estimate
-rather than a serving result. It does not validate restart-layout reuse or
-establish dominance over prefix caching.
+The corrected synthetic harness measures disk lookup, cold KV computation and
+write, cache assembly and transfer, query prefill, and 16-token greedy decode.
+At Zipf $a=1.5$, 32 source documents, five 500-token documents per request, and
+a 32-token query, each of three seeds uses 10 warmups and 50 measured requests
+per mode. Cache hit rates are 0.948, 0.944, and 0.944. Cache/recompute speedups
+are 1.245$\times$, 1.220$\times$, and 1.192$\times$; treating seed as the
+replication unit gives mean 1.219$\times$ and a 95\% t-interval
+[1.152, 1.286]. Against full causal, the corresponding mean is
+1.094$\times$ [1.022, 1.166]. All rows are pinned to git revision
+\texttt{4ae5750}; raw rows are in \texttt{results/cache\_v51\_throughput.jsonl}.
 
 \figureifexists{generated/F5.pdf}{%
-    F5 --- throughput versus document reuse rate. One line per mode:
-    full-causal recompute, prefix caching, DDI per-document cache.%
+    F5 --- throughput at the measured restart-layout request shape. One bar per
+    mode: full-causal recompute, DDI recompute, and DDI per-document cache.%
 }{fig:f5}
 
-The sequential cache estimate is kept separate from the archived flex timing
-observations. Neither result establishes a general serving-throughput claim.
+The estimate is kept separate from archived Flex timing observations and does
+not establish a general serving-throughput claim across shapes or models.

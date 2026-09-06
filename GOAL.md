@@ -15,8 +15,9 @@ raw-kernel observations into parity or serving claims.
   original, reordered, and 2-hit/1-miss partial-reuse requests. Numerical logit identity
   fails the old tolerance (`max|delta|=0.3125` at `N=2,L=32,Q=8`).
 - C4 cache throughput: the historical 1.72x result is withdrawn because its runner stored
-  empty cache sentinels and did not consume document KV. A corrected tiny-shape sanity run
-  shows no speedup and is not performance evidence; a repeated production-shape study is open.
+  empty cache sentinels and did not consume document KV. The corrected three-seed study at
+  `top=32,N=5,L=500,Q=32,A=16` reports 1.219x cache/recompute throughput (95% t-CI
+  [1.152, 1.286]); this is a one-shape systems result, not a general serving claim.
 - C4 restart control: the local 16-layer single-run control with explicit
   cached-decode positions is restart EM=0.47 versus sequential EM=0.45 on 100
   hotpot_qa records. It invalidates the legacy restart wall but does not establish
