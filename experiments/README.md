@@ -15,8 +15,9 @@ landed via the [#81 refactor](https://github.com/AlexKay28/ddi/issues/81).
 
 The preprint is scoped to three claims (per [#81](https://github.com/AlexKay28/ddi/issues/81)):
 
-- **C1 — quality parity.** DDI masks match `full` causal within the non-inferiority
-  margin `Δ` on the retrieval-QA datasets.
+- **C1 — bounded quality characterization.** Compare DDI masks with `full`
+  causal on the measured retrieval-QA cells under the frozen evidence rules;
+  the current matched Qwen/Llama result does not reach natural-QA parity.
 - **C3 — speed and realization ratio.** Wall-clock speedup vs. the analytical
   sparsity ceiling across `(N, L, backend)` grids.
 - **C4 — caching and restart layout.** Per-document KV blocks are reusable across
@@ -25,9 +26,11 @@ The preprint is scoped to three claims (per [#81](https://github.com/AlexKay28/d
 C5 (failure envelope), C6 (distractor robustness), PCW and composition are out of preprint
 scope and have no YAML here.
 
-**Fine-tuning does.** `finetune.yaml` is indexed below and is the bulk of what the Nirvana
-fleet is currently running — see the note in [`../README.md`](../README.md#2-scope--models-datasets-paper-claims).
-Older text in this repo describing it as out of scope predates that campaign.
+**Measured fine-tuning evidence does.** `finetune.yaml` is indexed below, and
+the matched V46 Qwen/Llama artifacts are retained for the bounded paper. The
+V48 powered expansion and larger-scale cells are preserved as deferred future
+work, not required paper runs; no parity, equivalence, architecture-invariance,
+or scale-trend claim follows from the current experiment set.
 
 ---
 
@@ -43,7 +46,7 @@ config trains, so a stale one is pure misinformation.
 | YAML | kind | one-line purpose | tracking |
 |---|---|---|---|
 | [`smoke.yaml`](smoke.yaml) | `quality` | **Not a measurement.** The CPU-only end-to-end check: `synthetic_qa` × 3 masks × 4 records × 8 new tokens, ~10s, no GPU/Hub/YT/network. Run it as `make smoke`, which builds the tiny model it needs. | VIBEQUEUE-16 |
-| [`quality.yaml`](quality.yaml) | `quality` | C1 parity across `hotpot_qa` / `musique` / `synthetic_qa` under `full` / `ddi_qf` / `blind`; em, f1, presence, loss. `MODEL=Qwen/Qwen2.5-7B-Instruct` → [#74](https://github.com/AlexKay28/ddi/issues/74), `MODEL=meta-llama/Llama-3.1-8B-Instruct` → [#75](https://github.com/AlexKay28/ddi/issues/75). | #74 / #75 |
+| [`quality.yaml`](quality.yaml) | `quality` | C1 measurements and parity gates across `hotpot_qa` / `musique` / `synthetic_qa` under `full` / `ddi_qf` / `blind`; em, f1, presence, loss. `MODEL=Qwen/Qwen2.5-7B-Instruct` → [#74](https://github.com/AlexKay28/ddi/issues/74), `MODEL=meta-llama/Llama-3.1-8B-Instruct` → [#75](https://github.com/AlexKay28/ddi/issues/75). | #74 / #75 |
 | [`performance.yaml`](performance.yaml) | `timing` | C3 timing grid over `(N, L, backend, mask)` — TTFT / TPOT / sparsity / analytical / realized / realization. Same model→issue mapping as `quality.yaml`. | #74 / #75 |
 | [`cache_correctness.yaml`](cache_correctness.yaml) | `cache` (`task: correctness`) | C4 gate: per-document cached logits must match a fresh recompute within tolerance. If this fails the other C4 YAMLs are moot. | *(pending — C4 rollup)* |
 | [`cache_throughput.yaml`](cache_throughput.yaml) | `cache` (`task: throughput`) | C4 QPS on repeated documents across `ddi_cache` / `ddi_recompute` / `full_causal`. | *(pending — C4 rollup)* |

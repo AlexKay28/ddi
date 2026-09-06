@@ -5,6 +5,9 @@ evidence. It records the pre-registration: what the project intended to claim,
 what it would need to run, and the planned comparison grid. Current claim
 boundaries are in `AUDIT_NOTES.md`, `preprint.tex`, and `../README.md`; this
 plan contains superseded targets and must not be cited as empirical support.
+In particular, its powered quality-expansion and larger-model cells are retained
+as a reopenable VIBEQUEUE-48 plan, but are deferred optional future work rather
+than prerequisites for the bounded characterization paper.
 
 Companion to the repo write-up in [`../README.md`](../README.md) and the operational roadmap in
 [issue #1](https://github.com/AlexKay28/ddi/issues/1) (source of truth for phase structure).

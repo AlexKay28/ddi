@@ -53,6 +53,13 @@ hotpot blind control moves after tuning. Synthetic QA is saturated and serves
 only as a control. These results do not establish architecture invariance or
 universal transfer.
 
+\paragraph{Model scale and deferred expansion.}
+The paper makes no trend claim across model scale. Its quality conclusions are
+limited to the measured Qwen2.5-7B-Instruct and Llama-3.1-8B-Instruct
+checkpoints, datasets, and frozen manifests. Powered expansion and 14B/32B
+cells are retained under VIBEQUEUE-48 as optional future work, not as missing
+prerequisites for this bounded characterization.
+
 \paragraph{Uncertainty of quality comparisons.}
 The legacy Qwen full-causal baseline has three seed-selected splits with
 descriptive intervals: three 100-record splits yield 95\% t-intervals of

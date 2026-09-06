@@ -32,8 +32,14 @@ CPU handoff and to GPU work that follows it.
   regressed by 0.121 on hotpot_qa and 0.041 on musique relative to the matched
   V46 seed-0 checkpoint. It is not a deciding quality cell: the source tree was
   dirty at run time, the stopped checkpoint was removed after hashing, and no
-  three-seed expansion or paired bootstrap ran. Architecture breadth remains
-  assigned to VIBEQUEUE-48.
+  three-seed expansion or paired bootstrap ran. VIBEQUEUE-48 retains the useful
+  powered-expansion and scale plans as deferred future work; those unrun cells
+  are not prerequisites for the bounded paper and cannot extend its claims.
+- Current quality evidence is bounded to the measured Qwen2.5-7B-Instruct and
+  Llama-3.1-8B-Instruct checkpoints, named datasets, frozen manifests, and
+  retained per-example outputs. The sole valid natural-QA architecture contrast
+  is musique F1. It establishes neither parity nor a practical architecture
+  difference, equivalence, architecture invariance, or a model-scale trend.
 
 ## Evidence Required For Any Gate
 

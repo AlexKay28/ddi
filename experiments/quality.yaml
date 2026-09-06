@@ -1,4 +1,4 @@
-# C1 — quality parity across the four direct QA datasets.
+# C1 — bounded quality measurements across the three retained QA datasets.
 #
 # Model-agnostic: run once per model with `make exp-c1 MODEL=<hf-id>`. On `main` this
 # is exercised against Qwen2.5-7B-Instruct (tracking: #74) and Llama-3.1-8B-Instruct

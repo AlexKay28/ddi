@@ -18,19 +18,25 @@ explicitly.
 \centering
 \caption{Models. Qwen2.5-7B-Instruct is the primary study. Llama-3.1-8B uses
     the matched three-seed transfer protocol. Qwen2.5-1.5B appears only as a
-    legacy single-run train-free estimate; larger-scale cells were not run.}
+    legacy single-run train-free estimate; larger-scale cells are deferred
+    future work and are not required by this paper's claims.}
 \label{tab:models}
 \begin{tabular}{@{}llll@{}}
 \toprule
 Model & Role & Status & Notes \\
 \midrule
-Qwen2.5-7B-Instruct     & Primary   & \textbf{done}   & Three-seed transfer study \\
-Llama-3.1-8B-Instruct   & Replication & \textbf{done} & Matched three-seed study \\
+Qwen2.5-7B-Instruct     & Primary   & measured   & Three-seed transfer study \\
+Llama-3.1-8B-Instruct   & Replication & measured & Matched three-seed study \\
 Qwen2.5-1.5B-Instruct   & Ablation & descriptive    & Single-run train-free estimate \\
-Qwen2.5-14B/32B         & Scale     & not run        & Open breadth work (VIBEQUEUE-48) \\
+Qwen2.5-14B/32B         & Scale     & deferred       & Optional future work (VIBEQUEUE-48) \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+The measured rows support claims only for their named checkpoints, datasets,
+and frozen manifests. They establish no parity, architecture equivalence or
+invariance, or trend with model scale. The deferred VIBEQUEUE-48 cells would
+extend this scope if run; their absence is not a missing paper cell.
 
 All runs use bf16 precision, greedy decoding for quality metrics, and
 seed control committed to provenance. Batch size is 1 for the current

@@ -30,10 +30,12 @@ raw-kernel observations into parity or serving claims.
   the matched V46 seed-0 checkpoint. It is campaign bookkeeping, not a deciding
   quality cell: the run used a dirty working tree, the checkpoint was removed,
   and the planned three-seed expansion and paired bootstrap did not run.
-- Research completion: VIBEQUEUE-48 (quality breadth/power) and VIBEQUEUE-49
-  (validated compiled timing) remain open. VIBEQUEUE-50 now has deterministic
-  rendering from hash-pinned preserved evidence. The research program is still
-  not complete.
+- Paper scope: VIBEQUEUE-48's powered quality expansion and model-scale cells
+  are deferred future work, not missing prerequisites for the bounded
+  characterization paper. VIBEQUEUE-50 now provides deterministic rendering
+  from hash-pinned preserved evidence. Any VIBEQUEUE-49 compiled-timing work is
+  likewise additional evidence rather than a prerequisite for the claims
+  currently admitted.
 
 ## Results summary
 

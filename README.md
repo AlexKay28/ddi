@@ -128,19 +128,23 @@ remain out of scope per [#82](https://github.com/AlexKay28/ddi/issues/82).
 | **C3** | Analytical cost versus qualified timing observations | SDPA has no sparsity benefit from a 4D mask; the unhashable historical Flex timing table and its numerical claims are removed |
 | **C4** | End-to-end per-document cache reuse and a restart control | Exact short greedy generation is validated for original, reordered, and partial-hit requests. At `N=5,L=500`, corrected cache/recompute throughput is 1.219x (three-seed 95% t-CI [1.152, 1.286]); numerical logit identity fails and no cross-shape serving claim is made. The historical 1.72x result is withdrawn |
 
-### Fine-tuning is in scope, and is the current campaign
+### Fine-tuning evidence is in scope; further expansion is deferred
 
-[#82](https://github.com/AlexKay28/ddi/issues/82) put the fine-tuning path out of preprint
-scope, and this README said so long after that stopped being true. It is now the bulk of the
-work: `experiments/finetune.yaml` (`kind: finetune`) trains a student under `ddi_qf` against a
-teacher under `full` by KL on answer-position logits, and of the 38 publishable Nirvana entry
-points in `nirvana/graphs/` (`make nv-list`) the majority are finetune-and-evaluate rows of
-that campaign. `make finetune MODEL=<hf-id> [NUM_GPUS=N]` is its entry point — a separate
-target from `exp-%` because the training step may need `torchrun` while the aggregate step
-stays single-process.
+The paper retains the measured self-distillation evidence produced by
+`experiments/finetune.yaml` (`kind: finetune`): a student runs under `ddi_qf`
+against a teacher under `full`, with KL on answer-position logits. The matched
+V46 study covers three independently trained seeds for the measured
+Qwen2.5-7B-Instruct and Llama-3.1-8B-Instruct checkpoints on frozen manifests.
+Neither architecture reaches natural-QA parity. The sole valid natural-QA
+architecture contrast is musique F1 and establishes no practical difference;
+it does not establish equivalence or invariance.
 
-Whether it belongs in the preprint is a scoping decision that has not been revisited. That it
-is what the repo is currently doing is not in question.
+VIBEQUEUE-48's powered quality expansion and larger-scale cells are deferred
+future work, not missing prerequisites for this bounded characterization. They
+may strengthen or extend a later paper only after they run with the same
+reproducibility controls; the current paper makes no scale-trend claim.
+`make finetune MODEL=<hf-id> [NUM_GPUS=N]` remains the training entry point for
+reopening that work.
 
 ---
 

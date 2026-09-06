@@ -159,3 +159,18 @@ control; its old defect row combined cells from different lineages and was
 removed rather than preserved as a comparison. PDF compilation was not run on the audit host,
 which has neither `pdflatex` nor `bibtex`; cross-installation PDF byte identity
 is not claimed without a validated pinned TeX distribution.
+
+## 2026-09-06: VIBEQUEUE-48 scope disposition
+
+This entry supersedes VIBEQUEUE-48's open-prerequisite interpretation in the
+earlier audit entry. The bounded characterization paper does not require the
+powered quality expansion or larger-model cells. Their protocols and experiment
+plans remain available as deferred future work so VIBEQUEUE-48 can be reopened,
+but no unrun cell is counted as completed or successful.
+
+The admitted quality evidence is limited to the measured
+Qwen2.5-7B-Instruct and Llama-3.1-8B-Instruct checkpoints, named datasets,
+frozen manifests, and retained outputs from VIBEQUEUE-46. VIBEQUEUE-52 remains
+a stopped one-seed pilot and adds no deciding cell. The sole valid natural-QA
+architecture contrast is musique F1; it establishes no parity, equivalence,
+architecture invariance, or scale trend.
