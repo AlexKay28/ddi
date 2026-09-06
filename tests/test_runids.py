@@ -91,14 +91,15 @@ def test_correctness_shape_from_run_cache_correctness() -> None:
 def test_throughput_shape_from_run_cache_throughput() -> None:
     # ddi/run.py: f"phase4_throughput:{model}:{mode}:{layout}:reuse={tag}:seed={s}:{sha[:8]}"
     parsed = ThroughputRunId.parse(
-        "phase4_throughput:Qwen/Qwen2.5-7B:ddi_cache:restart:reuse=zipf(a=1.1):seed=0:abcd1234"
+        "phase4_throughput:Qwen/Qwen2.5-7B:ddi_cache:restart:"
+        "reuse=zipf(a=1.1),top=32,N=5,L=500,Q=32,A=16:seed=0:abcd1234"
     )
     assert parsed is not None
     assert (parsed.model, parsed.mode, parsed.layout) == (
         "Qwen/Qwen2.5-7B", "ddi_cache", "restart"
     )
-    assert parsed.reuse == "zipf(a=1.1)"
-    assert parsed.arm == "restart/reuse=zipf(a=1.1)"
+    assert parsed.reuse == "zipf(a=1.1),top=32,N=5,L=500,Q=32,A=16"
+    assert parsed.arm == "restart/reuse=zipf(a=1.1),top=32,N=5,L=500,Q=32,A=16"
 
 
 def test_throughput_arm_falls_back_but_never_merges_with_a_shaped_one() -> None:

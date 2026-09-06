@@ -17,12 +17,15 @@ CPU handoff and to GPU work that follows it.
   throughput evidence.
 - Existing Qwen and Llama quality values, including the legacy checkpoints,
   are descriptive diagnostics unless they satisfy the matched matrix below.
+- The historical C4 cache correctness and 1.72x throughput claims are withdrawn: those
+  runners populated but did not consume real document K/V. The corrected Qwen2.5-7B bf16
+  path exactly matches 16-token greedy text for original, reordered, and 2-hit/1-miss
+  requests, but cache-vs-recompute numerical logit identity fails (`max|delta|=0.3125` at
+  `N=2,L=32,Q=8`). Production-shape repeated throughput remains unmeasured.
 - R4/R5a establish reproducibility plumbing, not a quality or transfer result:
   frozen held-out manifests, per-example outputs, checkpoint revision
   provenance, and seed-independent aggregation identities.
-- Tracker MCP was checked for this R6a handoff and was disconnected with
-  `Failed to connect to tracker`. This project document records the decision
-  rules; it does not close or update a Tracker issue.
+- Cache gap-closing work and intermediate gates are tracked in `VIBEQUEUE-51`.
 
 ## Evidence Required For Any Gate
 

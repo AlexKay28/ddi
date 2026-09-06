@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-09-06 — real end-to-end document KV reuse
+
+The cache audit found that the historical `ddi_cache` runners never consumed cached K/V:
+correctness populated `DocCache` and then recomputed the full DDI request, while throughput
+stored empty sentinels and timed an unrelated query-only generation. The prior exact-logit and
+1.72x QPS claims are withdrawn.
+
+The replacement concatenates validated restart-layout K/V blocks in request order into an HF
+`DynamicCache`, prefills the query with explicit restart/cache positions and the sliced DDI-QF
+mask, and preserves that mask and position layout during greedy decode. Qwen2.5-7B-Instruct
+bf16 on an A100 produced exact 16-token greedy text for original, reordered, and 2-hit/1-miss
+partial-reuse requests. Numerical logit identity is not established: a corrected synthetic
+`N=2,L=32,Q=8` cell reports cache-vs-recompute max absolute difference 0.3125. A three-request
+tiny-shape throughput sanity check measured 7.19 cache QPS versus 7.74 recompute and 8.67 full;
+it validates plumbing only and is not a speedup claim.
+
 Chronological log of experiments and project decisions. **Newest first.**
 
 ## 2026-09-04 — VIBEQUEUE-47 Flex parity root cause

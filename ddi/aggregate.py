@@ -11,8 +11,8 @@ Dispatch on ``kind``:
                       ``realized`` and ``realization`` are DERIVED by pairing variant
                       rows with matching ``full`` rows at ``(model, N, L, backend, seed)``.
 - ``throughput``    → phase4_throughput rows, ``{model: {mode: {arm: value}}}`` where
-                      ``arm`` is ``{layout}/reuse={reuse}`` — the only axis the
-                      phase4_throughput run_id actually carries besides the mode.
+                      ``arm`` is ``{layout}/reuse={reuse}``; current reuse values also carry
+                      request shape so unlike benchmark cells cannot be merged.
 - ``restart_quality``→ phase4_restart rows, ``{model: {layout: {dataset: value}}}``.
 - ``correctness``   → phase4_cache rows, ``{model: {mode: {L: {N: value}}}}``
                       (worst-case max across queries).
@@ -649,8 +649,8 @@ _THROUGHPUT_UNKNOWN_ARM = ThroughputRunId.UNKNOWN_ARM
 def _throughput_cell_key(run_id: str) -> tuple[str, str, str] | None:
     """``(model, mode, arm)`` for a phase4_throughput row, or None to drop it.
 
-    ``arm`` is ``"{layout}/reuse={reuse}"`` — the only axis the run_id carries besides the
-    mode. It used to be an ``N={N}`` scan with a ``"n/a"`` sentinel fallback. No producer has
+    ``arm`` is ``"{layout}/reuse={reuse}"``. It used to be an ``N={N}`` scan with a
+    ``"n/a"`` sentinel fallback. No producer has
     ever emitted ``N=`` here (the throughput runner takes a scalar ``docs_per_request``, not
     an ``Ns:`` sweep), so the sentinel was the only value the axis ever took —
     ``cache_throughput.yaml``'s ``cols: N`` rendered as one unnamed column. Meanwhile
@@ -659,9 +659,8 @@ def _throughput_cell_key(run_id: str) -> tuple[str, str, str] | None:
     `restart` throughput run averaged them into a single number with nothing in the output
     saying so. The sentinel is gone and the key now carries the axis that actually exists.
 
-    Still not carried by the run_id, and therefore still collidable: ``top_docs``,
-    ``docs_per_request`` and ``doc_token_len``. Two runs differing only in those merge into
-    one cell. Fixing that means changing the run_id in ``ddi/run.py``.
+    Current producers include ``top``, ``N``, ``L``, ``Q`` and ``A`` inside the reuse value,
+    so request shapes no longer collide. Historical rows retain their shorter legacy arm.
     """
     parsed = ThroughputRunId.parse(run_id)
     if parsed is None:

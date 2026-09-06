@@ -218,11 +218,9 @@ class CorrectnessRunId:
 class ThroughputRunId:
     """``phase4_throughput:{model}:{mode}:{layout}:reuse={reuse}:seed={seed}:{sha8}``.
 
-    `layout` and `reuse` are the only experiment axes this run_id carries besides the mode,
-    and `arm` joins them into the one axis the throughput table renders. ``top_docs``,
-    ``docs_per_request`` and ``doc_token_len`` are NOT in the run_id, so two runs differing
-    only in those still merge into one cell — fixing that means changing the run_id in
-    `ddi/run.py`.
+    `layout` and `reuse` form the arm rendered by the throughput table. New rows include
+    request shape inside the reuse value (``top``, ``N``, ``L``, ``Q``, ``A``); historical
+    rows without it remain parseable and retain their original arm.
 
     Both halves of the arm are optional because the run_id is scanned, not indexed: a
     historical row that carries only one of them still gets a cell (named after the half it

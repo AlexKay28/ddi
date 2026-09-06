@@ -135,3 +135,90 @@ def test_cached_decode_matches_single_forward(variant: str) -> None:
         f"not the mask"
     )
     assert max_abs < 0.5, f"{variant}: logits diverge by {max_abs:.4f} between the two paths"
+
+
+@pytest.mark.skipif(not _INTEGRATION, reason=_REASON)
+def test_assembled_document_cache_matches_ddi_generation(tmp_path) -> None:
+    """Original, reordered, and partial-hit requests must preserve greedy generation."""
+    from ddi import inference
+    from ddi.cache import (
+        DocCache,
+        compute_doc_kv,
+        compute_key,
+        forward_query_with_doc_cache,
+        generate_tokens_with_doc_cache,
+    )
+    from ddi.masks import build_mask, to_additive
+    from ddi.positions import build_positions
+
+    model, tokenizer = inference.load(MODEL)
+    model.eval()
+    docs = [
+        "The Eiffel Tower is a wrought-iron lattice tower in Paris.",
+        "The structure is named after engineer Gustave Eiffel.",
+        "Construction finished for the 1889 World's Fair.",
+    ]
+    query = "Question: Who is the Eiffel Tower named after? Answer briefly."
+    entries = [compute_doc_kv(model, tokenizer, doc, "restart") for doc in docs]
+    doc_ids = [
+        tokenizer(doc, return_tensors="pt", add_special_tokens=False).input_ids
+        for doc in docs
+    ]
+    query_ids = tokenizer(query, return_tensors="pt", add_special_tokens=False).input_ids
+    doc_lengths = [int(ids.shape[-1]) for ids in doc_ids]
+    query_len = int(query_ids.shape[-1])
+    doc_total = sum(doc_lengths)
+
+    cached = forward_query_with_doc_cache(model, query_ids, entries).logits.float()
+    all_ids = torch.cat([*doc_ids, query_ids], dim=-1).to(model.device)
+    positions = build_positions(doc_lengths, query_len, 0, "restart").unsqueeze(0)
+    allow = build_mask(doc_lengths, query_len, 0, "ddi_qf")
+    additive = to_additive(allow, dtype=model.dtype)[None, None]
+    with torch.no_grad():
+        recomputed = model(
+            input_ids=all_ids,
+            attention_mask=additive.to(model.device),
+            position_ids=positions.to(model.device),
+            use_cache=False,
+        ).logits[:, doc_total:, :].float()
+
+    assert cached.shape == recomputed.shape
+    assert cached[:, -1].argmax(-1).item() == recomputed[:, -1].argmax(-1).item()
+    cosine = torch.nn.functional.cosine_similarity(
+        cached.flatten(), recomputed.flatten(), dim=0
+    ).item()
+    assert cosine >= 0.999, f"assembled cache cosine similarity is only {cosine:.6f}"
+
+    disk_cache = DocCache(tmp_path / "kv")
+    for entry in entries:
+        disk_cache.put(entry)
+    new_doc = "The tower stands on the Champ de Mars in Paris."
+    partial_docs = [docs[0], new_doc, docs[2]]
+    partial_entries = []
+    hits = 0
+    model_id = getattr(model.config, "_name_or_path", "") or type(model).__name__
+    for doc in partial_docs:
+        entry = disk_cache.get(compute_key(model_id, model.dtype, doc))
+        if entry is None:
+            entry = compute_doc_kv(model, tokenizer, doc, "restart")
+            disk_cache.put(entry)
+        else:
+            hits += 1
+        partial_entries.append(entry)
+    assert hits == 2
+
+    scenarios = [
+        (docs, entries),
+        ([docs[2], docs[0], docs[1]], [entries[2], entries[0], entries[1]]),
+        (partial_docs, partial_entries),
+    ]
+    for scenario_docs, scenario_entries in scenarios:
+        batch = inference.encode(tokenizer, scenario_docs, query, layout="restart")
+        expected_text = inference.generate(
+            model, tokenizer, batch, "ddi_qf", max_new_tokens=16
+        )[0]
+        actual_tokens = generate_tokens_with_doc_cache(
+            model, tokenizer, query_ids, scenario_entries, max_new_tokens=16
+        )
+        actual_text = tokenizer.decode(actual_tokens, skip_special_tokens=True).strip()
+        assert actual_text == expected_text

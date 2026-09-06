@@ -761,7 +761,13 @@ def _cache_correctness(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path
       - run_id: ``phase4_cache:{model}:{mode}:N={N}:L={L}:seed={seed}:{sha}:q{i}``
       - metric: ``max_abs_logit_diff`` (``full_causal`` row is always 0.0).
     """
-    from ddi.cache import DocCache, compute_doc_kv, compute_key
+    from ddi.cache import (
+        DocCache,
+        compute_doc_kv,
+        compute_key,
+        forward_query_with_doc_cache,
+    )
+    from ddi.positions import build_positions
 
     model_name = _require(cfg, "model", "cache/correctness")
     modes = _require(cfg, "modes", "cache/correctness")
@@ -845,31 +851,33 @@ def _cache_correctness(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path
             .unsqueeze(0)
             .unsqueeze(0)
         )
+        positions = (
+            build_positions(doc_lengths, query_len, 0, "restart")
+            .unsqueeze(0)
+            .to(model.device)
+        )
         with torch.no_grad():
             out = model(
                 input_ids=input_ids,
                 attention_mask=additive,
+                position_ids=positions,
                 use_cache=False,
             )
-        return out.logits.detach()
+        return out.logits[:, -query_len:, :].detach()
 
     def _ddi_cache_logits(
         doc_texts: list[str],
-        doc_ids_list: list[torch.Tensor],
         query_ids: torch.Tensor,
     ) -> torch.Tensor:
-        # Walk each doc: on cache miss, compute per-doc KV via compute_doc_kv and store.
-        # The cached KVs prove that a hit yields identical logits under DDI's block-
-        # diagonal mask — that's the C4 correctness gate. For fidelity we still run the
-        # full-prefill forward here (the cache path in production would concatenate the
-        # per-doc KV blocks + a query-only prefill; that plumbing lives on the model side
-        # and is out of scope for the correctness gate — see ddi/cache.py docstring).
+        entries = []
         for doc_text in doc_texts:
             key = compute_key(model_id, model.dtype, doc_text)
-            if not doc_cache.has(key):
+            entry = doc_cache.get(key)
+            if entry is None:
                 entry = compute_doc_kv(model, tokenizer, doc_text, "restart")
                 doc_cache.put(entry)
-        return _ddi_recompute_logits(doc_ids_list, query_ids)
+            entries.append(entry)
+        return forward_query_with_doc_cache(model, query_ids, entries).logits.detach()
 
     # `atol_check` is a `--set`-able config key (see `_SET_KEYS`), so it has to do
     # something. It stays advisory rather than raising: the store row carries the real
@@ -888,25 +896,34 @@ def _cache_correctness(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path
             gen.manual_seed(seed + N * 1_000_003 + L)
             L_int = int(L)
             N_int = int(N)
-            doc_id_tensors = [
+            sampled_doc_ids = [
                 torch.randint(0, vocab_size, (1, L_int), generator=gen) for _ in range(N_int)
             ]
             # Decoded doc text so DocCache keys per-doc content (str -> sha256), matching
             # the production API in ddi.cache.compute_key.
             doc_texts = [
                 tokenizer.decode(t[0].tolist(), skip_special_tokens=True)
-                for t in doc_id_tensors
+                for t in sampled_doc_ids
             ]
-            doc_id_tensors = [t.to(model.device) for t in doc_id_tensors]
+            # Both reference and cache paths must consume the retokenized text. Decode is
+            # not generally tokenization-invertible, so comparing sampled ids on one side
+            # with retokenized text on the other silently compares different requests.
+            doc_id_tensors = [
+                tokenizer(text, return_tensors="pt", add_special_tokens=False).input_ids.to(
+                    model.device
+                )
+                for text in doc_texts
+            ]
 
             for query_i in range(n_queries_per_doc):
                 query_ids = torch.randint(0, vocab_size, (1, Q), generator=gen).to(model.device)
                 full_input_ids = torch.cat(doc_id_tensors + [query_ids], dim=-1)
 
-                # Compute the baseline once per query; every mode's diff is measured
-                # against this exact logits tensor.
+                # Compute both references once: DDI is compared with full causal, while
+                # assembled cache is compared with the matching fresh DDI query logits.
                 try:
-                    ref_logits = _full_causal_logits(full_input_ids)
+                    ref_logits = _full_causal_logits(full_input_ids)[:, -Q:, :]
+                    ddi_logits = _ddi_recompute_logits(doc_id_tensors, query_ids)
                 except Exception as exc:
                     _log_cell_failure(
                         f"cache/correctness(baseline, N={N_int}, L={L_int}, q={query_i})",
@@ -922,21 +939,16 @@ def _cache_correctness(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path
                         if mode == "full_causal":
                             diff = 0.0
                         elif mode == "ddi_recompute":
-                            variant_logits = _ddi_recompute_logits(doc_id_tensors, query_ids)
-                            diff = float(
-                                (ref_logits - variant_logits).abs().max().item()
-                            )
+                            diff = float((ref_logits - ddi_logits).abs().max().item())
                         elif mode == "ddi_cache":
-                            variant_logits = _ddi_cache_logits(
-                                doc_texts, doc_id_tensors, query_ids
-                            )
+                            variant_logits = _ddi_cache_logits(doc_texts, query_ids)
                             diff = float(
-                                (ref_logits - variant_logits).abs().max().item()
+                                (ddi_logits - variant_logits).abs().max().item()
                             )
                         else:  # unreachable — validated above.
                             raise AssertionError(f"unreachable mode {mode!r}")
 
-                        if mode != "full_causal":
+                        if mode == "ddi_cache":
                             compared += 1
                             if diff > atol_check:
                                 over_tolerance += 1
@@ -957,9 +969,9 @@ def _cache_correctness(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path
 
     if over_tolerance:
         _log(
-            f"cache/correctness: {over_tolerance}/{compared} non-baseline row(s) exceeded "
-            f"atol_check={atol_check:g} — the cached/recomputed path does NOT reproduce "
-            f"full_causal at that tolerance"
+            f"cache/correctness: {over_tolerance}/{compared} cache row(s) exceeded "
+            f"atol_check={atol_check:g} — assembled cache does NOT reproduce fresh DDI "
+            f"recomputation at that tolerance"
         )
     elif compared:
         _log(f"cache/correctness: all {compared} row(s) within atol_check={atol_check:g}")
@@ -968,11 +980,10 @@ def _cache_correctness(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path
 # ---------------------------------------------------------------------------
 # Throughput inner loop — inlined from ddi/runners/phase4_throughput.py in #89.
 #
-# The helpers below (`_sample_doc_indices`, `_time_doc_prefill`,
-# `_time_query_prefill`, `_time_full_causal`, `_one_request`) were previously
+# The helpers below (`_sample_doc_indices`, `_time_full_causal`, `_one_request`) were previously
 # imported lazily from `ddi.runners.phase4_throughput`. That module is deleted
-# by #89, so the helpers move here verbatim to keep the ddi_cache /
-# ddi_recompute / full_causal timing shape bit-identical to the pre-#89 runner.
+# by #89. The request implementations now execute their named paths end to end;
+# historical `ddi_cache` and `ddi_recompute` timing semantics were invalid.
 # ---------------------------------------------------------------------------
 
 
@@ -1028,66 +1039,6 @@ def _sample_doc_indices(
                 picked.append(tail)
         requests.append(picked)
     return requests
-
-
-def _time_doc_prefill(model, tokenizer, doc_text: str, layout: str) -> float:
-    """Time one `compute_doc_kv`-shaped forward and return elapsed ms."""
-    from ddi.positions import build_positions
-
-    doc_ids = tokenizer(doc_text, return_tensors="pt", add_special_tokens=False).input_ids
-    doc_len = int(doc_ids.shape[-1])
-    input_ids = doc_ids.to(model.device)
-    positions = build_positions([doc_len], 0, 0, layout).unsqueeze(0).to(model.device)  # type: ignore[arg-type]
-    allow = build_mask([doc_len], query_len=0, answer_len=0, variant="full")
-    additive = to_additive(allow, dtype=model.dtype).to(model.device).unsqueeze(0).unsqueeze(0)
-
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-    t0 = time.perf_counter()
-    with torch.no_grad():
-        model(
-            input_ids=input_ids,
-            attention_mask=additive,
-            position_ids=positions,
-            use_cache=True,
-        )
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-    return (time.perf_counter() - t0) * 1000.0
-
-
-def _time_query_prefill(
-    model,
-    tokenizer,
-    query_text: str,
-    n_new_tokens: int,
-) -> float:
-    """Time a query-only masked prefill + greedy decode; returns elapsed ms."""
-    ids = tokenizer(query_text, return_tensors="pt", add_special_tokens=False).input_ids.to(
-        model.device
-    )
-    q_len = ids.shape[-1]
-    allow = build_mask([q_len], query_len=0, answer_len=0, variant="full")
-    additive = to_additive(allow, dtype=model.dtype).to(model.device).unsqueeze(0).unsqueeze(0)
-
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-    t0 = time.perf_counter()
-    with torch.no_grad():
-        out = model(input_ids=ids, attention_mask=additive, use_cache=True)
-        past = out.past_key_values
-        next_token = out.logits[0, -1].argmax(dim=-1, keepdim=True).unsqueeze(0)
-        for _ in range(n_new_tokens):
-            step = model(
-                input_ids=next_token,
-                past_key_values=past,
-                use_cache=True,
-            )
-            past = step.past_key_values
-            next_token = step.logits[0, -1].argmax(dim=-1, keepdim=True).unsqueeze(0)
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-    return (time.perf_counter() - t0) * 1000.0
 
 
 def _time_full_causal(
@@ -1153,27 +1104,37 @@ def _one_request(
         )
         return 0, 0
 
-    hits = 0
-    lookups = len(doc_indices)
-    for doc_idx in doc_indices:
-        if mode == "ddi_cache" and cache is not None and cache.has(doc_keys[doc_idx]):
-            hits += 1
-            continue
-        _time_doc_prefill(model, tokenizer, docs[doc_idx], layout)
-        if mode == "ddi_cache" and cache is not None:
-            from ddi.cache import CacheEntry
+    request_docs = [docs[i] for i in doc_indices]
+    if mode == "ddi_recompute":
+        batch = inference.encode(tokenizer, request_docs, query_text, layout=layout)
+        inference.generate(
+            model, tokenizer, batch, "ddi_qf", max_new_tokens=n_new_tokens
+        )
+        return 0, 0
 
-            cache.put(
-                CacheEntry(
-                    key=doc_keys[doc_idx],
-                    k_per_layer=[],
-                    v_per_layer=[],
-                    doc_len=0,
-                    layout=layout,  # type: ignore[arg-type]
-                )
-            )
-    _time_query_prefill(model, tokenizer, query_text, n_new_tokens)
-    return hits, lookups
+    if cache is None:
+        raise ValueError("ddi_cache mode requires a cache")
+    if layout != "restart":
+        raise ValueError("ddi_cache mode requires layout='restart'")
+    from ddi.cache import compute_doc_kv, generate_tokens_with_doc_cache
+
+    entries = []
+    hits = 0
+    for doc_idx in doc_indices:
+        entry = cache.get(doc_keys[doc_idx])
+        if entry is None:
+            entry = compute_doc_kv(model, tokenizer, docs[doc_idx], "restart")
+            cache.put(entry)
+        else:
+            hits += 1
+        entries.append(entry)
+    query_ids = tokenizer(
+        query_text, return_tensors="pt", add_special_tokens=False
+    ).input_ids
+    generate_tokens_with_doc_cache(
+        model, tokenizer, query_ids, entries, max_new_tokens=n_new_tokens
+    )
+    return hits, len(doc_indices)
 
 
 def _cache_throughput(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path: Path) -> None:
@@ -1259,12 +1220,20 @@ def _cache_throughput(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path:
                 config_hash=cfg_hash,
                 seed=seed,
                 model_revision=model_name,
-                dataset_revision=f"synthetic_throughput_top={top_docs}_L={doc_token_len}",
+                dataset_revision=(
+                    f"synthetic_throughput_top={top_docs}_N={docs_per_request}_"
+                    f"L={doc_token_len}_Q={query_token_len}_A={n_new_tokens}_"
+                    f"reuse={reuse_distribution}"
+                ),
             )
-            reuse_tag = (
+            reuse_name = (
                 f"{reuse_distribution}(a={zipf_a})"
                 if reuse_distribution == "zipf"
                 else reuse_distribution
+            )
+            reuse_tag = (
+                f"{reuse_name},top={top_docs},N={docs_per_request},L={doc_token_len},"
+                f"Q={query_token_len},A={n_new_tokens}"
             )
             run_id = (
                 f"phase4_throughput:{model_name}:{mode}:{layout}:reuse={reuse_tag}:"
@@ -1276,10 +1245,12 @@ def _cache_throughput(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path:
                     mode, model, tokenizer, index_stream[req_i], docs, doc_keys,
                     cache, query_text, n_new_tokens, layout,
                 )
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
 
             hits = 0
             lookups = 0
-            total_start = time.perf_counter()
+            total_request_s = 0.0
             for req_i in range(n_requests):
                 indices = index_stream[warmup_requests + req_i]
                 req_start = time.perf_counter()
@@ -1287,7 +1258,10 @@ def _cache_throughput(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path:
                     mode, model, tokenizer, indices, docs, doc_keys,
                     cache, query_text, n_new_tokens, layout,
                 )
+                if torch.cuda.is_available():
+                    torch.cuda.synchronize()
                 req_ms = (time.perf_counter() - req_start) * 1000.0
+                total_request_s += req_ms / 1000.0
                 append(
                     f"{run_id}:req{req_i}",
                     "per_request_latency_ms",
@@ -1297,12 +1271,11 @@ def _cache_throughput(cfg: dict[str, Any], cfg_hash: str, seed: int, store_path:
                 )
                 hits += req_hits
                 lookups += req_lookups
-            total_elapsed_s = time.perf_counter() - total_start
 
-            qps = n_requests / total_elapsed_s if total_elapsed_s > 0 else float("inf")
+            qps = n_requests / total_request_s if total_request_s > 0 else float("inf")
             append(run_id, "qps", qps, prov, store=store_path)
             append(run_id, "n_requests", n_requests, prov, store=store_path)
-            append(run_id, "total_elapsed_s", total_elapsed_s, prov, store=store_path)
+            append(run_id, "total_elapsed_s", total_request_s, prov, store=store_path)
             hit_rate = hits / lookups if (mode == "ddi_cache" and lookups > 0) else 0.0
             append(run_id, "hit_rate", hit_rate, prov, store=store_path)
         except Exception as exc:

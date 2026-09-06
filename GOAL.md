@@ -3,7 +3,7 @@
 Document the bounded DDI evidence without converting single-run controls or
 raw-kernel observations into parity or serving claims.
 
-## Current state (2026-08-31) - restart control corrected
+## Current state (2026-09-06) - end-to-end cache path corrected
 
 - C1 quality: Qwen quality values are single-run estimates. The observed hotpot
   cells include 0.46 versus 0.46 (sequential) and 0.39 versus 0.40 (mixed),
@@ -11,9 +11,12 @@ raw-kernel observations into parity or serving claims.
 - C3 compute: archived batch-1 flex prefill timings show a speed signal, but
   no current flex model-throughput claim is admitted: the full-model parity
   gate fails at `N=2,L=128` before the direct sparse or batched path is timed.
-- C4 cache correctness: PASSES (ddi_cache equals ddi_recompute).
-- C4 cache throughput: 1.72x QPS (2.53 vs 1.47) remains a separate throughput
-  result.
+- C4 cache behavior: exact 16-token greedy text matches on one A100 diagnostic for
+  original, reordered, and 2-hit/1-miss partial-reuse requests. Numerical logit identity
+  fails the old tolerance (`max|delta|=0.3125` at `N=2,L=32,Q=8`).
+- C4 cache throughput: the historical 1.72x result is withdrawn because its runner stored
+  empty cache sentinels and did not consume document KV. A corrected tiny-shape sanity run
+  shows no speedup and is not performance evidence; a repeated production-shape study is open.
 - C4 restart control: the local 16-layer single-run control with explicit
   cached-decode positions is restart EM=0.47 versus sequential EM=0.45 on 100
   hotpot_qa records. It invalidates the legacy restart wall but does not establish

@@ -12,9 +12,10 @@ handed back on a Llama fp16 query).
 Storage layout and the atomic-write contract are stated where they are implemented, on
 `DocCache` and `DocCache.put`.
 
-The Phase 4.2 acceptance criterion — a cache hit yields KV blocks identical to the cold
-compute within bf16 tolerance — is checked by the `kind: cache task: correctness` cell in
-`ddi/run.py`, which drives this module alongside `compute_doc_kv`.
+The `kind: cache task: correctness` cell in `ddi/run.py` compares query logits from assembled
+cache entries with fresh restart-layout DDI recomputation. Behavioral generation equivalence
+is covered separately because bf16 execution paths need not produce numerically identical
+logits.
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ from pathlib import Path
 from typing import Any
 
 import torch
-from transformers import PreTrainedModel, PreTrainedTokenizerBase
+from transformers import DynamicCache, PreTrainedModel, PreTrainedTokenizerBase
 
 from ddi.masks import build_mask, to_additive
 from ddi.positions import Layout, build_positions
@@ -131,6 +132,120 @@ class DocCache:
 
     def size(self) -> int:
         return sum(1 for _ in self.cache_dir.glob("*.pt"))
+
+
+def assemble_dynamic_cache(
+    entries: list[CacheEntry], device: torch.device
+) -> DynamicCache:
+    """Concatenate restart-layout document K/V blocks in request order."""
+    if not entries:
+        raise ValueError("at least one cache entry is required")
+    if any(entry.layout != "restart" for entry in entries):
+        raise ValueError("document KV reuse requires restart-layout cache entries")
+    layer_count = len(entries[0].k_per_layer)
+    if layer_count == 0 or len(entries[0].v_per_layer) != layer_count:
+        raise ValueError("cache entries must contain matching non-empty K/V layers")
+
+    layers = []
+    for layer in range(layer_count):
+        keys = []
+        values = []
+        reference_shape = None
+        for entry in entries:
+            if len(entry.k_per_layer) != layer_count or len(entry.v_per_layer) != layer_count:
+                raise ValueError("cache entries have different layer counts")
+            key = entry.k_per_layer[layer]
+            value = entry.v_per_layer[layer]
+            if key.shape != value.shape or key.ndim != 4:
+                raise ValueError("each cache layer must contain shape-matched rank-4 K/V")
+            if key.shape[-2] != entry.doc_len:
+                raise ValueError("cache entry doc_len does not match its K/V sequence length")
+            shape = (*key.shape[:-2], key.shape[-1])
+            if reference_shape is None:
+                reference_shape = shape
+            elif shape != reference_shape:
+                raise ValueError("cache entries have incompatible K/V shapes")
+            keys.append(key.to(device))
+            values.append(value.to(device))
+        layers.append((torch.cat(keys, dim=-2), torch.cat(values, dim=-2)))
+    return DynamicCache.from_legacy_cache(tuple(layers))
+
+
+def forward_query_with_doc_cache(
+    model: PreTrainedModel,
+    query_ids: torch.Tensor,
+    entries: list[CacheEntry],
+) -> Any:
+    """Prefill a query against real assembled per-document K/V blocks."""
+    doc_lengths = [entry.doc_len for entry in entries]
+    query_len = int(query_ids.shape[-1])
+    doc_total = sum(doc_lengths)
+    cache = assemble_dynamic_cache(entries, model.device)
+    positions = build_positions(doc_lengths, query_len, 0, "restart")
+    query_positions = positions[doc_total:].unsqueeze(0).to(model.device)
+    cache_position = torch.arange(
+        doc_total, doc_total + query_len, dtype=torch.long, device=model.device
+    )
+    allow = build_mask(doc_lengths, query_len, 0, "ddi_qf")
+    additive = (
+        to_additive(allow[doc_total:, :], dtype=model.dtype)
+        .to(model.device)
+        .unsqueeze(0)
+        .unsqueeze(0)
+    )
+    with torch.no_grad():
+        return model(
+            input_ids=query_ids.to(model.device),
+            attention_mask=additive,
+            position_ids=query_positions,
+            cache_position=cache_position,
+            past_key_values=cache,
+            use_cache=True,
+        )
+
+
+def generate_tokens_with_doc_cache(
+    model: PreTrainedModel,
+    tokenizer: PreTrainedTokenizerBase,
+    query_ids: torch.Tensor,
+    entries: list[CacheEntry],
+    max_new_tokens: int,
+) -> list[int]:
+    """Greedy-decode from independently cached restart-layout documents."""
+    doc_lengths = [entry.doc_len for entry in entries]
+    query_len = int(query_ids.shape[-1])
+    prefix_len = sum(doc_lengths) + query_len
+    allow = build_mask(doc_lengths, query_len, max_new_tokens, "ddi_qf")
+    additive = to_additive(allow, dtype=model.dtype).to(model.device)
+    positions = build_positions(doc_lengths, query_len, 0, "restart")
+    decode_start = int(positions[-1].item()) + 1
+    out = forward_query_with_doc_cache(model, query_ids, entries)
+    past = out.past_key_values
+    next_token = out.logits[0, -1].argmax(dim=-1, keepdim=True).unsqueeze(0)
+    generated = []
+    with torch.no_grad():
+        for i in range(max_new_tokens):
+            token_id = int(next_token.item())
+            generated.append(token_id)
+            if tokenizer.eos_token_id is not None and token_id == tokenizer.eos_token_id:
+                break
+            kv_len = prefix_len + i + 1
+            step_mask = additive[prefix_len + i, :kv_len].clone().reshape(1, 1, 1, kv_len)
+            step = model(
+                input_ids=next_token,
+                attention_mask=step_mask,
+                position_ids=torch.tensor(
+                    [[decode_start + i]], dtype=torch.long, device=model.device
+                ),
+                cache_position=torch.tensor(
+                    [prefix_len + i], dtype=torch.long, device=model.device
+                ),
+                past_key_values=past,
+                use_cache=True,
+            )
+            past = step.past_key_values
+            next_token = step.logits[0, -1].argmax(dim=-1, keepdim=True).unsqueeze(0)
+    return generated
 
 
 def compute_doc_kv(

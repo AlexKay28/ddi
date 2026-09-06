@@ -125,7 +125,7 @@ remain out of scope per [#82](https://github.com/AlexKay28/ddi/issues/82).
 |---|---|---|
 | **C1** | Quality estimates under `ddi_qf` and `full` | The matched Qwen/Llama study uses three trained seeds and frozen manifests; neither architecture reaches natural-QA parity, and the sole valid architecture contrast establishes no practical difference. Other legacy rows remain single-run estimates |
 | **C3** | Analytical cost versus qualified timing observations | SDPA has no sparsity benefit from a 4D mask; archived batch-1 flex observations are not model-level or batched-throughput evidence |
-| **C4** | Cache correctness, sequential cache throughput, and a restart control | The corrected restart control is single-run and not a parity conclusion |
+| **C4** | End-to-end per-document cache reuse and a restart control | Exact short greedy generation is validated for original, reordered, and partial-hit requests; numerical logit identity and production-shape throughput remain open. The historical 1.72x result did not consume cached KV and is withdrawn |
 
 ### Fine-tuning is in scope, and is the current campaign
 

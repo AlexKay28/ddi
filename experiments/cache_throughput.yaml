@@ -27,14 +27,12 @@ doc_token_len: 500      # tokens per document — this is the real "L"
 
 # Sweeping the document count needs one invocation per point, e.g.
 #   python -m ddi.run experiments/cache_throughput.yaml --model <id> --set docs_per_request=9
-# because the runner takes a scalar, not a list. Note before you do: `docs_per_request`,
-# `doc_token_len` and `top_docs` are NOT in the phase4_throughput run_id, so two such runs
-# land in the same aggregator cell and get averaged. Adding them to the run_id
-# (ddi/run.py::_cache_throughput) is the prerequisite for a real sweep.
+# because the runner takes a scalar, not a list. The generated run ID carries every request
+# dimension in its `reuse=` arm, keeping these invocations in distinct aggregate cells.
 
-# `rows: mode` / `cols: N` dropped: nothing read them, and `cols: N` was doubly wrong --
-# there is no N axis in these rows at all. The body is `{model: {mode: {arm: value}}}`
-# where `arm` is `{layout}/reuse={reuse}`, the only axis the run_id actually carries.
+# Shape is encoded in the `reuse=` arm as `top=...,N=...,L=...,Q=...,A=...`, so runs with
+# different request shapes no longer collapse into one aggregate cell. The body is
+# `{model: {mode: {arm: value}}}` where `arm` contains layout, reuse, and request shape.
 report:
   tables:
     - kind: throughput

@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 import torch
 
-from ddi.cache import CacheEntry, DocCache, compute_key
+from ddi.cache import CacheEntry, DocCache, assemble_dynamic_cache, compute_key
 
 
 def _fake_entry(key: str, doc_len: int = 4, num_layers: int = 2) -> CacheEntry:
@@ -59,9 +59,9 @@ def test_cache_put_then_get_roundtrips(tmp_path: Path) -> None:
     assert got.doc_len == entry.doc_len
     assert got.layout == entry.layout
     assert len(got.k_per_layer) == 2
-    for a, b in zip(got.k_per_layer, entry.k_per_layer):
+    for a, b in zip(got.k_per_layer, entry.k_per_layer, strict=True):
         assert torch.equal(a, b)
-    for a, b in zip(got.v_per_layer, entry.v_per_layer):
+    for a, b in zip(got.v_per_layer, entry.v_per_layer, strict=True):
         assert torch.equal(a, b)
 
 
@@ -76,10 +76,45 @@ def test_cache_size_counts_files(tmp_path: Path) -> None:
 def test_has_matches_get(tmp_path: Path) -> None:
     cache = DocCache(tmp_path)
     assert cache.has("k1") == (cache.get("k1") is not None)
-
     cache.put(_fake_entry(key="k1"))
     assert cache.has("k1") is True
     assert cache.has("k1") == (cache.get("k1") is not None)
+
+
+def test_assemble_dynamic_cache_preserves_request_order() -> None:
+    first = _fake_entry("first", doc_len=2)
+    second = _fake_entry("second", doc_len=3)
+    second = CacheEntry(
+        key=second.key,
+        k_per_layer=[tensor + 10 for tensor in second.k_per_layer],
+        v_per_layer=[tensor + 10 for tensor in second.v_per_layer],
+        doc_len=second.doc_len,
+        layout=second.layout,
+    )
+    cache = assemble_dynamic_cache([second, first], torch.device("cpu"))
+    assert cache.get_seq_length() == 5
+    assert torch.equal(cache.key_cache[0][..., :3, :], second.k_per_layer[0])
+    assert torch.equal(cache.key_cache[0][..., 3:, :], first.k_per_layer[0])
+
+
+def test_assemble_dynamic_cache_requires_restart_entries() -> None:
+    entry = _fake_entry("sequential")
+    entry = CacheEntry(
+        key=entry.key,
+        k_per_layer=entry.k_per_layer,
+        v_per_layer=entry.v_per_layer,
+        doc_len=entry.doc_len,
+        layout="sequential",
+    )
+    with pytest.raises(ValueError, match="restart-layout"):
+        assemble_dynamic_cache([entry], torch.device("cpu"))
+
+
+def test_assemble_dynamic_cache_rejects_empty_sentinels() -> None:
+    with pytest.raises(ValueError, match="non-empty"):
+        assemble_dynamic_cache(
+            [CacheEntry("empty", [], [], 0, "restart")], torch.device("cpu")
+        )
 
 
 def test_atomic_write_via_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
