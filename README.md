@@ -8,7 +8,7 @@ Research code for **DDI (Decoupled Document Inference)**: making RAG-style prefi
 > three evidence areas — **C1** (quality estimates, including a fixed-manifest
 > three-seed transfer study), **C3**
 > (analytical cost and qualified timing observations), **C4** (cache tests and
-> a sequential-layout throughput estimate). See
+> a restart-layout throughput estimate). See
 > [`paper/RESEARCH_PLAN.md`](paper/RESEARCH_PLAN.md) for the research design and
 > [`experiments/README.md`](experiments/README.md) for what runs.
 
@@ -48,7 +48,8 @@ Two properties make this attractive:
 - **Sparsity → cost model.** The block-diagonal mask removes attended pairs from the analytical
   prefill count. Archived batch-1 flex timings are not validated model-throughput results.
 - **Cacheability hypothesis.** Under the restart-layout assumptions, document KV blocks can be
-  content-addressable. The reported throughput estimate is limited to the sequential cache harness.
+  content-addressable. The reported throughput estimate is limited to one corrected restart-layout
+  harness and request shape.
 
 ### Mask variants
 
@@ -205,11 +206,11 @@ enough for steps 2 and 3.
 **2. Check the code imports and the units pass.**
 
 ```bash
-make test       # 441 passed, 27 skipped, 2 failed as of 2026-08-08
+make test       # 535 passed, 28 skipped as of 2026-09-06
 ```
 
-The two failures are `tests/test_provenance.py` and are environmental: they shell out to
-`git`, and an Arcadia checkout has no `.git`. Everything else must pass.
+Network-, CUDA-, and real-model integration tests are skipped unless explicitly enabled;
+the default suite must otherwise pass.
 
 **3. Run the pipeline end to end, on CPU, in ten seconds.**
 

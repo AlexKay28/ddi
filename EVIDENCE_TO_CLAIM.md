@@ -28,6 +28,12 @@ CPU handoff and to GPU work that follows it.
   frozen held-out manifests, per-example outputs, checkpoint revision
   provenance, and seed-independent aggregation identities.
 - Cache gap-closing work and intermediate gates are tracked in `VIBEQUEUE-51`.
+- The preregistered VIBEQUEUE-52 seed-0 remediation pilot stopped after DDI F1
+  regressed by 0.121 on hotpot_qa and 0.041 on musique relative to the matched
+  V46 seed-0 checkpoint. It is not a deciding quality cell: the source tree was
+  dirty at run time, the stopped checkpoint was removed after hashing, and no
+  three-seed expansion or paired bootstrap ran. Architecture breadth remains
+  assigned to VIBEQUEUE-48.
 
 ## Evidence Required For Any Gate
 

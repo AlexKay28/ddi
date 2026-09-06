@@ -1,11 +1,12 @@
-% Non-inferiority margin Δ from 3-seed baseline. Source: results/sprint_a_baseline.jsonl
+% Descriptive baseline spread. Source: results/sprint_a_baseline.jsonl
+% (local, not tracked). Intervals use unrounded seed means.
 \begin{tabular}{lcccccc}
 \toprule
 dataset & metric & seed 0 & seed 1 & seed 2 & $3\sigma$ spread & descriptive 95\% t-interval \\
 \midrule
 hotpot\_qa & EM & 0.57 & 0.45 & 0.46 & 0.200 & [0.328, 0.659] \\
-hotpot\_qa & F1 & 0.700 & 0.626 & 0.631 & 0.123 & [0.550, 0.755] \\
+hotpot\_qa & F1 & 0.700 & 0.626 & 0.631 & 0.123 & [0.550, 0.754] \\
 musique & EM & 0.29 & 0.25 & 0.20 & 0.135 & [0.135, 0.359] \\
-musique & F1 & 0.377 & 0.368 & 0.309 & 0.112 & [0.260, 0.443] \\
+musique & F1 & 0.377 & 0.368 & 0.309 & 0.112 & [0.259, 0.444] \\
 \bottomrule
 \end{tabular}

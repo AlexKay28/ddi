@@ -17,8 +17,8 @@ explicitly.
 \begin{table}[t]
 \centering
 \caption{Models. Qwen2.5-7B-Instruct is the primary study. Llama-3.1-8B uses
-    the matched three-seed transfer protocol. Scale
-    ablations are not reported.}
+    the matched three-seed transfer protocol. Qwen2.5-1.5B appears only as a
+    legacy single-run train-free estimate; larger-scale cells were not run.}
 \label{tab:models}
 \begin{tabular}{@{}llll@{}}
 \toprule
@@ -26,8 +26,8 @@ Model & Role & Status & Notes \\
 \midrule
 Qwen2.5-7B-Instruct     & Primary   & \textbf{done}   & Three-seed transfer study \\
 Llama-3.1-8B-Instruct   & Replication & \textbf{done} & Matched three-seed study \\
-Qwen2.5-1.5B-Instruct   & Ablation & planned        & Scale trend \\
-Qwen2.5-14B/32B         & Scale     & planned        & Scale trend at larger size \\
+Qwen2.5-1.5B-Instruct   & Ablation & descriptive    & Single-run train-free estimate \\
+Qwen2.5-14B/32B         & Scale     & not run        & Open breadth work (VIBEQUEUE-48) \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -103,12 +103,13 @@ Four discipline rules apply to every experiment
 (issue~\href{https://github.com/AlexKay28/ddi/issues/1}{\#1}):
 (1)~every result row is written to the append-only store with full
 provenance (git SHA, config, seed, dataset hash, model revision);
-(2)~a number that is not in the store cannot appear in the paper --- every
-table and figure in Sections~\ref{sec:results-quality}--\ref{sec:results-caching}
-is rendered from \texttt{results/runs.jsonl} by \texttt{ddi.report};
+(2)~every empirical number must identify its evidence source and claim
+boundary. The checked-in tables are currently hand-audited artifacts rather
+than renderer output; several cited historical stores are not tracked, so a
+clean checkout cannot regenerate them. Reproducible rendering is tracked by
+VIBEQUEUE-50;
 (3)~one mask definition, one implementation, no re-implementations across
 files; (4)~$\Delta$ is fixed from the full baseline before any DDI number
-is interpreted (Section~\ref{sec:method-delta}). Ground rule~(2) is the
-mechanism by which this preprint's numbers are not hand-typed: an empty
-store surfaces as an explicit TODO stub in the compiled PDF, and no other
-path exists to place a numerical claim in the document.
+is interpreted (Section~\ref{sec:method-delta}). An absent checked-in artifact
+surfaces as an explicit TODO stub; this does not substitute for preserving its
+raw source.

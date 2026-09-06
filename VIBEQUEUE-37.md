@@ -75,3 +75,11 @@ token-argmax agreement is `92.5%`. The batched `BlockMask` unit and raw-kernel
 checks establish mask and kernel behavior only; they do not establish model
 parity. Consequently no batch-throughput number is reported, including for a
 smaller shape, until full-model parity passes for the exact batched path.
+
+## VIBEQUEUE-47 Superseding Diagnostic
+
+The aggregate VIBEQUEUE-40/44 proxy values above are historical. The current
+per-mask diagnostic on torch 2.13.0+cu126 reports cosine/argmax agreement of
+`0.993342`/`87.19%` for `full`, `0.998553`/`95.00%` for `ddi_qf`, and
+`0.998701`/`94.38%` for `blind`. All three fail the required 0.999 cosine and
+100% argmax gates, so the blocker and no-throughput disposition are unchanged.

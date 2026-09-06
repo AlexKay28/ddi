@@ -5,9 +5,11 @@ raw-kernel observations into parity or serving claims.
 
 ## Current state (2026-09-06) - end-to-end cache path corrected
 
-- C1 quality: Qwen quality values are single-run estimates. The observed hotpot
-  cells include 0.46 versus 0.46 (sequential) and 0.39 versus 0.40 (mixed),
-  but neither is a parity conclusion.
+- C1 quality: the matched three-seed Qwen/Llama transfer study reaches no
+  natural-QA parity gate. Its sole valid architecture contrast is musique F1:
+  Llama minus Qwen normalized closure is 0.028 with a 95% equal-seed bootstrap
+  interval of [-0.085, 0.179], which establishes no practical architecture
+  difference. Older Qwen cells remain single-run estimates.
 - C3 compute: archived batch-1 flex prefill timings show a speed signal, but
   no current flex model-throughput claim is admitted: the full-model parity
   gate fails at `N=2,L=128` before the direct sparse or batched path is timed.
@@ -23,6 +25,14 @@ raw-kernel observations into parity or serving claims.
   hotpot_qa records. It invalidates the legacy restart wall but does not establish
   parity. Dynamic NTK scaling is inactive: maximum position 4,720 is
   below the 32,768 threshold.
+- Follow-up remediation: the preregistered one-seed VIBEQUEUE-52 pilot stopped
+  after DDI F1 regressed by 0.121 on hotpot_qa and 0.041 on musique relative to
+  the matched V46 seed-0 checkpoint. It is campaign bookkeeping, not a deciding
+  quality cell: the run used a dirty working tree, the checkpoint was removed,
+  and the planned three-seed expansion and paired bootstrap did not run.
+- Research completion: VIBEQUEUE-48 (quality breadth/power), VIBEQUEUE-49
+  (validated compiled timing), and VIBEQUEUE-50 (reproducible paper rendering)
+  remain open. The research program is therefore not complete.
 
 ## Results summary
 

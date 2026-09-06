@@ -10,7 +10,7 @@
 %      cross-document attention can be removed, and what does removing it
 %      buy? (RESEARCH_PLAN §12.)
 %
-% Regenerate + compile:  make paper
+% Compile checked-in artifacts:  ./paper/build.sh
 % =====================================================================
 
 \documentclass[11pt]{article}
@@ -42,8 +42,8 @@
 %
 % \todoreport{human message}{regeneration hint}
 %   Rendered in place of any table / figure the store cannot yet
-%   populate. paper/build.sh emits stubs that call this macro so the
-%   compiled PDF advertises exactly which sweep unblocks each cell.
+%   populate. Sections call this macro when a checked-in artifact is absent so
+%   the compiled PDF advertises exactly which sweep unblocks each cell.
 % =====================================================================
 \newcommand{\todoreport}[2]{%
     \begin{center}%
@@ -74,7 +74,7 @@
             \label{#3}%
         \end{figure}%
     }{%
-        \todoreport{figure \texttt{#1} missing}{make paper}%
+        \todoreport{figure \texttt{#1} missing}{./paper/build.sh}%
     }%
 }
 
@@ -122,14 +122,14 @@ On the 100-record hotpot_qa control, explicit positions propagated through
 cached decode yield a single-run estimate of 0.47 restart versus 0.45
 sequential EM. The legacy evaluator omitted those decode positions, so neither
 its apparent restart wall nor its RoPE-base interpretation is evidence.
-Table sources are identified in their generated artifacts; missing inputs are
-surfaced as explicit TODOs.
+Generated artifacts identify their source paths. Several historical raw sources
+are not tracked, so reproducible rendering remains open work rather than a claim
+of this preprint.
 \end{abstract}
 
 % ---------------------------------------------------------------------
 % Body — every section is a separate .tex under sections/. Keep the
-% split so a section can be regenerated / re-reviewed independently
-% and so build.sh's re-render step does not touch the prose.
+% split so a section can be reviewed independently from checked-in artifacts.
 % ---------------------------------------------------------------------
 \input{sections/00_intro.tex}
 \input{sections/01_related_work.tex}

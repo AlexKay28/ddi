@@ -23,8 +23,9 @@ objects is the path forward, but requires per-sample block masks for
 variable-length documents across the batch --- non-trivial because
 \texttt{create\_block\_mask} produces a single pattern, not a batched
 one. More importantly, the current full-model flex parity gate fails even at
-the smaller proxy shape $N{=}2$, $\ell{=}128$, $Q{=}64$: cosine similarity is
-0.9989066 against a required 0.999 and token-argmax agreement is 92.5\%.
+the smaller proxy shape $N{=}2$, $\ell{=}128$, $Q{=}64$. The full/DDI/blind
+cosine similarities are 0.993342/0.998553/0.998701 against a required 0.999,
+and token-argmax agreements are 87.19\%/95.00\%/94.38\% against 100\%.
 Thus the raw batched-kernel checks and archived batch-1 prefill timings do not
 support an end-to-end batch-throughput claim at any shape. As stated, the
 reported efficiency numbers are for the single-request setting; server-side
@@ -34,7 +35,7 @@ model parity passes.
 \paragraph{Preprint scope.}
 This preprint covers retrieval quality (C1) on Qwen2.5-7B-Instruct, including
 self-distillation finetuning to reduce the mask quality gap. TTFT / archived
-timing observations (C3) and sequential-layout KV-cache measurements (C4) are
+timing observations (C3) and restart-layout KV-cache measurements (C4) are
 reported on the same model. The restart position layout is intended to enable
 position-independent KV blocks for caching;
 its generation evaluation must propagate the same explicit positions through
@@ -55,8 +56,8 @@ universal transfer.
 \paragraph{Uncertainty of quality comparisons.}
 The legacy Qwen full-causal baseline has three seed-selected splits with
 descriptive intervals: three 100-record splits yield 95\% t-intervals of
-[0.328, 0.659] and [0.550, 0.755] for hotpot EM and F1, and [0.135, 0.359]
-and [0.260, 0.443] for musique EM and F1. These intervals describe the mean
+[0.328, 0.659] and [0.550, 0.754] for hotpot EM and F1, and [0.135, 0.359]
+and [0.259, 0.444] for musique EM and F1. These intervals describe the mean
 full-baseline score across those splits only. The matched transfer study
 separately records fixed held-out IDs, paired per-example outcomes, and three
 independently trained checkpoints per architecture, and applies its

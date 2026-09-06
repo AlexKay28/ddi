@@ -117,3 +117,27 @@ are not full-model parity, end-to-end, or batched-throughput evidence. The resta
 control invalidates the earlier restart-wall and RoPE interpretations but does not
 establish parity. Only the four Qwen full-baseline descriptive t-intervals are CIs;
 all other quality values remain single-run estimates.
+
+## 2026-09-06: evidence and paper reproducibility audit
+
+The paper workflow had split into three contradictory states: prose promised
+automatic generation, `paper/build.sh` documented manual artifacts, and a stale
+`paper/render.py` expected absent summary files while producing incompatible
+tables and figures. The stale renderer and duplicate generated-directory build
+script were retired. VIBEQUEUE-50 remains open because the raw stores behind
+T2--T6 are local ignored files; only T7 and the F5 aggregate have tracked source
+evidence sufficient for a clean-checkout audit.
+
+The audit corrected the T4 restart-tuned hotpot delta from +0.03 to -0.03,
+identified the actual T4-16L 100-record source, recomputed T6 F1 intervals from
+unrounded seed means, aligned T3 prose with its TTFT/TPOT/sparsity columns, and
+removed F3 from the manuscript because its archived PDF has no matching tracked
+source and disagrees with the retired renderer. Flex proxy values now report all
+three failed mask arms from VIBEQUEUE-47 rather than an older aggregate value.
+
+VIBEQUEUE-52 is retained only as campaign bookkeeping. Its preregistered seed-0
+pilot stopped after DDI F1 regressed by 0.121 on hotpot_qa and 0.041 on musique,
+but it is not a deciding paper cell: the run used a dirty tree, its checkpoint
+was removed after hashing, and three-seed expansion and paired bootstrap did not
+run. VIBEQUEUE-48, VIBEQUEUE-49, and VIBEQUEUE-50 remain open, so the research
+program is not complete.
