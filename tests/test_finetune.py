@@ -91,6 +91,44 @@ def test_linear_warmup_lr() -> None:
     assert ddi_finetune._linear_warmup_lr(0, warmup_steps=0, base_lr=0.5) == 0.5
 
 
+def test_answer_kl_is_zero_for_identical_logits() -> None:
+    logits = torch.tensor([[[1.0, 2.0], [3.0, -1.0]]])
+    assert ddi_finetune._answer_kl(logits, logits, temperature=2.0) == pytest.approx(
+        0.0, abs=1e-7
+    )
+
+
+def test_teacher_first_token_ce_uses_teacher_argmax() -> None:
+    student = torch.tensor([[[0.0, 4.0, 0.0], [9.0, 0.0, 0.0]]])
+    teacher = torch.tensor([[[0.0, 3.0, 1.0], [0.0, 0.0, 8.0]]])
+    expected = torch.nn.functional.cross_entropy(
+        student[:, 0, :], torch.tensor([1])
+    )
+    assert ddi_finetune._teacher_first_token_ce(student, teacher) == expected
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["teacher_first_token_weight", "full_anchor_weight", "blind_anchor_weight"],
+)
+def test_finetune_rejects_negative_objective_weight(
+    tmp_path: Path, name: str
+) -> None:
+    from ddi.provenance import Provenance
+
+    prov = Provenance(
+        git_sha="x", dirty=False, config_hash="x", seed=0,
+        model_revision="x", dataset_revision="x",
+        gpu_model="cpu", driver_version="x", cuda_version="x",
+        torch_version="x", timestamp_utc="x",
+    )
+    with pytest.raises(ValueError, match=f"{name} must be >= 0"):
+        ddi_finetune.finetune(
+            "irrelevant", ["ds"], tmp_path / "out", seed=0,
+            provenance=prov, store_path=tmp_path / "runs.jsonl", **{name: -1.0},
+        )
+
+
 def test_finetune_rejects_empty_datasets(tmp_path: Path) -> None:
     from ddi.provenance import Provenance
 

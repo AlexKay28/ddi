@@ -1,0 +1,26 @@
+# Frozen matched evaluation from VIBEQUEUE-52-PROTOCOL.md.
+kind: quality
+seed: 0
+model: Qwen/Qwen2.5-7B-Instruct
+checkpoint: results/checkpoints/Qwen__Qwen2.5-7B-Instruct__ddi_qf__v52_r1_pilot_seed0
+evaluation_model: Qwen2.5-7B-Instruct__v52_r1_pilot
+datasets: [hotpot_qa, musique, synthetic_qa]
+masks: [full, ddi_qf, blind]
+max_records: 100
+max_new_tokens: 64
+metrics: [em, f1, presence, loss]
+heldout_manifest: results/transfer_heldout
+heldout_manifest_mode: verify
+output_store: results/transfer_qwen_v52_r1_pilot_seed0.jsonl
+predictions_store: results/transfer_qwen_v52_r1_pilot_seed0_predictions.jsonl
+
+report:
+  tables:
+    - kind: quality
+      metric: em
+    - kind: quality
+      metric: f1
+    - kind: quality
+      metric: presence
+    - kind: quality
+      metric: loss

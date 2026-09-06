@@ -1,0 +1,109 @@
+{
+  "candidate": "R1-first-token-anchors",
+  "checkpoint": {
+    "logical_path": "results/checkpoints/Qwen__Qwen2.5-7B-Instruct__ddi_qf__v52_r1_pilot_seed0",
+    "index_sha256": "6f59cd2c7706d148a0ebe5f20922238df779cd96ab5c02ad110ba912193e89d3",
+    "shards": {
+      "model-00001-of-00004.safetensors": "9ff3b270cb6b8ce8a059a43678cebaefb7aa2a3b587aadc5a4e2f6c1e4d13a28",
+      "model-00002-of-00004.safetensors": "854698ca4d7581b9fd40f5da9176b010422194ec26cab3abd907ff21e477d1ca",
+      "model-00003-of-00004.safetensors": "69c44c067c1fcb8aa01352edd3ac83d7419afd07ed66412197e0ca497f6b517d",
+      "model-00004-of-00004.safetensors": "06006972c3be88e8a44fe21cfe2b0472b130780c781a741f8f90f1fe5ba3aae2"
+    }
+  },
+  "configs": {
+    "protocol_sha256": "d58f4b56efbbd175e4a428bfc19b627db61eec3421b873dcf4c73736311635e6",
+    "training_sha256": "5820fcada2ddd7c68f2d231017135a56ffca9e917b8299ab538de148fa7f762c",
+    "evaluation_sha256": "26f622d44ba5c3d267fa5c9af2607e871160a0e4c759315fb32210a5c24f1bb1"
+  },
+  "evaluation": {
+    "hotpot_qa": {
+      "blind": {"em": 0.15, "f1": 0.2828145514616103, "loss": 2.4822865295410157, "presence": 0.19},
+      "ddi_qf": {"em": 0.35, "f1": 0.47744444444444445, "loss": 0.9360911560058593, "presence": 0.37},
+      "full": {"em": 0.58, "f1": 0.7020912698412698, "loss": 0.8098386242985726, "presence": 0.62}
+    },
+    "musique": {
+      "blind": {"em": 0.04, "f1": 0.11220764790764791, "loss": 3.450240173339844, "presence": 0.05},
+      "ddi_qf": {"em": 0.12, "f1": 0.21076096387272858, "loss": 1.4769287109375, "presence": 0.16},
+      "full": {"em": 0.28, "f1": 0.3841950883818185, "loss": 1.473343620300293, "presence": 0.34}
+    },
+    "synthetic_qa": {
+      "blind": {"em": 0.0, "f1": 0.0, "loss": 2.057421875, "presence": 0.0},
+      "ddi_qf": {"em": 1.0, "f1": 1.0, "loss": 0.000012399256229400635, "presence": 1.0},
+      "full": {"em": 1.0, "f1": 1.0, "loss": 0.000001542014069855213, "presence": 1.0}
+    }
+  },
+  "gate": {
+    "required_ddi_f1_improvement": 0.03,
+    "hotpot_qa": {
+      "ddi_f1_change_vs_v46_tuned": -0.12135830455840463,
+      "full_f1_change_vs_base": 0.002557319985945455,
+      "blind_f1_change_vs_base": 0.030366598486039448,
+      "f1_delta": 0.08217024515937857,
+      "pass": false
+    },
+    "musique": {
+      "ddi_f1_change_vs_v46_tuned": -0.04089442461992206,
+      "full_f1_change_vs_base": 0.006800525407202666,
+      "blind_f1_change_vs_base": 0.002990383590383588,
+      "f1_delta": 0.07457484051439973,
+      "pass": false
+    },
+    "verdict": "STOP_PILOT_DDI_F1_REGRESSION"
+  },
+  "inputs": {
+    "base_seed0_predictions": {
+      "path": "results/r5b1_qwen25_7b_base_seed0_20260902T1059Z_predictions.jsonl",
+      "sha256": "de4d3f2c7a5dda0806695342612ee19fe1889d697e687ed28a7d8107113842a2"
+    },
+    "v46_tuned_seed0_predictions": {
+      "path": "results/transfer_qwen_tuned_seed0_predictions.jsonl",
+      "sha256": "977c823e86059336a14df10ea1182e991d3bf9c2ae3e1d9b2b24e90d41e21c0c"
+    }
+  },
+  "limitations": {
+    "aggregate_parity": "unavailable: pilot stopped before three-seed expansion",
+    "paired_bootstrap": "unavailable: pilot is one preregistered seed",
+    "llama_transfer": "out of scope; retained for VIBEQUEUE-48"
+  },
+  "provenance": {
+    "dirty_at_run": true,
+    "evaluation_config_hash": "26f622d44ba5c3d2",
+    "gpu_model": "NVIDIA A100 80GB PCIe",
+    "source_git_sha": "bdd3c60db0f041fb86cf0178144789dbbcbae517",
+    "torch_version": "2.13.0+cu126",
+    "training_config_hash": "5820fcada2ddd7c6"
+  },
+  "stores": {
+    "failed_save_attempt1": {
+      "path": "results/finetune_qwen_v52_r1_pilot_seed0.failed_save_attempt1.jsonl",
+      "rows": 143,
+      "sha256": "28a96e7d18398282bd7154ccfd1d07258b03fab7d113f48db5f11be695fa77ff"
+    },
+    "training": {
+      "path": "results/finetune_qwen_v52_r1_pilot_seed0.jsonl",
+      "rows": 143,
+      "sha256": "8e915456a1973bc98b466e61d1fe245ec437c40ba6e9cabb2491b6ba20ec0c9c"
+    },
+    "evaluation_metrics": {
+      "path": "results/transfer_qwen_v52_r1_pilot_seed0.jsonl",
+      "rows": 2640,
+      "sha256": "2723f2ef14e6da248f4e1667a1f1f7af23d5d51aa5aedac31ed4528b0d9aef81"
+    },
+    "evaluation_predictions": {
+      "path": "results/transfer_qwen_v52_r1_pilot_seed0_predictions.jsonl",
+      "rows": 660,
+      "sha256": "2db91a14e98871f8c6806fb16dd25109a4487446300785051203a0d26d276243"
+    }
+  },
+  "training": {
+    "attempts": 2,
+    "attempt1_status": "checkpoint_save_failed_after_training",
+    "attempt2_elapsed_seconds": 2812.5,
+    "optimizer_steps": 475,
+    "perplexity_student_ddi_qf_post": 2.8010829751162505,
+    "perplexity_student_ddi_qf_pre": 7.249452724022907,
+    "perplexity_teacher_full": 4.01316709057483,
+    "records": 1900,
+    "skipped_steps_reported": 0
+  }
+}

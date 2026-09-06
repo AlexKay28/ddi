@@ -2,7 +2,8 @@
 
 Teacher = base model + ``full`` causal mask (frozen).
 Student = base model + ``ddi_qf`` mask (same weights, only mask differs).
-Loss    = temperature-scaled KL divergence on answer-position logits.
+Loss    = temperature-scaled KL divergence on answer-position logits, with
+          optional first-token and control-path anchors.
 
 Goal is the "does training under ddi_qf close the C1 quality gap?" experiment.
 This module is intentionally minimal — one function, one loop, no scheduler
@@ -123,6 +124,31 @@ def _build_additive(
     return to_additive(allow, dtype=dtype).to(device).unsqueeze(0).unsqueeze(0)
 
 
+def _answer_kl(
+    student_logits: torch.Tensor,
+    teacher_logits: torch.Tensor,
+    temperature: float,
+) -> torch.Tensor:
+    """Mean temperature-scaled KL over answer positions."""
+    log_p_student = torch.nn.functional.log_softmax(
+        student_logits / temperature, dim=-1
+    )
+    p_teacher = torch.nn.functional.softmax(teacher_logits / temperature, dim=-1)
+    return torch.nn.functional.kl_div(
+        log_p_student.reshape(-1, log_p_student.shape[-1]),
+        p_teacher.reshape(-1, p_teacher.shape[-1]),
+        reduction="batchmean",
+    ) * (temperature ** 2)
+
+
+def _teacher_first_token_ce(
+    student_logits: torch.Tensor, teacher_logits: torch.Tensor
+) -> torch.Tensor:
+    """CE against the full teacher's greedy first answer token."""
+    target = teacher_logits[:, 0, :].argmax(dim=-1)
+    return torch.nn.functional.cross_entropy(student_logits[:, 0, :], target)
+
+
 def _maybe_grad_checkpoint(model) -> None:
     """Enable HF gradient checkpointing on the student if ``DDI_GRAD_CHECKPOINT=1``.
 
@@ -177,8 +203,8 @@ def _decoder_layers(model) -> tuple[str, torch.nn.ModuleList]:
     name, layers = max(candidates, key=lambda kv: sum(p.numel() for p in kv[1].parameters()))
     if len(candidates) > 1:
         _log(
-            "found %d layer stacks (%s); training in %s, the largest"
-            % (len(candidates), ", ".join(n for n, _ in candidates), name)
+            f"found {len(candidates)} layer stacks "
+            f"({', '.join(n for n, _ in candidates)}); training in {name}, the largest"
         )
     return name, layers
 
@@ -396,6 +422,9 @@ def finetune(
     lr: float = 1e-5,
     weight_decay: float = 0.0,
     kl_temperature: float = 1.0,
+    teacher_first_token_weight: float = 0.0,
+    full_anchor_weight: float = 0.0,
+    blind_anchor_weight: float = 0.0,
     grad_accum_steps: int = 1,
     warmup_steps: int = 100,
     log_every: int = 50,
@@ -426,6 +455,14 @@ def finetune(
         raise ValueError(f"epochs must be >= 1, got {epochs}")
     if kl_temperature <= 0:
         raise ValueError(f"kl_temperature must be > 0, got {kl_temperature}")
+    objective_weights = {
+        "teacher_first_token_weight": teacher_first_token_weight,
+        "full_anchor_weight": full_anchor_weight,
+        "blind_anchor_weight": blind_anchor_weight,
+    }
+    for name, weight in objective_weights.items():
+        if weight < 0:
+            raise ValueError(f"{name} must be >= 0, got {weight}")
     if warmup_steps < 0:
         raise ValueError(f"warmup_steps must be >= 0, got {warmup_steps}")
     if max_steps is not None and max_steps < 1:
@@ -674,6 +711,11 @@ def finetune(
             additive_student = _build_additive(
                 doc_lengths, query_len, answer_len, student_variant, dtype, device
             )
+            additive_blind = (
+                _build_additive(doc_lengths, query_len, answer_len, "blind", dtype, device)
+                if blind_anchor_weight > 0
+                else None
+            )
 
             # Mixed-layout training: coin flip per record between sequential/restart.
             # Teacher always uses sequential positions (frozen reference); the student
@@ -707,12 +749,16 @@ def finetune(
                     position_ids=teacher_positions,
                     use_cache=False,
                 )
-            student_out = student(
-                input_ids=full_ids,
-                attention_mask=additive_student,
-                position_ids=student_positions,
-                use_cache=False,
-            )
+                teacher_blind_out = (
+                    teacher(
+                        input_ids=full_ids,
+                        attention_mask=additive_blind,
+                        position_ids=teacher_positions,
+                        use_cache=False,
+                    )
+                    if additive_blind is not None
+                    else None
+                )
 
             # Next-token shift: logits at position t predict token t+1. The answer
             # region on the input axis is [T-answer_len, T); its predictive logits
@@ -721,34 +767,75 @@ def finetune(
             lo = T - answer_len - 1
             hi = T - 1
             teacher_ans = teacher_out.logits[:, lo:hi, :].float()
-            student_ans = student_out.logits[:, lo:hi, :].float()
-
-            T_temp = kl_temperature
-            log_p_student = torch.nn.functional.log_softmax(student_ans / T_temp, dim=-1)
-            p_teacher = torch.nn.functional.softmax(teacher_ans / T_temp, dim=-1)
-            # Mean over answer tokens; T^2 scale so LR is temperature-independent.
-            #
-            # The [1, L, V] logits are flattened to [L, V] first. `batchmean` divides by
-            # `input.shape[0]`, which on the unflattened tensor is the batch dim (always 1
-            # here) — so the loss was the *sum* over the L answer positions, not the mean,
-            # and the gradient scaled with answer length. Records with long answers
-            # therefore dominated every accumulation window (VIBEQUEUE-2 review, issue R5).
-            loss = torch.nn.functional.kl_div(
-                log_p_student.reshape(-1, log_p_student.shape[-1]),
-                p_teacher.reshape(-1, p_teacher.shape[-1]),
-                reduction="batchmean",
-            ) * (T_temp ** 2)
 
             # Under DDP, suppress gradient all-reduce on non-boundary micro-steps —
             # only the backward that immediately precedes optimizer.step() should
             # sync. Otherwise we'd pay world_size × grad_accum_steps all-reduces
             # per optimizer step instead of one (issue #123).
             will_step = (accum_since_step + 1) >= grad_accum_steps or is_last_record
-            sync_ctx = (
-                contextlib.nullcontext() if (will_step or not is_dist) else student.no_sync()
-            )
-            with sync_ctx:
-                (loss / grad_accum_steps).backward()
+            components: list[tuple[str, float, torch.Tensor, torch.Tensor, torch.Tensor]] = [
+                ("ddi_kl_loss", 1.0, additive_student, student_positions, teacher_ans)
+            ]
+            if full_anchor_weight > 0:
+                components.append(
+                    (
+                        "full_anchor_loss",
+                        full_anchor_weight,
+                        additive_teacher,
+                        teacher_positions,
+                        teacher_ans,
+                    )
+                )
+            if blind_anchor_weight > 0:
+                assert additive_blind is not None and teacher_blind_out is not None
+                components.append(
+                    (
+                        "blind_anchor_loss",
+                        blind_anchor_weight,
+                        additive_blind,
+                        teacher_positions,
+                        teacher_blind_out.logits[:, lo:hi, :].float(),
+                    )
+                )
+
+            component_values: dict[str, float] = {}
+            objective_value = 0.0
+            for component_i, (name, weight, mask, positions, target_logits) in enumerate(
+                components
+            ):
+                sync_this_backward = will_step and component_i == len(components) - 1
+                sync_ctx = (
+                    contextlib.nullcontext()
+                    if (sync_this_backward or not is_dist)
+                    else student.no_sync()
+                )
+                # Keep only one student activation graph resident at a time. With three
+                # objective paths, summing graph-bearing losses before backward can exceed
+                # an 80GB card even though each path fits independently.
+                with sync_ctx:
+                    student_out = student(
+                        input_ids=full_ids,
+                        attention_mask=mask,
+                        position_ids=positions,
+                        use_cache=False,
+                    )
+                    student_ans = student_out.logits[:, lo:hi, :].float()
+                    component_loss = _answer_kl(
+                        student_ans, target_logits, kl_temperature
+                    )
+                    weighted_loss = weight * component_loss
+                    if name == "ddi_kl_loss" and teacher_first_token_weight > 0:
+                        first_token_loss = _teacher_first_token_ce(student_ans, teacher_ans)
+                        component_values["teacher_first_token_loss"] = float(
+                            first_token_loss.detach().item()
+                        )
+                        weighted_loss = weighted_loss + (
+                            teacher_first_token_weight * first_token_loss
+                        )
+                    (weighted_loss / grad_accum_steps).backward()
+                value = float(component_loss.detach().item())
+                component_values[name] = value
+                objective_value += float(weighted_loss.detach().item())
             accum_since_step += 1
 
             if accum_since_step >= grad_accum_steps or is_last_record:
@@ -793,12 +880,22 @@ def finetune(
                     or global_step % log_every == 0
                 )
                 if should_log and is_main:
-                    loss_val = float(loss.detach().item())
                     step_rid = f"{run_prefix}:step={global_step}"
-                    append(step_rid, "kl_loss", loss_val, provenance, store=store_path)
+                    append(
+                        step_rid, "objective_loss", objective_value, provenance,
+                        store=store_path,
+                    )
+                    for metric, value in component_values.items():
+                        append(step_rid, metric, value, provenance, store=store_path)
+                    # Preserve the historical metric consumed by aggregate.py. It is the
+                    # DDI KL component; objective_loss is the weighted total for R1 runs.
+                    append(
+                        step_rid, "kl_loss", component_values["ddi_kl_loss"], provenance,
+                        store=store_path,
+                    )
                     append(step_rid, "lr", current_lr, provenance, store=store_path)
                     _log(
-                        f"step {global_step} loss={loss_val:.4f} lr={current_lr:.2e} "
+                        f"step {global_step} loss={objective_value:.4f} lr={current_lr:.2e} "
                         f"(epoch {epoch + 1}, rec {rec_i + 1}/{len(train_records)})"
                     )
 

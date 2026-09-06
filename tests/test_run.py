@@ -587,6 +587,8 @@ def test_finetune_dispatch_writes_expected_rows(
         f"output_dir: {output_dir}\n"
         "max_records: 4\nheld_out_frac: 0.25\nepochs: 2\n"
         "lr: 5.0e-5\nkl_temperature: 2.0\ngrad_accum_steps: 2\n"
+        "teacher_first_token_weight: 0.5\nfull_anchor_weight: 0.75\n"
+        "blind_anchor_weight: 1.25\n"
         "warmup_steps: 7\nlog_every: 10\n"
         f"output_store: {store}\n"
     )
@@ -602,6 +604,9 @@ def test_finetune_dispatch_writes_expected_rows(
     assert kw["epochs"] == 2
     assert kw["lr"] == 5e-5
     assert kw["kl_temperature"] == 2.0
+    assert kw["teacher_first_token_weight"] == 0.5
+    assert kw["full_anchor_weight"] == 0.75
+    assert kw["blind_anchor_weight"] == 1.25
     assert kw["grad_accum_steps"] == 2
     assert kw["warmup_steps"] == 7
     assert kw["log_every"] == 10

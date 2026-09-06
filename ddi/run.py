@@ -1481,6 +1481,9 @@ def run_finetune(cfg: dict[str, Any], cfg_hash: str, seed: int) -> None:
     lr = float(cfg.get("lr", 1e-5))
     weight_decay = float(cfg.get("weight_decay", 0.0))
     kl_temperature = float(cfg.get("kl_temperature", 1.0))
+    teacher_first_token_weight = float(cfg.get("teacher_first_token_weight", 0.0))
+    full_anchor_weight = float(cfg.get("full_anchor_weight", 0.0))
+    blind_anchor_weight = float(cfg.get("blind_anchor_weight", 0.0))
     grad_accum_steps = int(cfg.get("grad_accum_steps", 1))
     warmup_steps = int(cfg.get("warmup_steps", 100))
     log_every = int(cfg.get("log_every", 50))
@@ -1556,6 +1559,9 @@ def run_finetune(cfg: dict[str, Any], cfg_hash: str, seed: int) -> None:
             lr=lr,
             weight_decay=weight_decay,
             kl_temperature=kl_temperature,
+            teacher_first_token_weight=teacher_first_token_weight,
+            full_anchor_weight=full_anchor_weight,
+            blind_anchor_weight=blind_anchor_weight,
             grad_accum_steps=grad_accum_steps,
             warmup_steps=warmup_steps,
             log_every=log_every,
@@ -1685,6 +1691,9 @@ _SET_KEYS: dict[str, frozenset[str]] = {
         "lr",
         "weight_decay",
         "kl_temperature",
+        "teacher_first_token_weight",
+        "full_anchor_weight",
+        "blind_anchor_weight",
         "grad_accum_steps",
         "warmup_steps",
         "log_every",
