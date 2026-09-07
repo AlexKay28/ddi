@@ -663,9 +663,9 @@ def _timing_cell(
         ftt = measure_prefill(model, prefill_ids, additive, n_repeats=n_repeats, warmup=warmup)
     append_timing(store=store_path, run_id=run_id, metric="ftt", timing=ftt, provenance=prov)
 
-    # Decode: flex_attention offers no benefit at Q_LEN=1 (memory-bound), so
-    # both flex and sdpa use the same sdpa decode path. For flex, reset the
-    # block_mask so patched layers fall back to sdpa (see patch_model_for_flex).
+    # Both flex and sdpa use the same sdpa decode path at Q_LEN=1. For flex,
+    # reset the block_mask so patched layers fall back to sdpa (see
+    # patch_model_for_flex).
     if backend == "flex":
         model._flex_block_mask = None  # type: ignore[attr-defined]
     tpot = measure_decode(

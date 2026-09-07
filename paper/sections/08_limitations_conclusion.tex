@@ -9,28 +9,13 @@
 Two limitations bound the interpretation of every result in this paper.
 
 \paragraph{Batch size.}
-The current harness runs with batch size~1. We implemented batched
-prefill with per-sample block-diagonal 4D additive masks
-(\texttt{ddi.batch}), but measured it to be \emph{slower} than batch=1:
-7.03~QPS at $B{=}1$ versus 4.76~QPS at $B{=}8$ on Qwen2.5-7B. The
-cause is that SDPA falls back to its slow-math path when a 4D float
-additive mask is passed (the DDI mask patch bypasses HF's own mask
-builder), so the kernel that would benefit from batching is never
-selected. FlashAttention~2 varlen would solve this but is blocked by
-the build environment (nvcc~12.2 / Python~3.13). The
-\texttt{flex\_attention} backend with compiled \texttt{BlockMask}
-objects is the path forward, but requires per-sample block masks for
-variable-length documents across the batch --- non-trivial because
-\texttt{create\_block\_mask} produces a single pattern, not a batched
-one. More importantly, the current full-model flex parity gate fails even at
-the smaller proxy shape $N{=}2$, $\ell{=}128$, $Q{=}64$. The full/DDI/blind
-cosine similarities are 0.993342/0.998553/0.998701 against a required 0.999,
-and token-argmax agreements are 87.19\%/95.00\%/94.38\% against 100\%.
-Thus the raw batched-kernel checks do not support an end-to-end
-batch-throughput claim at any shape. As stated, the
-reported efficiency numbers are for the single-request setting; server-side
-throughput at higher batch sizes is left to future work after exact batched
-model parity passes.
+The reported model measurements run with batch size~1. The harness supports
+per-sample block-diagonal 4D additive masks (\texttt{ddi.batch}), but no
+admissible batched-throughput result is retained. The current full-model Flex
+parity gate fails for every tested mask, so raw batched-kernel checks do not
+support an end-to-end batch-throughput claim. Server-side throughput at higher
+batch sizes is outside this paper. VIBEQUEUE-49 is deferred; any future timing
+requires the unchanged exact model-parity gates to pass first.
 
 \paragraph{Preprint scope.}
 This preprint covers retrieval quality (C1) on Qwen2.5-7B-Instruct, including

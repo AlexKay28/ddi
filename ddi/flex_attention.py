@@ -257,10 +257,9 @@ def patch_model_for_flex(model: torch.nn.Module) -> torch.nn.Module:
 
     After patching, each layer's ``forward`` reads ``model._flex_block_mask``.
     When it is a flex_attention ``BlockMask``, the layer uses the compiled
-    ``flex_attention`` kernel (fast block-sparse prefill). When it is ``None``
+    ``flex_attention`` kernel for block-sparse prefill. When it is ``None``
     (decode, or any single-token step), the layer falls back to
-    ``scaled_dot_product_attention`` — decode is memory-bound and mask sparsity
-    does not help at Q_LEN=1, so flex offers no benefit there.
+    ``scaled_dot_product_attention``; the Flex path is not used at Q_LEN=1.
 
     Callers set the block_mask by assigning ``model._flex_block_mask = bm``
     before a prefill forward, and reset it to ``None`` before decode.

@@ -33,7 +33,8 @@ model gate: token-argmax agreement is 87.19% (`full`), 95.00% (`ddi_qf`), and
 94.38% (`blind`). Divergence begins in the first attention layer on identical
 projected Q/K/V. Explicit score scaling, Flex prescaling, and FP32 do not
 repair it, identifying a compiled-kernel numerical mismatch rather than a DDI
-mask or wrapper-semantic defect. Flex model timing remains blocked.
+mask or wrapper-semantic defect. V49 timing did not begin and is deferred
+outside the bounded paper.
 
 ## 2026-09-04 — VIBEQUEUE-46 matched cross-architecture transfer
 
@@ -54,10 +55,10 @@ equivalence. Synthetic QA is saturated and remains a control.
 
 ## 2026-09-01 — VIBEQUEUE-42 evidence-to-claim audit
 
-Current framing retains four bounded findings: canonical mask semantic tests;
-raw direct-sparse construction at N=25,L=2048; archived batch-1 flex timing
-observations (1.29x within flex and 2.13x versus dense SDPA at N=9,L=2048); and
-the corrected single-run restart control (0.45 sequential, 0.47 restart).
+Current framing retains canonical mask semantic tests, raw direct-sparse
+construction as a mechanistic observation, and the corrected single-run restart
+control (0.45 sequential, 0.47 restart). Unsupported archived Flex timing is
+not retained as numerical evidence.
 
 The flex observations are not full-model parity, end-to-end, or batched
 throughput evidence. The corrected control invalidates the apparent restart
@@ -120,11 +121,12 @@ The bounded 16L run raises hotpot `ddi_qf` EM by 0.09 and narrows its gap by
 repository's Delta criterion.  It is therefore evidence of capacity-sensitive
 improvement, not a Llama parity claim or a reason to revise the paper result.
 
-## 2026-08-28 — flex_attention production integration: 54/54 timing grid passed
+## 2026-08-28 — flex_attention production integration (superseded)
 
-**Superseded as a model-level claim by VIBEQUEUE-40 and VIBEQUEUE-44.** The
-timing rows below are archived batch-1 observations only: current full-model
-flex parity fails, so they do not establish model throughput or batched serving.
+**Superseded as a model-level claim by VIBEQUEUE-40, VIBEQUEUE-44, and the V47
+per-mask failure.** The historical timing source is unavailable and current
+full-model Flex parity fails, so no numerical Flex result is retained and this
+entry establishes neither model throughput nor batched serving.
 
 ### flex_attention integrated into production timing harness
 
@@ -133,25 +135,11 @@ Completed the integration of `flex_attention` as a first-class backend in the DD
 - **`ddi/flex_attention.py`**: Rewrote `patch_model_for_flex()` to store `block_mask` as `model._flex_block_mask`. Patched layers use compiled `flex_attention` when set (prefill), fall back to `F.scaled_dot_product_attention` when None (decode, Q_LEN=1, memory-bound).
 - **`ddi/run.py`**: Added `_measure_prefill_flex()` helper with explicit torch.compile warm-up outside timed region. Added `gc.collect()` + `torch.cuda.empty_cache()` between cells to prevent OOM cascade.
 - **`experiments/performance.yaml`**: `backends: [sdpa, fa2, flex]`.
-- **All 489 unit tests pass, 54/54 timing cells pass.**
+The integration and unit-test chronology remains useful, but the timing rows and
+their derived Flex speedup claims are removed rather than reconstructed from
+prose or unrelated runs.
 
-### Production timing grid results (sdpa vs flex, Qwen2.5-7B-Instruct, A100 80GB)
-
-| N | L | sdpa full (ms) | flex ddi_qf (ms) | DDI ratio sdpa | DDI ratio flex | System speedup |
-|---|---|---|---|---|---|---|
-| 3 | 512 | 151 | 147 | 0.98x | 0.98x | 1.03x |
-| 9 | 512 | 485 | 397 | 1.00x | 1.05x | 1.22x |
-| 25 | 512 | 1901 | 1066 | 1.01x | 1.21x | 1.78x |
-| 3 | 2048 | 685 | 553 | 0.98x | 1.01x | 1.24x |
-| 9 | 2048 | 3247 | 1601 | 1.00x | 1.25x | 2.03x |
-| 25 | 2048 | 17762 | 4458 | 1.01x | **1.81x** | **3.98x** |
-
-Key findings:
-1. sdpa confirms the regression: 4D additive mask forces sdpa to slow math backend, DDI speedup flat at ~1.0x.
-2. flex realizes the speedup: block-sparse kernel skips masked QK^T blocks, DDI speedup grows to 1.81x at N=25 L=2048.
-3. Total system speedup (flex+ddi_qf vs sdpa+full) reaches 3.98x at N=25 L=2048.
-
-## 2026-08-28 — flex_attention: C3 speedup breakthrough
+## 2026-08-28 — flex_attention C3 implementation probe (superseded)
 
 ### Historical C3 prefill-speedup interpretation — superseded
 
@@ -161,37 +149,12 @@ Three approaches tested to realize the analytical speedup from block-diagonal ma
 
 **Step 2: flash-attention-2 — BUILD FAILED.** System nvcc 12.2 cannot compile torch 2.13 headers (needs CUDA 12.6). No pre-built wheel for Python 3.13 + torch 2.13. Abandoned.
 
-**Step 2b: flex_attention — BREAKTHROUGH.** `torch.nn.attention.flex_attention` (built into torch 2.13, no install needed) compiles the block-diagonal mask pattern into a block-sparse kernel that skips masked QK^T blocks entirely.
-
-### Raw attention layer results (single layer, 28 heads, head_dim=128)
-
-| N | L | sparsity | sdpa ratio | flex ratio | analytical |
-|---|---|---|---|---|---|
-| 3 | 512 | 80.7% | 0.33x | 0.96x | 5.2x |
-| 9 | 512 | 93.2% | 0.25x | 1.44x | 14.8x |
-| 25 | 512 | 97.5% | 0.06x | 3.24x | 40.3x |
-| 25 | 2048 | 97.9% | 0.06x | 8.24x | 47.2x |
-
-### Full model results (28 layers, Qwen2.5-7B-Instruct, A100 80GB)
-
-| N | L | sparsity | sdpa ratio | flex ratio | analytical |
-|---|---|---|---|---|---|
-| 3 | 512 | 80.7% | 0.96x | 1.00x | 5.2x |
-| 9 | 512 | 93.2% | 0.83x | 1.05x | 14.8x |
-| 25 | 512 | 97.5% | 0.63x | 1.21x | 40.3x |
-| 25 | 2048 | 97.9% | 0.40x | 1.77x | 47.2x |
-
-### Three critical findings
-
-1. **sdpa + 4D additive mask is a REGRESSION** (0.40x at N=25 L=2048 — ddi_qf is 2.5x SLOWER than full). The 4D additive mask forces sdpa from the optimized flash/efficient backend to the slow math backend. All previous timing numbers were measuring this regression, not "no speedup."
-
-2. **flex_attention realizes 1.21x-1.77x model-level speedup.** At N=25 L=2048: flex ddi_qf = 4541ms vs flex full = 8060ms. The speedup is diluted by MLP/other ops but still significant at long sequences where attention dominates.
-
-3. **flex ddi_qf beats sdpa full** — at N=25 L=2048: flex ddi_qf (4541ms) vs sdpa full (7080ms) = 1.56x faster. The masked model with flex_attention is faster than the unmasked baseline with sdpa.
-
-### Paper impact
-
-C3 transforms from "no speedup" (realized ~1.0x with sdpa, actually 0.40x regression) to "1.77x realized speedup at 97.9% sparsity" (with flex_attention). The previous realization gap was not structural — it was a backend limitation. flex_attention closes it.
+**Step 2b: flex_attention — implementation probe.**
+`torch.nn.attention.flex_attention` (built into torch 2.13, no install needed)
+was integrated as a candidate block-sparse backend. The raw-kernel and model
+timing interpretations formerly recorded here are not admitted evidence: the
+historical source is unavailable and the later exact full-model parity gate
+fails. The numerical tables and paper-impact claim are therefore removed.
 
 Scripts: `scripts/timing_compile_test.py`, `scripts/timing_flex_test.py`, `scripts/timing_flex_model.py`
 Tracker: VIBEQUEUE-21 (steps 1, 2, 2b documented)

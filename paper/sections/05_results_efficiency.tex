@@ -86,6 +86,10 @@ block-sparse backend. The previous manuscript included an archived numerical
 timing table, but its cited raw log is unavailable. We therefore remove the
 table and all numerical Flex speedup claims rather than reconstructing them
 from prose or unrelated runs. No Flex model-throughput result is retained.
+VIBEQUEUE-49 timing is deferred outside this bounded paper and did not begin
+because the required full-model parity gate fails. Future timing remains
+reopenable only after the unchanged cosine and token-argmax gates pass for every
+applicable mask and path.
 
 Table~\ref{tab:t3} reports prefill and per-output-token measurements, not
 end-to-end latency. End-to-end evidence is limited to the separate corrected

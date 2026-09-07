@@ -3,7 +3,7 @@
 Document the bounded DDI evidence without converting single-run controls or
 raw-kernel observations into parity or serving claims.
 
-## Current state (2026-09-06) - end-to-end cache path corrected
+## Current state (2026-09-06) - bounded evidence finalized
 
 - C1 quality: the matched three-seed Qwen/Llama transfer study reaches no
   natural-QA parity gate. Its sole valid architecture contrast is musique F1:
@@ -12,7 +12,8 @@ raw-kernel observations into parity or serving claims.
   difference. Older Qwen cells remain single-run estimates.
 - C3 compute: SDPA shows no sparsity benefit from a 4D mask. The old numerical
   Flex timing table is removed because its cited historical log is unavailable;
-  no Flex model-throughput claim is admitted.
+  no Flex model-throughput, batching, or serving claim is admitted. The V47
+  full-model proxy fails all masks, so V49 timing did not begin.
 - C4 cache behavior: exact 16-token greedy text matches on one A100 diagnostic for
   original, reordered, and 2-hit/1-miss partial-reuse requests. Numerical logit identity
   fails the old tolerance (`max|delta|=0.3125` at `N=2,L=32,Q=8`).
@@ -33,9 +34,9 @@ raw-kernel observations into parity or serving claims.
 - Paper scope: VIBEQUEUE-48's powered quality expansion and model-scale cells
   are deferred future work, not missing prerequisites for the bounded
   characterization paper. VIBEQUEUE-50 now provides deterministic rendering
-  from hash-pinned preserved evidence. Any VIBEQUEUE-49 compiled-timing work is
-  likewise additional evidence rather than a prerequisite for the claims
-  currently admitted.
+  from hash-pinned preserved evidence. VIBEQUEUE-49 is deferred out of scope,
+  not completed as a timing result. Its exact parity-first timing protocol is
+  preserved in `EVIDENCE_TO_CLAIM.md` for optional future work.
 
 ## Results summary
 
@@ -73,12 +74,16 @@ failure, success, or parity claim.
   decode omitted explicit position IDs.
 - [x] Step 8: Corrected 16-layer restart control - 0.47 restart versus 0.45
   sequential EM on 100 hotpot_qa records.
+- [x] Step 9: Defer VIBEQUEUE-49 compiled Flex timing outside the bounded paper;
+  preserve the failed V47 parity boundary and parity-first reopen protocol.
 
 ## Success criteria
 
 - [x] Single-run quality and corrected restart-control values are recorded.
 - No residual restart limitation is claimed without a correctly controlled
   reproduction.
+- The bounded paper relies only on retained SDPA timing and the corrected
+  one-shape cache result for current efficiency/system evidence.
 
 ## Constraints
 

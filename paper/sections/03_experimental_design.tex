@@ -95,7 +95,8 @@ enumerate their cross product.
           $-\infty$ mask (reference semantics, the standard PyTorch
           path) and \texttt{flex\_attention} (PyTorch 2.13's compiled
            block-sparse kernel with raw semantic tests). Its full-model parity
-           gate currently fails, so it is not a validated model backend.
+           gate currently fails, so it is not a validated model backend and
+           compiled timing is deferred outside this paper.
            FlashAttention-2 varlen was scoped but
           could not be compiled on the test platform (system \texttt{nvcc}
           12.2 cannot compile torch 2.13 headers; no prebuilt wheel

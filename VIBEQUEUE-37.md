@@ -45,14 +45,12 @@ Checked local alternatives:
   `+cu121` artifact nor an installed project environment.
 - The lock-selected cached `torch 2.5.1+cu121` artifact is CPython 3.13 only.
 
-## Remaining Blocker
+## Historical Environment Blocker
 
-No existing Python <=3.12 environment combines a CUDA torch compatible with
-the project lock and the project dependencies. Provision a reproducible Python
-<=3.12 CUDA environment from approved local artifacts or an approved package
-source, then run the actual patched model's batch=8 versus batch=1 prefill QPS
-benchmark. Until then the ticket is an environment-blocked negative result,
-not an end-to-end throughput delivery.
+At this stage no existing Python <=3.12 environment combined a CUDA torch
+compatible with the project lock and dependencies. This was superseded by the
+later V47 diagnostic below; it is not the current instruction to run a batch
+benchmark.
 
 ## VIBEQUEUE-40 Follow-up
 
@@ -82,4 +80,13 @@ The aggregate VIBEQUEUE-40/44 proxy values above are historical. The current
 per-mask diagnostic on torch 2.13.0+cu126 reports cosine/argmax agreement of
 `0.993342`/`87.19%` for `full`, `0.998553`/`95.00%` for `ddi_qf`, and
 `0.998701`/`94.38%` for `blind`. All three fail the required 0.999 cosine and
-100% argmax gates, so the blocker and no-throughput disposition are unchanged.
+100% argmax gates, preserving the mechanistic boundary and no-throughput
+disposition.
+
+## VIBEQUEUE-49 Scope Disposition
+
+Compiled Flex timing is deferred outside the bounded paper, not completed.
+The raw single/batched kernel checks above remain mechanistic diagnostics only.
+No Flex model-throughput, batching, or serving result is admitted, and timing
+must not begin unless the unchanged exact gates in `EVIDENCE_TO_CLAIM.md` first
+pass for every applicable mask and path.

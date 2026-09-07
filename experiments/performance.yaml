@@ -1,4 +1,7 @@
 # C3 — timing grid.
+# Historical/general timing configuration. Flex cells are not admitted V49
+# evidence and must not be run for a claim until every applicable unchanged
+# full-model gate in EVIDENCE_TO_CLAIM.md passes first. Current V47 parity fails.
 #
 # Model-agnostic: run once per model with `make exp-c3 MODEL=<hf-id>`. On `main` this
 # is exercised against Qwen2.5-7B-Instruct (tracking: #74) and Llama-3.1-8B-Instruct

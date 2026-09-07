@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 # Sprint F (VIBEQUEUE-32): flex_attention realization benchmark.
+# Historical harness only: its local correctness check predates and is weaker
+# than the exact parity gates in EVIDENCE_TO_CLAIM.md. Do not use it for V49 or
+# admissible Flex timing unless ddi.flex_parity first passes every unchanged
+# gate for all applicable masks and paths. Current V47 parity fails.
 #
 # Runs the timing grid: Ns x Ls x {sdpa,flex} x {full,ddi_qf}.
 # Correctness check: flex logits vs sdpa logits (bf16 tolerance).

@@ -8,6 +8,9 @@ plan contains superseded targets and must not be cited as empirical support.
 In particular, its powered quality-expansion and larger-model cells are retained
 as a reopenable VIBEQUEUE-48 plan, but are deferred optional future work rather
 than prerequisites for the bounded characterization paper.
+Its compiled-Flex timing targets are likewise a reopenable VIBEQUEUE-49 plan,
+not required paper work. Current Flex parity fails; the unchanged exact gates in
+`../EVIDENCE_TO_CLAIM.md` must pass before any future timing begins.
 
 Companion to the repo write-up in [`../README.md`](../README.md) and the operational roadmap in
 [issue #1](https://github.com/AlexKay28/ddi/issues/1) (source of truth for phase structure).

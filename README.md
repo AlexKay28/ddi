@@ -3,7 +3,7 @@
 Research code for **DDI (Decoupled Document Inference)**: making RAG-style prefill cheaper by
 *not* letting retrieved documents attend to each other.
 
-> **Status: preprint in progress.** Core code + experiment pipeline in place after the
+> **Status: bounded preprint evidence finalized.** Core code + experiment pipeline in place after the
 > [#81 refactor](https://github.com/AlexKay28/ddi/issues/81). The preprint focuses on
 > three evidence areas — **C1** (quality estimates, including a fixed-manifest
 > three-seed transfer study), **C3**
@@ -46,7 +46,7 @@ d3 ██████                  d3     ██                  d3     █
 Two properties make this attractive:
 
 - **Sparsity → cost model.** The block-diagonal mask removes attended pairs from the analytical
-  prefill count. Archived batch-1 flex timings are not validated model-throughput results.
+  prefill count. No numerical historical Flex result or Flex model-throughput claim is retained.
 - **Cacheability hypothesis.** Under the restart-layout assumptions, document KV blocks can be
   content-addressable. The reported throughput estimate is limited to one corrected restart-layout
   harness and request shape.
@@ -125,7 +125,7 @@ remain out of scope per [#82](https://github.com/AlexKay28/ddi/issues/82).
 | claim | what | evidence |
 |---|---|---|
 | **C1** | Quality estimates under `ddi_qf` and `full` | The matched Qwen/Llama study uses three trained seeds and frozen manifests; neither architecture reaches natural-QA parity, and the sole valid architecture contrast establishes no practical difference. Other legacy rows remain single-run estimates |
-| **C3** | Analytical cost versus qualified timing observations | SDPA has no sparsity benefit from a 4D mask; the unhashable historical Flex timing table and its numerical claims are removed |
+| **C3** | Analytical cost versus qualified timing observations | SDPA has no sparsity benefit from a 4D mask; the unhashable historical Flex timing table and its numerical claims are removed. V49 Flex timing is deferred and did not run because the V47 parity gate fails |
 | **C4** | End-to-end per-document cache reuse and a restart control | Exact short greedy generation is validated for original, reordered, and partial-hit requests. At `N=5,L=500`, corrected cache/recompute throughput is 1.219x (three-seed 95% t-CI [1.152, 1.286]); numerical logit identity fails and no cross-shape serving claim is made. The historical 1.72x result is withdrawn |
 
 ### Fine-tuning evidence is in scope; further expansion is deferred
@@ -145,6 +145,12 @@ may strengthen or extend a later paper only after they run with the same
 reproducibility controls; the current paper makes no scale-trend claim.
 `make finetune MODEL=<hf-id> [NUM_GPUS=N]` remains the training entry point for
 reopening that work.
+
+VIBEQUEUE-49 compiled Flex timing is likewise deferred optional future work,
+not a missing prerequisite. The current proxy fails the required cosine and
+token-argmax gates for every mask, so no timing began and no Flex model-throughput,
+batching, or serving claim is admitted. Reopening it must follow the unchanged
+parity-first protocol in [`EVIDENCE_TO_CLAIM.md`](EVIDENCE_TO_CLAIM.md).
 
 ---
 

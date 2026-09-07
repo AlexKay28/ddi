@@ -108,13 +108,12 @@ universal transfer claim.
 
 ## VIBEQUEUE-42: evidence-to-claim boundary
 
-The paper and repository-facing documentation now distinguish four retained
-findings from model-level conclusions: canonical mask semantic tests; raw direct
-sparse construction at N=25,L=2048; archived batch-1 flex timing observations
-(1.29x within flex and 2.13x versus dense SDPA at N=9,L=2048); and the corrected
-single-run restart control (0.45 sequential, 0.47 restart). The flex observations
-are not full-model parity, end-to-end, or batched-throughput evidence. The restart
-control invalidates the earlier restart-wall and RoPE interpretations but does not
+The paper and repository-facing documentation distinguish canonical mask
+semantic tests and raw direct-sparse construction from model-level conclusions.
+The unsupported archived Flex timing observations are not retained as numerical
+evidence. The corrected single-run restart control is 0.45 sequential versus
+0.47 restart; it invalidates the earlier restart-wall and RoPE interpretations
+but does not
 establish parity. Only the four Qwen full-baseline descriptive t-intervals are CIs;
 all other quality values remain single-run estimates.
 
@@ -139,8 +138,8 @@ VIBEQUEUE-52 is retained only as campaign bookkeeping. Its preregistered seed-0
 pilot stopped after DDI F1 regressed by 0.121 on hotpot_qa and 0.041 on musique,
 but it is not a deciding paper cell: the run used a dirty tree, its checkpoint
 was removed after hashing, and three-seed expansion and paired bootstrap did not
-run. VIBEQUEUE-48, VIBEQUEUE-49, and VIBEQUEUE-50 remain open, so the research
-program is not complete.
+run. VIBEQUEUE-48, VIBEQUEUE-49, and VIBEQUEUE-50 were open at this point, so
+this entry is not the current scope disposition.
 
 ## 2026-09-06: VIBEQUEUE-50 deterministic rendering
 
@@ -174,3 +173,18 @@ frozen manifests, and retained outputs from VIBEQUEUE-46. VIBEQUEUE-52 remains
 a stopped one-seed pilot and adds no deciding cell. The sole valid natural-QA
 architecture contrast is musique F1; it establishes no parity, equivalence,
 architecture invariance, or scale trend.
+
+## 2026-09-06: VIBEQUEUE-49 scope disposition
+
+This entry supersedes VIBEQUEUE-49's open-prerequisite interpretation in the
+earlier audit entry. Compiled Flex timing is deferred outside the bounded
+characterization paper and did not run: the V47 full-model proxy at
+`N=2,L=128,Q=64` fails the required cosine >=0.999 and 100% token-argmax gates
+for `full`, `ddi_qf`, and `blind`. This remains a mechanistic boundary, not a
+successful Flex result.
+
+The bounded paper retains SDPA timing and the corrected one-shape cache result
+as its only current efficiency/system evidence. It makes no Flex
+model-throughput, batching, or serving claim and retains no numerical historical
+Flex result. `EVIDENCE_TO_CLAIM.md` preserves the exact reopen protocol: all
+applicable parity gates must pass unchanged before timing may begin.

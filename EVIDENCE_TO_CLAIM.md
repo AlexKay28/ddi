@@ -15,6 +15,11 @@ CPU handoff and to GPU work that follows it.
   explicit scale, prescaling, and FP32 do not repair it. Raw-kernel checks and
   archived timing observations are therefore not Flex model-parity or
   throughput evidence.
+- VIBEQUEUE-49 is deferred outside the bounded paper rather than completed as
+  a timing result. Reopening it requires the unchanged gates below; timing must
+  not begin until all applicable parity gates pass. The bounded paper admits no
+  Flex model-throughput, batching, or serving claim and retains no numerical
+  historical Flex result.
 - Existing Qwen and Llama quality values, including the legacy checkpoints,
   are descriptive diagnostics unless they satisfy the matched matrix below.
 - The historical C4 cache correctness and 1.72x throughput claims are withdrawn: those
@@ -75,7 +80,9 @@ claimed mask, model revision, precision, cache mode, and batch/layout path:
    and cached decode; label that target-shape result as proxy-validated, not
    dense-logit-equivalent.
 
-Only after the applicable parity gate passes may timing begin. Time matched
+Only after the applicable parity gate passes may timing begin. This is the
+reopenable VIBEQUEUE-49 protocol, not a missing prerequisite for the bounded
+paper. Time matched
 `full` and `ddi_qf` workloads on the same hardware, software build, model,
 precision, shape, batch, warmup policy, and decode length. Discard warmups and
 collect at least five timed repeats. Report all repeats, median, spread, and a
