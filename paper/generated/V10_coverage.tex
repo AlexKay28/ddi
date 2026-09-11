@@ -7,10 +7,11 @@
 \midrule
 Quality / prefill speedup & \textcolor{ddiBlue}{V57: matched full-vs-DDI QA + timing, same 100 requests} &
 \textcolor{ddiRed}{Matched QA under a validated sparse kernel} \\[5pt]
-Quality / KV reuse & \textcolor{ddiGreen}{V58 + V65: gold-answer QA under hits; V64 audited} &
-\textcolor{ddiRed}{Non-inferiority established (fails narrowly)} \\[5pt]
+Quality / KV reuse & \textcolor{ddiGreen}{V58 + V65: gold-answer QA under hits; V64 audited;
+V68 divergence anatomy; V70 trained contract: C$-$B exactly zero, $n{=}300$, both gates passed} &
+\textcolor{ddiRed}{Multi-seed robustness; scale beyond $n{=}300$} \\[5pt]
 Warm-path serving win & \textcolor{ddiGreen}{V65: 2.05$\times$ TTFT, byte-identical, gate passed} &
-\textcolor{ddiRed}{Mixed/partial-hit beating baseline; prefix-cache baseline} \\[5pt]
+\textcolor{ddiRed}{Mixed/partial-hit beating baseline; prefix-cache baseline; trained-contract serving latency} \\[5pt]
 Hit rate / sparsity & \textcolor{ddiPurple}{V59 measured crossover + analytical surface} &
 \textcolor{ddiRed}{Controlled workload$\times$mask sweep at scale} \\
 \bottomrule

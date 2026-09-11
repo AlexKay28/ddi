@@ -234,6 +234,84 @@
       "sha256": "90f34eec2d9b24426a0af79ba757bedad178b8cb1abecf503cb0a87aea2188d1",
       "bytes": 9971,
       "required": true
+    },
+    "v66_boundary_crossover_table": {
+      "path": "results/v66_boundary_20260910T132922Z/crossover_table.md",
+      "sha256": "4abaab2e92530cc88e7b94efa4d905a3d58017b82a53d4211a64ee42ae80fa0e",
+      "bytes": 15024,
+      "required": true
+    },
+    "v66_boundary_scoping_sentence": {
+      "path": "results/v66_boundary_20260910T132922Z/scoping_sentence.md",
+      "sha256": "b1d836a94f2d2570cc794c793abe3bf4330e04a5d0ad1f80f1f3a25c92772cce",
+      "bytes": 1813,
+      "required": true
+    },
+    "v66_boundary_manifest": {
+      "path": "results/v66_boundary_20260910T132922Z/manifest.json",
+      "sha256": "ef217f17d2107b32039798a9d4e5a948ff063b2648145cbb310531c6a23b7779",
+      "bytes": 14676,
+      "required": true
+    },
+    "v66_boundary_prereg": {
+      "path": "experiments/v66_boundary_preregistration.json",
+      "sha256": "b6654e8e88b24b18d8076a388a9c72ed8a5ef3d1049cb382ed201fa5017afe3b",
+      "bytes": 10435,
+      "required": true
+    },
+    "v68_anatomy_table": {
+      "path": "results/v68_anatomy_20260910T131036Z/anatomy_table.md",
+      "sha256": "68119f401e12309d534bccd43009c9d470ca73828bc28efcfcb0f0e716c2dc99",
+      "bytes": 6242,
+      "required": true
+    },
+    "v68_classifications": {
+      "path": "results/v68_anatomy_20260910T131036Z/classifications.jsonl",
+      "sha256": "9403c2af47dfb5da0436c567c193a90bfc69c24d1bf5386a78cb826170a26ee6",
+      "bytes": 25845,
+      "required": true
+    },
+    "v68_interpretation": {
+      "path": "results/v68_anatomy_20260910T131036Z/interpretation.md",
+      "sha256": "f744ff9d177d2105d795501b4916c150d22911623b111f527530f1d86043002f",
+      "bytes": 2100,
+      "required": true
+    },
+    "v68_differing_records": {
+      "path": "results/v68_anatomy_20260910T131036Z/differing_records.jsonl",
+      "sha256": "c7184d0ce3ef323efb8d61c472d016dfbe4640a9dfae96c1fde1eeaca5983928",
+      "bytes": 26185,
+      "required": true
+    },
+    "v69_attribution_table": {
+      "path": "results/v69_attribution_20260910T162613Z/attribution_table.md",
+      "sha256": "f7f2e342cb9d0244a2dd4ffc18628abbab65bd19e8d549f5d5a5ae8eb0a86753",
+      "bytes": 6181,
+      "required": true
+    },
+    "v69_prereg": {
+      "path": "results/v69_attribution_20260910T162613Z/prereg.json",
+      "sha256": "9c1536e4a1550627ec0c52fef7fd37d7b8e13a01d0c26313a3c78a30fc9a47cc",
+      "bytes": 2473,
+      "required": true
+    },
+    "v69_sha256sums": {
+      "path": "results/v69_attribution_20260910T162613Z/sha256sums.txt",
+      "sha256": "4bd60d02a2edefce1f590dca5fb2c9b19702f70c9173ceae8ae384b457462891",
+      "bytes": 324,
+      "required": true
+    },
+    "v70_confirmation_result": {
+      "path": "results/v70_confirmation300_k5.json",
+      "sha256": "9283392c5a8669237a8152a9a884ed6045693fbc556d37aecf951eb3b07795f0",
+      "bytes": 255143,
+      "required": true
+    },
+    "v70_confirmation_verdict": {
+      "path": "results/v70_confirmation_analysis_20260911T152345Z/verdict.json",
+      "sha256": "6bd916f922c233d90df9e913a01b7907b326ceb86f482231c4253f2e4ce63ddd",
+      "bytes": 22986,
+      "required": true
     }
   },
   "artifacts": {
@@ -436,7 +514,14 @@
       "n_requests": 100
     },
     "T13_v66_boundary": {
-      "sources": ["v66_boundary_summary", "v66_boundary_t9_followup"],
+      "sources": [
+        "v66_boundary_summary",
+        "v66_boundary_t9_followup",
+        "v66_boundary_crossover_table",
+        "v66_boundary_scoping_sentence",
+        "v66_boundary_manifest",
+        "v66_boundary_prereg"
+      ],
       "data_role": "development",
       "data_role_note": "Frozen V62 development split, seed 47, single seed, 15 timed repeat pairs per cell; development data only and no confirmation-quality claim.",
       "rows": [
@@ -457,10 +542,21 @@
         [512, "d=64", 0.8, 0.7]
       ],
       "byte_identical_repeats": [2775, 3600],
-      "repeats_per_cell": 15
+      "repeats_per_cell": 15,
+      "headline_ttft_speedup": {
+        "context": "L=512, N=10, h=1 (all-hit)",
+        "point": 4.281,
+        "ci": [4.157, 4.412]
+      },
+      "all_hit_wall_dilution": {"d1": 2.901, "d64": 1.223}
     },
     "T14_v69_attribution": {
-      "sources": ["v69_attribution"],
+      "sources": [
+        "v69_attribution",
+        "v69_attribution_table",
+        "v69_prereg",
+        "v69_sha256sums"
+      ],
       "data_role": "development",
       "data_role_note": "Derivation over pinned artifacts: pre/post totals trace to the confirmation-frozen V60/V65 runs (V64-adjudicated); the phase leaves are uniformly rescaled from the development-role V65 overhead profile (factor 0.945248). Supports no confirmation-quality claim.",
       "rows": [
@@ -475,7 +571,61 @@
       "residual_frac_of_pre": 0.01572097603835297,
       "opt3_budget_ms": 23.043673551472935,
       "opt3_implied_post_ms": 8.843626972963747,
-      "speedup_vs_pre": 3.5514235145792314
+      "speedup_vs_pre": 3.5514235145792314,
+      "post_reconstruction_ms": 62.29646783322095,
+      "post_reconstruction_delta_ms": -7.105427357601002e-15,
+      "ca_post": [0.48853635514214383, 0.4326919478917944, 0.5503906127960165],
+      "ca_pre_v60": 1.7705,
+      "cold_b_ms": 417.41941310465336,
+      "cold_b_over_oldb": 0.9995177345419544
+    },
+    "T15_v70_gates": {
+      "sources": ["v70_confirmation_result", "v70_confirmation_verdict"],
+      "data_role": "confirmation_primary",
+      "data_role_note": "Preregistered primary confirmation gates (experiments/v70_preregistration, amendments 1-3) over the frozen 300-record confirmation300 split; arms A and B are diagnostic only per the pinned verdict.",
+      "n_records": 300,
+      "margin": -0.02,
+      "bootstrap": {"seed": 47, "resamples": 10000},
+      "k": 5,
+      "arm_means": {
+        "A": {"em": 0.43666666666666665, "f1": 0.5826162642565439, "role": "diagnostic only"},
+        "B": {"em": 0.42333333333333334, "f1": 0.5561052661860493, "role": "diagnostic only"},
+        "C": {"em": 0.42333333333333334, "f1": 0.5561052661860493, "role": "gate candidate"},
+        "D": {"em": 0.18333333333333332, "f1": 0.2814477213205474, "role": "gate reference"}
+      },
+      "rows": [
+        ["C-B", "EM", 0.0, [0.0, 0.0], "PASS"],
+        ["C-B", "F1", 0.0, [0.0, 0.0], "PASS"],
+        ["C-D", "EM", 0.24, [0.17666666666666667, 0.3], "PASS"],
+        ["C-D", "F1", 0.274657544865502, [0.21161750774366167, 0.3351885287643735], "PASS"]
+      ],
+      "cache_validation": {
+        "hit_only": true,
+        "reopened_store": true,
+        "entries": 2947,
+        "keys_unchanged": true,
+        "encode_on_miss": "fail_closed"
+      }
+    },
+    "T16_v68_anatomy": {
+      "sources": [
+        "v68_anatomy_table",
+        "v68_classifications",
+        "v68_interpretation",
+        "v68_differing_records"
+      ],
+      "data_role": "diagnostic",
+      "data_role_note": "Single-seed labeled anatomy of the 22 divergent confirmation records against a rubric frozen before inspection; no rate or causal claims.",
+      "n_confirmation_records": 100,
+      "n_divergent": 22,
+      "rows": [
+        ["near_tie_greedy_flip", 8],
+        ["clear_semantic_change", 11],
+        ["truncation_stopping_artifact", 3],
+        ["ambiguous", 0]
+      ],
+      "position": {"first_token": 9, "mid_generation": 13},
+      "direction": {"cached_strictly_loses_em": 5, "cached_strictly_gains_em": 4}
     },
     "V58_cache_qa": {
       "sources": ["v58_cache_qa_summary"],

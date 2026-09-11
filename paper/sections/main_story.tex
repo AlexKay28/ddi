@@ -23,7 +23,9 @@ This version reports a completed deployment validation program, not only
 separate panels. Sections~\ref{sec:quality}--\ref{sec:cache} now include
 matched natural-QA campaigns that join quality, timing and cache state on the
 same frozen requests (V57, V58, V65), an audited 24-record confirmation with
-preregistered intervals (V64), and a geometry crossover study (V59). The
+preregistered intervals (V64), a geometry crossover study (V59), a
+serving-boundary sweep with divergence anatomy (V66, V68), and a trained
+reuse-contract confirmation (V70). The
 headlines are narrow by design and now carry a measured boundary: on
 development data the optimized warm reuse path beats the monolithic baseline
 only above measured hit-fraction crossovers --- first-token latency wins above
@@ -33,7 +35,10 @@ $\sim$4.3$\times$ at $L=512$, $N=10$), diluting with decode budget until full
 support at $L=128$ or at $L=32$ at any decode budget --- with outputs
 byte-identical to the monolithic baseline on 2775/3600 timed repeats
 (divergences are bf16 reduction-order flips deeper in the trajectory, first
-token always identical); quality non-inferiority is not established; the
+token always identical). The untrained reuse path fails the preregistered
+quality floor narrowly at $n{=}100$; after remediated training with fixed
+link-token conditioning, the persisted cache is byte-identical to fresh with
+exact-zero intervals at $n{=}300$ (both preregistered gates pass). The
 sparse cold path wins only at long-document shapes.
 
 \paragraph{Reading the evidence.}
@@ -367,7 +372,7 @@ repeats (divergences are bf16 reduction-order flips deeper in the trajectory;
 the first token is always identical).
 
 \begin{table}[H]
-\centering\footnotesize\input{generated/T13_v66_boundary.tex}
+\centering\footnotesize\input{generated/T13_v66_crossover.tex}
 \caption{Measured serving boundary of the optimized warm path versus the
 monolithic baseline (V66 T9 follow-up). Frozen V62 development split, seed 47,
 single seed, 15 timed repeat pairs per cell; crossover $h$ is the smallest
@@ -380,8 +385,9 @@ not established.}
 
 The V65 gates were declared in the run manifest before execution: the reuse arm
 must beat the monolithic baseline with byte-identical outputs, and it does
-(C/A $=0.4885$, CI $[0.4327,0.5504]$). Quality under reuse, however, remains
-the open gate.
+(C/A $=0.4885$, CI $[0.4327,0.5504]$). Quality under reuse was the remaining
+open gate; the next paragraphs close it --- first the anatomy of the residual
+divergences (V68), then a trained reuse contract (V70).
 
 \paragraph{Where the audited win came from (V69).}
 A derivation over the pinned V60/V65 artifacts attributes the
@@ -400,9 +406,66 @@ supports no confirmation-quality claim.
 \caption{QA non-inferiority under the preregistered $-0.02$ floor (paired
 bootstrap, seed 47). The 24-record canonical confirmation is favorable but
 underpowered; the 100-record untouched confirmation is near-neutral
-(prediction-equal 78/100) yet fails the rule. Quality preservation under reuse
-is \textbf{not established}.}
+(prediction-equal 78/100) yet fails the rule under the \emph{untrained}
+deployment contract. The trained contract is assessed in
+Table~\ref{tab:v70gates}.}
 \label{tab:qaconfirmation}
+\end{table}
+
+\paragraph{Anatomy of the residual divergences (V68).}
+A preregistered CPU-only classification of the 22 differing records inside the
+$n{=}100$ confirmation finds 8 near-tie greedy flips, 11 clear semantic
+changes and 3 truncation-stopping artifacts (0 ambiguous); 9 diverge at the
+first token and 13 mid-generation. Damage is bidirectional --- reuse strictly
+loses EM on 5 records and strictly gains on 4, exactly reproducing the paired
+aggregate --- and an earlier $n{=}3$ ``no semantic signature'' reading does
+not survive at $n{=}22$: roughly half of the semantic-sized changes are
+autoregressive drift after a single-token near-tie flip. The pattern is a
+low-magnitude, two-sided bf16 sensitivity perturbation, not cache-specific
+corruption; logits were not retained, so ``near-tie'' is a structural
+judgment. Diagnostic only: single seed, $n{=}22$, no rate claims
+(Table~\ref{tab:v68anatomy}).
+
+\begin{table}[H]
+\centering\footnotesize\input{generated/T16_v68_anatomy.tex}
+\caption{Anatomy of the 22 differing cached/fresh records under the untrained
+contract (V68, preregistered rubric, CPU-only). A bidirectional,
+low-magnitude perturbation consistent with bf16 independent-encoding
+sensitivity; single-seed diagnostic, no rate claims.}
+\label{tab:v68anatomy}
+\end{table}
+
+\paragraph{A trained reuse contract closes the quality gate (V70).}
+An earlier quality-recovery attempt (V67) is not cited here: its harness did
+not implement the registered experiment (arm labels never reached the model
+inputs), its verdict was retracted in the tracker, and a validity audit is
+pinned in the artifacts. The rebuilt V70 experiment conditions generation on
+$k{=}5$ fixed link tokens with a differentiably trained independent-KV
+contract (1000 optimizer steps, seed 47, preregistration frozen before
+measurement) and evaluates a \emph{reopened persisted cache} on 300 untouched
+records with paired bootstrap gates. Both preregistered gates pass:
+cache-versus-fresh is exactly zero on every record (C$-$B delta 0.000000,
+CI $[0,0]$ on EM and F1; byte-identical generations), and the cache path is
+\emph{superior} to its trained full-causal reference (C$-$D EM $+0.240$
+$[0.177,0.300]$, F1 $+0.275$ $[0.212,0.335]$); why the trained full-causal
+reference trails its own cache arm is not established by the preregistered
+analysis. The fixed markers add $5N$ link tokens to prefill; no
+serving-timing claim is made for the trained contract. To our knowledge no
+prior work reports exact byte-identical cache-versus-fresh equality with
+interval support: KVLink \citep{yang2025kvlink} reports approximate recovery
+via trainable link tokens and positional correction, CacheBlend
+\citep{yao2025cacheblend} recovers quality approximately while recomputing
+5--18\% of tokens per layer, and CacheClip \citep{yang2025cacheclip} repairs
+selected cross-chunk tokens with an auxiliary model.
+
+\begin{table}[H]
+\centering\footnotesize\input{generated/T15_v70_gates.tex}
+\caption{Trained reuse-contract confirmation (V70): 300 untouched records,
+paired bootstrap (10k resamples, seed 47, margin $-0.02$), $k{=}5$ fixed
+link-token contract, reopened hit-only persisted store. Arms A and B are
+diagnostic only. C$-$B is exactly zero on all 300 records; C$-$D passes with
+wide margins. Single seed, one checkpoint; no serving-timing claim.}
+\label{tab:v70gates}
 \end{table}
 
 \section{Hits, Fidelity, and an Analytical Surface}
@@ -450,8 +513,10 @@ a token- or cost-weighted hit rate would be needed.
 \centering\input{generated/V10_coverage.tex}
 \caption{Evidence coverage after the validation program. The previously red
 quality--timing and quality--reuse joins are now measured on frozen requests
-(V57, V58, V65); remaining red cells are quality non-inferiority at scale,
-mixed/partial-hit schedules and a validated sparse-plus-reuse combination.}
+(V57, V58, V65, V68, V70); remaining red cells are quality robustness at
+scale (multi-seed, beyond $n{=}300$), mixed/partial-hit schedules, a
+validated sparse-plus-reuse combination and trained-contract serving
+latency.}
 \label{fig:coverage}
 \end{figure}
 
@@ -469,8 +534,11 @@ The audited win covers one checkpoint, HotpotQA, 24 frozen requests and an
 LRU-warm single-GPU path; cold encode (690.97\,ms per document median) and
 fresh-process disk loads (~62.6\,ms per pass) are excluded from all-hit walls
 by design and reported separately. Quality non-inferiority fails narrowly at
-$n{=}100$: a larger preregistered confirmation or a quality intervention is
-required, not a relaxed margin. No optimized prefix-cache baseline or
+$n{=}100$ under the untrained contract (V68 attributes the divergences to
+two-sided bf16 tie-flips); the trained $k{=}5$ link-token contract closes
+both preregistered gates at $n{=}300$ with exact cache-versus-fresh equality
+(V70) --- single seed, one checkpoint, and no serving-latency measurement
+yet. No optimized prefix-cache baseline or
 concurrency sweep exists; the segmented-kernel criterion is calibrated, not
 task-level confirmed.
 
@@ -482,17 +550,21 @@ winning only above the measured hit-fraction crossovers (TTFT: $h\geq 0.9$ at
 $L=128$, $h\geq 0.7$ at $L=512$; first-generation-token wall: $h\geq 1$ and
 $h\geq 0.7$; full 64-token generations: no CI-supported win at $L=128$,
 $h\geq 0.8$ at $L=512$, never at $L=32$), with mixed-hit schedules still
-slower and quality non-inferiority unproven. \textbf{Sparse cold prefill} is real only at
+slower and the untrained-path quality gate failed narrowly; a trained
+link-token contract then made the persisted cache byte-identical to fresh
+(C$-$B $=0$, CI $[0,0]$, $n{=}300$) and superior to its trained full-causal
+reference. \textbf{Sparse cold prefill} is real only at
 long-document shapes (1.12--1.29$\times$ at $L{=}512$) and the canonical cold
 path remains 3.27$\times$ slower than monolithic, so the cold lever is not yet
 competitive. The isolation quality cost is large for base models
 (.56/.70 versus .30/.42 EM/F1 matched). The honest claim is a measured,
-correctly-scoped warm-path acceleration --- not yet a quality-preserving general
-replacement for full causal attention.
+correctly-scoped warm-path acceleration that becomes quality-lossless after
+contract training at evaluation scope --- not yet a demonstrated
+quality-preserving general replacement for full causal attention at scale.
 
 \paragraph{Reproducibility.}
 All displayed empirical figures are generated from the pinned ledger, including
-the V57/V58/V59/V60/V61/V64/V65/V66/V69 validation artifacts. The renderer rejects
+the V57--V61, V64--V66, V68--V70 validation artifacts. The renderer rejects
 changed hashes, incomplete request joins, geometry/work mismatches and dropped
 failed gates. Reports document historical decisions; the appendix states which
 conclusions remain diagnostic.

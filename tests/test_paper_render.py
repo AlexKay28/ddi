@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import copy
 import json
+import math
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -120,7 +122,9 @@ def test_visualizations_are_rendered_from_audited_artifacts() -> None:
     assert "77.96" in rendered["V9_analytical_surface.tex"]
     assert "Measured (validation program)" in rendered["V10_coverage.tex"]
     assert "Still missing" in rendered["V10_coverage.tex"]
-    assert "Non-inferiority established" in rendered["V10_coverage.tex"]
+    assert "V70 trained contract" in rendered["V10_coverage.tex"]
+    assert "Multi-seed robustness" in rendered["V10_coverage.tex"]
+    assert "trained-contract serving latency" in rendered["V10_coverage.tex"]
     for name, content in rendered.items():
         if name.startswith("V"):
             assert "resizebox" not in content
@@ -304,6 +308,22 @@ NEW_PINNED_SOURCES = (
     "v65_benchmark_result",
     "v65_combined_result",
     "v61_timing_result",
+    "v66_boundary_summary",
+    "v66_boundary_t9_followup",
+    "v66_boundary_crossover_table",
+    "v66_boundary_scoping_sentence",
+    "v66_boundary_manifest",
+    "v66_boundary_prereg",
+    "v68_anatomy_table",
+    "v68_classifications",
+    "v68_interpretation",
+    "v68_differing_records",
+    "v69_attribution",
+    "v69_attribution_table",
+    "v69_prereg",
+    "v69_sha256sums",
+    "v70_confirmation_result",
+    "v70_confirmation_verdict",
 )
 
 
@@ -414,11 +434,206 @@ def test_v57_matched_table_is_rendered_from_pinned_contrasts() -> None:
         assert needle in t12
 
 
+def test_v66_crossover_table_is_rendered_from_the_pinned_boundary() -> None:
+    t13 = render(load_evidence())["T13_v66_crossover.tex"]
+    for needle in (
+        "4.28",
+        "4.16",
+        "4.41",
+        "2775/3600",
+        "825",
+        "2.90",
+        "1.22",
+        "none in grid",
+        "bf16 reduction-order",
+        "first decoded token is always identical",
+        "sha256=3a4752465fe6cf0ec7b326e1a6f7108b5401dad588792188bf331f70b5a4a215",
+        "sha256=b6654e8e88b24b18d8076a388a9c72ed8a5ef3d1049cb382ed201fa5017afe3b",
+    ):
+        assert needle in t13
+
+
+def test_v66_headline_and_dilution_match_the_pinned_crossover_table() -> None:
+    evidence = load_evidence()
+    artifact = evidence["artifacts"]["T13_v66_boundary"]
+    table = (
+        expanded.ROOT / "results/v66_boundary_20260910T132922Z/crossover_table.md"
+    ).read_text(encoding="utf-8")
+    headline = artifact["headline_ttft_speedup"]
+    assert headline["context"] == "L=512, N=10, h=1 (all-hit)"
+    assert f"{headline['point']:.3f} [{headline['ci'][0]:.3f}, {headline['ci'][1]:.3f}]" in table
+    dilution = artifact["all_hit_wall_dilution"]
+    assert f"{dilution['d1']:.3f} [2.834, 3.014]" in table
+    assert f"{dilution['d64']:.3f} [1.217, 1.227]" in table
+
+
+def test_v69_attribution_table_is_rendered_from_the_pinned_derivation() -> None:
+    t14 = render(load_evidence())["T14_v69_attribution.tex"]
+    for needle in (
+        "85.61",
+        "53.9",
+        "59.14",
+        "37.2",
+        "14.20",
+        "8.9",
+        "3.48",
+        "1.6",
+        "221.2411",
+        "62.2965",
+        "closes at 62.30 ms (delta -0.00",
+        "0.4885",
+        "0.4327",
+        "0.5504",
+        "1.7705 (1.77",
+        "417.42 ms (B/old-B 0.9995",
+        "bounded envelope",
+    ):
+        assert needle in t14
+    assert t14.count(r"$^\dagger$") == 1
+
+
+def test_v69_attribution_context_matches_the_pinned_derivation() -> None:
+    evidence = load_evidence()
+    artifact = evidence["artifacts"]["T14_v69_attribution"]
+    attribution = json.loads(
+        (expanded.ROOT / "results/v69_attribution_20260910T162613Z/attribution.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    context = attribution["context"]["monolithic"]
+    assert artifact["ca_post"] == [
+        context["c_over_a"],
+        context["c_over_a_ci_low"],
+        context["c_over_a_ci_high"],
+    ]
+    assert artifact["ca_pre_v60"] == context["c_over_a_v60"]
+    assert artifact["cold_b_ms"] == context["b_wall_ms"]
+    assert artifact["cold_b_over_oldb"] == context["b_over_oldb"]
+    reconstruction = math.fsum(attribution["attribution"]["post_side_reconstruction_ms"].values())
+    assert artifact["post_reconstruction_ms"] == pytest.approx(reconstruction, abs=1e-12)
+    assert artifact["post_reconstruction_delta_ms"] == pytest.approx(
+        reconstruction - attribution["attribution"]["post_total_ms"], abs=1e-15
+    )
+
+
+def test_v70_gates_table_is_rendered_from_the_pinned_verdict() -> None:
+    t15 = render(load_evidence())["T15_v70_gates.tex"]
+    for needle in (
+        "+0.000000",
+        "C-B",
+        "+0.240000",
+        "0.176667",
+        "0.300000",
+        "+0.274658",
+        "0.211618",
+        "0.335189",
+        "PASS",
+        "0.436667",
+        "0.582616",
+        "0.423333",
+        "0.556105",
+        "0.183333",
+        "0.281448",
+        "margin -0.02",
+        "10000 paired bootstrap resamples, seed 47",
+        "k=5 selected checkpoint",
+        "2947 entries",
+        "encode-on-miss fails closed",
+    ):
+        assert needle in t15
+    assert t15.count("& diagnostic only &") == 2
+
+
+def test_v70_gate_rows_match_the_pinned_verdict() -> None:
+    evidence = load_evidence()
+    artifact = evidence["artifacts"]["T15_v70_gates"]
+    verdict = json.loads(
+        (
+            expanded.ROOT
+            / "results/v70_confirmation_analysis_20260911T152345Z/verdict.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert artifact["n_records"] == verdict["input"]["record_count"] == 300
+    assert artifact["margin"] == verdict["gate_margin"] == -0.02
+    assert artifact["k"] == verdict["input"]["k"] == 5
+    assert artifact["bootstrap"] == {
+        "seed": verdict["bootstrap"]["seed"],
+        "resamples": verdict["bootstrap"]["resamples"],
+    }
+    for arm, means in artifact["arm_means"].items():
+        assert means["em"] == verdict["arm_means"][arm]["em"]
+        assert means["f1"] == verdict["arm_means"][arm]["f1"]
+    assert [means["role"] for means in artifact["arm_means"].values()] == [
+        "diagnostic only",
+        "diagnostic only",
+        "gate candidate",
+        "gate reference",
+    ]
+    for contrast, metric, mean, ci, verdict_text in artifact["rows"]:
+        gate = verdict["gates"][contrast]["metrics"][metric.lower()]
+        assert mean == gate["mean"]
+        assert ci == gate["ci95"]
+        expected = "PASS" if verdict["gates"][contrast]["pass"] else "FAIL"
+        assert verdict_text == expected
+    cached = artifact["cache_validation"]
+    stored = verdict["cache_validation"]
+    assert cached["hit_only"] is stored["hit_only"] is True
+    assert cached["reopened_store"] is stored["reopened_store"] is True
+    assert cached["keys_unchanged"] is stored["keys_unchanged"] is True
+    assert cached["encode_on_miss"] == stored["encode_on_c_miss"] == "fail_closed"
+    assert cached["entries"] == stored["entry_count_after"] == 2947
+
+
+def test_v68_anatomy_table_is_rendered_from_the_pinned_labels() -> None:
+    t16 = render(load_evidence())["T16_v68_anatomy.tex"]
+    for needle in (
+        r"near\_tie\_greedy\_flip & 8",
+        r"clear\_semantic\_change & 11",
+        r"truncation\_stopping\_artifact & 3",
+        "ambiguous & 0",
+        "9 first-token",
+        "13 mid-generation",
+        "loses EM on 5",
+        "strictly gains on 4",
+        "22/100",
+        "no rate or causal claims",
+    ):
+        assert needle in t16
+
+
+def test_v68_anatomy_counts_match_the_pinned_classifications() -> None:
+    evidence = load_evidence()
+    artifact = evidence["artifacts"]["T16_v68_anatomy"]
+    records = expanded.source(evidence, "v68_classifications")
+    labels = Counter(record["label"] for record in records)
+    positions = Counter(record["divergence_position"] for record in records)
+    assert len(records) == artifact["n_divergent"] == 22
+    assert artifact["n_confirmation_records"] == 100
+    assert dict(artifact["position"]) == dict(positions)
+    assert dict(artifact["position"]) == {"first_token": 9, "mid_generation": 13}
+    assert {label: count for label, count in artifact["rows"] if count} == dict(labels)
+    assert dict(artifact["rows"])["ambiguous"] == 0
+    anatomy = (
+        expanded.ROOT / "results/v68_anatomy_20260910T131036Z/anatomy_table.md"
+    ).read_text(encoding="utf-8")
+    assert "ambiguous = 0" in anatomy
+    assert artifact["direction"] == {
+        "cached_strictly_loses_em": 5,
+        "cached_strictly_gains_em": 4,
+    }
+    assert sum(record["cached_em"] < record["fresh_em"] for record in records) == 5
+    assert sum(record["cached_em"] > record["fresh_em"] for record in records) == 4
+
+
 @pytest.mark.parametrize("artifact,width", [
     ("T9_v65_serving", 4),
     ("T10_qa_confirmation", 6),
     ("T11_v59_crossover", 8),
     ("T12_v57_matched", 6),
+    ("T13_v66_boundary", 4),
+    ("T14_v69_attribution", 3),
+    ("T15_v70_gates", 5),
+    ("T16_v68_anatomy", 2),
 ])
 def test_new_tables_reject_wrong_row_width(tmp_path: Path, artifact: str, width: int) -> None:
     evidence = json.loads(DEFAULT_EVIDENCE.read_text(encoding="utf-8"))
@@ -442,6 +657,11 @@ def test_new_tables_reject_wrong_row_width(tmp_path: Path, artifact: str, width:
         ("T11_v59_crossover", "rows", 2, 7, 0.9, "does not match artifact"),
         ("T12_v57_matched", "rows", 0, 3, 0.99, "does not match artifact"),
         ("T12_v57_matched", "timing_ratios", 0, 1, 2.0, "does not match artifact"),
+        ("T13_v66_boundary", "rows", 5, 2, 0.7, "does not match artifact"),
+        ("T14_v69_attribution", "rows", 0, 2, 1.0, "does not match artifact"),
+        ("T15_v70_gates", "rows", 2, 2, 0.9, "T15_v70_gates"),
+        ("T15_v70_gates", "rows", 0, 4, "FAIL", "T15_v70_gates"),
+        ("T16_v68_anatomy", "rows", 0, 1, 9, "T16_v68_anatomy"),
     ],
 )
 def test_new_table_mutations_fail_against_pinned_artifacts(

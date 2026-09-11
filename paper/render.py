@@ -37,6 +37,8 @@ EXPECTED_ARTIFACTS = {
     "T12_v57_matched",
     "T13_v66_boundary",
     "T14_v69_attribution",
+    "T15_v70_gates",
+    "T16_v68_anatomy",
     "F5",
     "V53_cache_diagnostic",
     "V11_flex_history",
@@ -63,8 +65,10 @@ GENERATED_FILES = (
     "T10_qa_confirmation.tex",
     "T11_v59_crossover.tex",
     "T12_v57_matched.tex",
-    "T13_v66_boundary.tex",
+    "T13_v66_crossover.tex",
     "T14_v69_attribution.tex",
+    "T15_v70_gates.tex",
+    "T16_v68_anatomy.tex",
     "V3_transfer_estimands.tex",
     "F5.tex",
     "V5_doc_quality.tex",
@@ -175,6 +179,8 @@ def load_evidence(path: Path = DEFAULT_EVIDENCE) -> dict[str, Any]:
         "T12_v57_matched": 6,
         "T13_v66_boundary": 4,
         "T14_v69_attribution": 3,
+        "T15_v70_gates": 5,
+        "T16_v68_anatomy": 2,
         "F5": 2,
         "V53_cache_diagnostic": 2,
     }.items():
@@ -653,6 +659,23 @@ def _render_t13(evidence: dict[str, Any]) -> str:
         isinstance(identical, list) and len(identical) == 2,
         "T13_v66_boundary.byte_identical_repeats must hold two counts",
     )
+    headline = artifact["headline_ttft_speedup"]
+    _require(
+        isinstance(headline, dict)
+        and set(headline) == {"context", "point", "ci"}
+        and isinstance(headline["ci"], list)
+        and len(headline["ci"]) == 2
+        and _finite(headline["point"], *headline["ci"]),
+        "T13_v66_boundary.headline_ttft_speedup is invalid",
+    )
+    dilution = artifact["all_hit_wall_dilution"]
+    _require(
+        isinstance(dilution, dict)
+        and set(dilution) == {"d1", "d64"}
+        and _finite(dilution["d1"], dilution["d64"]),
+        "T13_v66_boundary.all_hit_wall_dilution is invalid",
+    )
+    divergent = identical[1] - identical[0]
     lines = [
         _source_header(evidence, "T13_v66_boundary").rstrip(),
         r"\begin{tabular}{llr}",
@@ -672,6 +695,18 @@ def _render_t13(evidence: dict[str, Any]) -> str:
     lines.append(
         r"\multicolumn{3}{l}{Development data (frozen V62 split, seed 47, single seed): "
         rf"outputs byte-identical on {identical[0]}/{identical[1]} timed repeats.}} \\"
+    )
+    lines.append(
+        rf"\multicolumn{{3}}{{l}}{{Headline all-hit TTFT speedup "
+        rf"({_tex_name(headline['context'])}): "
+        rf"${headline['point']:.2f}\;[{headline['ci'][0]:.2f}, {headline['ci'][1]:.2f}]$; "
+        rf"the all-hit wall speedup dilutes from ${dilution['d1']:.2f}\times$ (d=1) "
+        rf"to ${dilution['d64']:.2f}\times$ (d=64).}} \\"
+    )
+    lines.append(
+        rf"\multicolumn{{3}}{{l}}{{The {divergent} divergent repeats are bf16 "
+        r"reduction-order flips deeper in the trajectory; the first decoded token is "
+        r"always identical.} \\"
     )
     lines.extend([r"\bottomrule", r"\end{tabular}"])
     return _table(lines)
@@ -693,6 +728,23 @@ def _render_t14(evidence: dict[str, Any]) -> str:
     residual = artifact["residual_ms"]
     residual_frac = artifact["residual_frac_of_pre"]
     speedup = artifact["speedup_vs_pre"]
+    reconstruction = artifact["post_reconstruction_ms"]
+    delta = artifact["post_reconstruction_delta_ms"]
+    ca_post = artifact["ca_post"]
+    ca_pre = artifact["ca_pre_v60"]
+    cold_b = artifact["cold_b_ms"]
+    b_over_oldb = artifact["cold_b_over_oldb"]
+    _require(
+        _finite(reconstruction, delta, ca_pre, cold_b, b_over_oldb)
+        and isinstance(ca_post, list)
+        and len(ca_post) == 3
+        and _finite(*ca_post),
+        "T14_v69_attribution context values are invalid",
+    )
+    _require(
+        math.isclose(reconstruction, post, rel_tol=1e-9, abs_tol=1e-9),
+        "T14_v69_attribution post-optimization reconstruction must close at the pinned post-total",
+    )
     lines = [
         _source_header(evidence, "T14_v69_attribution").rstrip(),
         r"\begin{tabular}{llrr}",
@@ -703,16 +755,17 @@ def _render_t14(evidence: dict[str, Any]) -> str:
     ]
     for label, phase, removed in rows:
         _require(_finite(removed) and removed > 0, f"T14_v69_attribution {label} is invalid")
+        dagger = r"$^\dagger$" if "bounded envelope" in label else ""
         lines.append(
             f"{_tex_name(label)} & {_tex_name(phase)} & {removed:.2f} & "
-            f"{100 * removed / reduction:.1f} " + r"\\"
+            f"{100 * removed / reduction:.1f}{dagger} " + r"\\"
         )
     lines.append(r"\midrule")
     lines.append(rf"Total removed & & {reduction:.2f} & 100.0 " + r"\\")
     lines.append(r"\midrule")
     lines.append(
         r"\multicolumn{4}{l}{Pre-optimization all-hit reuse "
-        rf"{pre:.2f} ms $\to$ post-optimization {post:.2f} ms ({speedup:.2f}$\times$).}} \\"
+        rf"{pre:.4f} ms $\to$ post-optimization {post:.4f} ms ({speedup:.2f}$\times$).}} \\"
     )
     lines.append(
         r"\multicolumn{4}{l}{OPT-3 is a bounded envelope, not a direct measurement: it fits "
@@ -726,6 +779,154 @@ def _render_t14(evidence: dict[str, Any]) -> str:
         r"\multicolumn{4}{l}{Unattributed wall remainder "
         rf"{residual:.2f} ms ({100 * residual_frac:.1f}\% of the pre-total, within the declared "
         r"5\% tolerance).} \\"
+    )
+    lines.append(
+        r"\multicolumn{4}{l}{Post-optimization phase reconstruction closes at "
+        rf"{reconstruction:.2f} ms (delta {delta:.2f} vs the pinned post-total).}} \\"
+    )
+    lines.append(
+        r"\multicolumn{4}{l}{Post-optimization C/A $"
+        rf"{ca_post[0]:.4f}\;[{ca_post[1]:.4f}, {ca_post[2]:.4f}]$; pre-optimization C/A "
+        rf"{ca_pre:.4f} ({ca_pre:.2f}$\times$ slower).}} \\"
+    )
+    lines.append(
+        r"\multicolumn{4}{l}{Cold arm B unchanged: "
+        rf"{cold_b:.2f} ms (B/old-B {b_over_oldb:.4f}).}} \\"
+    )
+    lines.extend([r"\bottomrule", r"\end{tabular}"])
+    return _table(lines)
+
+
+def _render_t15(evidence: dict[str, Any]) -> str:
+    artifact = evidence["artifacts"]["T15_v70_gates"]
+    gates = _rows(evidence["artifacts"], "T15_v70_gates", 5)
+    arms = artifact["arm_means"]
+    _require(
+        isinstance(arms, dict) and set(arms) == {"A", "B", "C", "D"},
+        "T15_v70_gates.arm_means must hold arms A-D",
+    )
+    _require(
+        artifact["n_records"] == 300 and artifact["margin"] == -0.02 and artifact["k"] == 5,
+        "T15_v70_gates confirmation shape is invalid",
+    )
+    bootstrap = artifact["bootstrap"]
+    _require(
+        isinstance(bootstrap, dict)
+        and bootstrap.get("seed") == 47
+        and bootstrap.get("resamples") == 10000,
+        "T15_v70_gates.bootstrap is invalid",
+    )
+    cache = artifact["cache_validation"]
+    _require(
+        isinstance(cache, dict)
+        and cache.get("hit_only") is True
+        and cache.get("reopened_store") is True
+        and cache.get("keys_unchanged") is True
+        and cache.get("encode_on_miss") == "fail_closed"
+        and type(cache.get("entries")) is int,
+        "T15_v70_gates.cache_validation is invalid",
+    )
+    lines = [
+        _source_header(evidence, "T15_v70_gates").rstrip(),
+        r"\begin{tabular}{llrrl}",
+        r"\toprule",
+        r"Arm & Role & EM & F1 & \\",
+        r"\midrule",
+    ]
+    for arm in ("A", "B", "C", "D"):
+        means = arms[arm]
+        _require(
+            isinstance(means, dict)
+            and set(means) == {"em", "f1", "role"}
+            and _finite(means["em"], means["f1"]),
+            f"T15_v70_gates arm {arm} is invalid",
+        )
+        lines.append(
+            f"{arm} & {_tex_name(means['role'])} & {means['em']:.6f} & {means['f1']:.6f} "
+            + r"\\"
+        )
+    lines.append(r"\midrule")
+    lines.append(r"Gate & Metric & $\Delta$ mean & 95\% CI & Verdict \\")
+    for contrast, metric, mean, ci, verdict in gates:
+        _require(
+            contrast in ("C-B", "C-D") and metric in ("EM", "F1") and verdict == "PASS",
+            f"T15_v70_gates gate row is invalid: {contrast}/{metric}/{verdict}",
+        )
+        _require(
+            isinstance(ci, list)
+            and len(ci) == 2
+            and _finite(mean, *ci)
+            and ci[0] <= mean <= ci[1],
+            f"T15_v70_gates {contrast} {metric} mean is inconsistent with its CI",
+        )
+        lines.append(
+            rf"{contrast} & {metric} & {_signed(mean, 6)} & "
+            rf"$[{ci[0]:.6f}, {ci[1]:.6f}]$ & {verdict} " + r"\\"
+        )
+    lines.append(r"\midrule")
+    lines.append(
+        rf"\multicolumn{{5}}{{l}}{{{artifact['n_records']} frozen confirmation300 records; "
+        rf"non-inferiority margin {artifact['margin']:.2f}; "
+        rf"{bootstrap['resamples']} paired bootstrap resamples, seed {bootstrap['seed']}.}} \\"
+    )
+    lines.append(
+        rf"\multicolumn{{5}}{{l}}{{k={artifact['k']} selected checkpoint; arms A and B are "
+        r"diagnostic only per the frozen verdict.} \\"
+    )
+    lines.append(
+        r"\multicolumn{5}{l}{Arm C read hit-only from a reopened persisted store: "
+        rf"{cache['entries']} entries before and after, keys unchanged, encode-on-miss "
+        r"fails closed.} \\"
+    )
+    lines.extend([r"\bottomrule", r"\end{tabular}"])
+    return _table(lines)
+
+
+def _render_t16(evidence: dict[str, Any]) -> str:
+    artifact = evidence["artifacts"]["T16_v68_anatomy"]
+    rows = _rows(evidence["artifacts"], "T16_v68_anatomy", 2)
+    position = artifact["position"]
+    direction = artifact["direction"]
+    _require(
+        isinstance(position, dict) and set(position) == {"first_token", "mid_generation"},
+        "T16_v68_anatomy.position is invalid",
+    )
+    _require(
+        isinstance(direction, dict)
+        and set(direction) == {"cached_strictly_loses_em", "cached_strictly_gains_em"},
+        "T16_v68_anatomy.direction is invalid",
+    )
+    _require(
+        artifact["n_divergent"]
+        == sum(count for _, count in rows)
+        == position["first_token"] + position["mid_generation"],
+        "T16_v68_anatomy label counts must sum to the pinned divergent count",
+    )
+    lines = [
+        _source_header(evidence, "T16_v68_anatomy").rstrip(),
+        r"\begin{tabular}{lr}",
+        r"\toprule",
+        r"Divergence label (frozen rubric) & Records \\",
+        r"\midrule",
+    ]
+    for label, count in rows:
+        _require(type(count) is int and count >= 0, f"T16_v68_anatomy {label} count is invalid")
+        lines.append(f"{_tex_name(label)} & {count} " + r"\\")
+    lines.append(r"\midrule")
+    lines.append(
+        rf"\multicolumn{{2}}{{l}}{{Divergence position: {position['first_token']} first-token, "
+        rf"{position['mid_generation']} mid-generation (of {artifact['n_divergent']}).}} \\"
+    )
+    lines.append(
+        rf"\multicolumn{{2}}{{l}}{{Direction is two-sided: cached strictly loses EM on "
+        rf"{direction['cached_strictly_loses_em']} records and strictly gains on "
+        rf"{direction['cached_strictly_gains_em']}, consistent with the V65 paired "
+        r"aggregate (EM $-0.01$).} \\"
+    )
+    lines.append(
+        rf"\multicolumn{{2}}{{l}}{{Diagnostic only: single-seed labeled sample of "
+        rf"{artifact['n_divergent']}/{artifact['n_confirmation_records']} confirmation "
+        r"records; no rate or causal claims.} \\"
     )
     lines.extend([r"\bottomrule", r"\end{tabular}"])
     return _table(lines)
@@ -789,8 +990,10 @@ def render(evidence: dict[str, Any]) -> dict[str, str]:
             "T10_qa_confirmation.tex": _render_t10(evidence),
             "T11_v59_crossover.tex": _render_t11(evidence),
             "T12_v57_matched.tex": _render_t12(evidence),
-            "T13_v66_boundary.tex": _render_t13(evidence),
+            "T13_v66_crossover.tex": _render_t13(evidence),
             "T14_v69_attribution.tex": _render_t14(evidence),
+            "T15_v70_gates.tex": _render_t15(evidence),
+            "T16_v68_anatomy.tex": _render_t16(evidence),
             "V3_transfer_estimands.tex": visuals["V3_transfer_estimands.tex"],
             "F5.tex": _render_f5(evidence),
         }
