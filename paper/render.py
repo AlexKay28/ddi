@@ -12,6 +12,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
+if __package__:
+    from .expanded import render_visuals
+else:
+    from expanded import render_visuals
+
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_EVIDENCE = ROOT / "paper" / "evidence.json"
 DEFAULT_OUTPUT = ROOT / "paper" / "generated"
@@ -25,20 +30,53 @@ EXPECTED_ARTIFACTS = {
     "T5",
     "T6_delta",
     "T7_transfer",
+    "T8_transfer_estimands",
+    "T9_v65_serving",
+    "T10_qa_confirmation",
+    "T11_v59_crossover",
+    "T12_v57_matched",
+    "T13_v66_boundary",
+    "T14_v69_attribution",
     "F5",
+    "V53_cache_diagnostic",
+    "V11_flex_history",
+    "V58_cache_qa",
+    "V61_timing_grid",
+    "V64_timing_recheck",
 }
 GENERATED_FILES = (
     "T1_mask_taxonomy.md",
     "T1_mask_taxonomy.tex",
+    "V1_mask_geometry.tex",
     "T2.tex",
     "T3.tex",
+    "V2_efficiency_intuition.tex",
+    "V4_production_opportunity.tex",
     "T4.tex",
     "T4_16L.tex",
     "T4_restart.tex",
     "T5.tex",
     "T6_delta.tex",
     "T7_transfer.tex",
+    "T8_transfer_estimands.tex",
+    "T9_v65_serving.tex",
+    "T10_qa_confirmation.tex",
+    "T11_v59_crossover.tex",
+    "T12_v57_matched.tex",
+    "T13_v66_boundary.tex",
+    "T14_v69_attribution.tex",
+    "V3_transfer_estimands.tex",
     "F5.tex",
+    "V5_doc_quality.tex",
+    "V6_mask_quality.tex",
+    "V7_hit_diagnostics.tex",
+    "V8_cache_requests.tex",
+    "V9_analytical_surface.tex",
+    "V10_coverage.tex",
+    "V11_flex_history.tex",
+    "V12_amdahl.tex",
+    "A1_cache_bins.tex",
+    "analysis.json",
 )
 T_CRITICAL_95_DF2 = 4.302652729911275
 
@@ -130,7 +168,15 @@ def load_evidence(path: Path = DEFAULT_EVIDENCE) -> dict[str, Any]:
         "T5": 5,
         "T6_delta": 3,
         "T7_transfer": 5,
+        "T8_transfer_estimands": 7,
+        "T9_v65_serving": 4,
+        "T10_qa_confirmation": 6,
+        "T11_v59_crossover": 8,
+        "T12_v57_matched": 6,
+        "T13_v66_boundary": 4,
+        "T14_v69_attribution": 3,
         "F5": 2,
+        "V53_cache_diagnostic": 2,
     }.items():
         _rows(artifacts, name, width)
     return evidence
@@ -409,11 +455,303 @@ def _render_t7(evidence: dict[str, Any]) -> str:
     return _table(lines)
 
 
+def _render_t8(evidence: dict[str, Any]) -> str:
+    lines = [
+        _source_header(evidence, "T8_transfer_estimands").rstrip(),
+        "% C is the retained historical normalized remaining tuned gap, not training recovery.",
+        r"\begin{tabular}{lllrrrr}",
+        r"\toprule",
+        r"Architecture & Dataset & Metric & $C$ & $\Delta$ DDI & $\Delta$ full & $\Delta$ gap \\",
+        r"\midrule",
+    ]
+    for architecture, dataset, metric, closure, ddi_change, full_change, gap_change in _rows(
+        evidence["artifacts"], "T8_transfer_estimands", 7
+    ):
+        lines.append(
+            f"{architecture} & {_tex_name(dataset)} & {metric} & {closure:.3f} & "
+            f"{_signed(ddi_change, 3)} & {_signed(full_change, 3)} & {_signed(gap_change, 3)} "
+            + r"\\"
+        )
+    lines.extend([r"\bottomrule", r"\end{tabular}"])
+    return _table(lines)
+
+
+def _finite(*values: float) -> bool:
+    return all(math.isfinite(value) for value in values)
+
+
+def _render_t9(evidence: dict[str, Any]) -> str:
+    artifact = evidence["artifacts"]["T9_v65_serving"]
+    rows = _rows(evidence["artifacts"], "T9_v65_serving", 4)
+    byte_ac = artifact["byte_identical_ac"]
+    _require(
+        isinstance(byte_ac, list) and len(byte_ac) == 2,
+        "T9_v65_serving.byte_identical_ac must hold two counts",
+    )
+    walls = artifact["schedule_walls_s"]
+    _require(
+        isinstance(walls, dict) and set(walls) == {"A", "all_hit"},
+        "T9_v65_serving.schedule_walls_s is invalid",
+    )
+    lines = [
+        _source_header(evidence, "T9_v65_serving").rstrip(),
+        r"\begin{tabular}{llr}",
+        r"\toprule",
+        r"Stage & Arm / contrast & TTFT median (ms) [95\% CI] \\",
+        r"\midrule",
+    ]
+    previous_stage = None
+    for stage, label, point, ci in rows:
+        _require(
+            stage in ("benchmark", "combined", "ratio"),
+            f"T9_v65_serving stage is invalid: {stage}",
+        )
+        _require(
+            isinstance(ci, list) and len(ci) == 2 and _finite(point, *ci),
+            f"T9_v65_serving interval is invalid for {label}",
+        )
+        if previous_stage is not None and stage != previous_stage:
+            lines.append(r"\midrule")
+        digits = 4 if stage == "ratio" else 2
+        lines.append(
+            f"{stage} & {_tex_name(label)} & "
+            rf"${point:.{digits}f}\;[{ci[0]:.{digits}f}, {ci[1]:.{digits}f}]$ " + r"\\"
+        )
+        previous_stage = stage
+    lines.append(r"\midrule")
+    lines.append(
+        r"\multicolumn{3}{l}{Arm outputs byte-identical to the V60 retained generations: "
+        rf"A {byte_ac[0]}/{byte_ac[0]}, C {byte_ac[1]}/{byte_ac[1]}.}} \\"
+    )
+    lines.append(
+        r"\multicolumn{3}{l}{End-to-end schedule walls: "
+        rf"A {walls['A']:.3f} s, all-hit {walls['all_hit']:.3f} s.}} \\"
+    )
+    lines.extend([r"\bottomrule", r"\end{tabular}"])
+    return _table(lines)
+
+
+def _render_t10(evidence: dict[str, Any]) -> str:
+    artifact = evidence["artifacts"]["T10_qa_confirmation"]
+    rows = _rows(evidence["artifacts"], "T10_qa_confirmation", 6)
+    precision = artifact["precision"]
+    _require(isinstance(precision, dict), "T10_qa_confirmation.precision must be an object")
+    prediction = artifact["prediction_equal"]
+    first_token = artifact["first_token_equal"]
+    _require(
+        isinstance(prediction, list) and len(prediction) == 2,
+        "T10_qa_confirmation.prediction_equal is invalid",
+    )
+    _require(
+        isinstance(first_token, list) and len(first_token) == 2,
+        "T10_qa_confirmation.first_token_equal is invalid",
+    )
+    lines = [
+        _source_header(evidence, "T10_qa_confirmation").rstrip(),
+        r"\begin{tabular}{llrrl}",
+        r"\toprule",
+        r"Cohort & Metric & $\Delta$ mean & 95\% CI & Verdict \\",
+        r"\midrule",
+    ]
+    previous_cohort = None
+    for cohort, metric, mean, lo, hi, verdict in rows:
+        _require(cohort in precision, f"T10_qa_confirmation cohort is invalid: {cohort}")
+        _require(_finite(mean, lo, hi), f"T10_qa_confirmation {cohort} {metric} is not finite")
+        digits = precision[cohort]
+        if previous_cohort is not None and cohort != previous_cohort:
+            lines.append(r"\midrule")
+        lines.append(
+            rf"{_tex_name(cohort)} & {metric} & {_signed(mean, digits)} & "
+            rf"$[{lo:.{digits}f}, {hi:.{digits}f}]$ & {verdict} " + r"\\"
+        )
+        previous_cohort = cohort
+    lines.append(r"\midrule")
+    lines.append(
+        r"\multicolumn{5}{l}{Non-inferiority floor: 95\% CI lower bound "
+        rf"$\geq {artifact['floor']:.2f}$ for both EM and F1.}} \\"
+    )
+    lines.append(
+        r"\multicolumn{5}{l}{V65 untouched: prediction-equal "
+        rf"{prediction[0]}/{prediction[1]}, "
+        rf"first-token-equal {first_token[0]}/{first_token[1]}.}} \\"
+    )
+    lines.extend([r"\bottomrule", r"\end{tabular}"])
+    return _table(lines)
+
+
+def _render_t11(evidence: dict[str, Any]) -> str:
+    rows = _rows(evidence["artifacts"], "T11_v59_crossover", 8)
+    lines = [
+        _source_header(evidence, "T11_v59_crossover").rstrip(),
+        r"\begin{tabular}{rrcccc}",
+        r"\toprule",
+        r" & & \multicolumn{2}{c}{TTFT median (ms)} & warm speedup & hit-rate \\",
+        r"$N$ & $L$ & fresh & warm & [95\% CI] & crossover \\",
+        r"\midrule",
+    ]
+    for n, length, fresh, warm, speedup, lo, hi, crossover in rows:
+        _require(
+            _finite(fresh, warm, speedup, lo, hi),
+            f"T11_v59_crossover cell ({n},{length}) is not finite",
+        )
+        _require(
+            crossover is None or math.isfinite(crossover),
+            "T11_v59_crossover crossover is invalid",
+        )
+        crossover_text = "none" if crossover is None else f"{crossover:.3f}"
+        lines.append(
+            rf"{n} & {length} & {fresh:.1f} & {warm:.1f} & "
+            rf"${speedup:.3f}\;[{lo:.3f}, {hi:.3f}]$ & {crossover_text} " + r"\\"
+        )
+    lines.extend([r"\bottomrule", r"\end{tabular}"])
+    return _table(lines)
+
+
+def _render_t12(evidence: dict[str, Any]) -> str:
+    artifact = evidence["artifacts"]["T12_v57_matched"]
+    rows = _rows(evidence["artifacts"], "T12_v57_matched", 6)
+    ratios = artifact["timing_ratios"]
+    _require(
+        isinstance(ratios, list) and len(ratios) == 2,
+        "T12_v57_matched.timing_ratios must hold two latency ratios",
+    )
+    lines = [
+        _source_header(evidence, "T12_v57_matched").rstrip(),
+        "% Latency ratios are means of paired per-request full/ddi_qf ratios.",
+        r"\begin{tabular}{lrrl}",
+        r"\toprule",
+        r" & \multicolumn{2}{c}{arm mean} & paired full $-$ ddi\_qf \\",
+        r"metric & full & ddi\_qf & $\Delta$ [95\% CI] \\",
+        r"\midrule",
+    ]
+    for metric, full, ddi, delta, lo, hi in rows:
+        _require(_finite(full, ddi, delta, lo, hi), f"T12_v57_matched {metric} is not finite")
+        lines.append(
+            rf"{metric} & {full:.4f} & {ddi:.4f} & "
+            rf"${delta:.4f}\;[{lo:.4f}, {hi:.4f}]$ " + r"\\"
+        )
+    lines.append(r"\midrule")
+    for label, point, lo, hi in ratios:
+        _require(_finite(point, lo, hi), f"T12_v57_matched {label} is not finite")
+        lines.append(
+            rf"{_tex_name(label)} & \multicolumn{{3}}{{l}}{{${point:.4f}\;[{lo:.4f}, {hi:.4f}]$}} "
+            + r"\\"
+        )
+    lines.append(r"\midrule")
+    lines.append(
+        rf"\multicolumn{{4}}{{l}}{{{artifact['n_requests']} matched HotpotQA requests, seed 0.}} \\"
+    )
+    lines.extend([r"\bottomrule", r"\end{tabular}"])
+    return _table(lines)
+
+
+def _render_t13(evidence: dict[str, Any]) -> str:
+    artifact = evidence["artifacts"]["T13_v66_boundary"]
+    rows = _rows(evidence["artifacts"], "T13_v66_boundary", 4)
+    identical = artifact["byte_identical_repeats"]
+    _require(
+        isinstance(identical, list) and len(identical) == 2,
+        "T13_v66_boundary.byte_identical_repeats must hold two counts",
+    )
+    lines = [
+        _source_header(evidence, "T13_v66_boundary").rstrip(),
+        r"\begin{tabular}{llr}",
+        r"\toprule",
+        r"Document length & Decode budget & Crossover hit fraction $h$ (wall / TTFT) \\",
+        r"\midrule",
+    ]
+    for length, budget, wall, ttft in rows:
+        _require(
+            (wall is None or _finite(wall)) and (ttft is None or _finite(ttft)),
+            f"T13_v66_boundary crossover is invalid for (L={length}, {budget})",
+        )
+        wall_text = "none in grid" if wall is None else rf"${wall:g}$"
+        ttft_text = "none in grid" if ttft is None else rf"${ttft:g}$"
+        lines.append(f"L={length} & {_tex_name(budget)} & {wall_text} / {ttft_text} " + r"\\")
+    lines.append(r"\midrule")
+    lines.append(
+        r"\multicolumn{3}{l}{Development data (frozen V62 split, seed 47, single seed): "
+        rf"outputs byte-identical on {identical[0]}/{identical[1]} timed repeats.}} \\"
+    )
+    lines.extend([r"\bottomrule", r"\end{tabular}"])
+    return _table(lines)
+
+
+def _render_t14(evidence: dict[str, Any]) -> str:
+    artifact = evidence["artifacts"]["T14_v69_attribution"]
+    rows = _rows(evidence["artifacts"], "T14_v69_attribution", 3)
+    reduction = artifact["reduction_ms"]
+    _require(_finite(reduction) and reduction > 0, "T14_v69_attribution reduction is invalid")
+    total = math.fsum(row[2] for row in rows)
+    _require(
+        _finite(total) and math.isclose(total, reduction, rel_tol=1e-12, abs_tol=1e-12),
+        "T14_v69_attribution removed phases must sum to the pinned reduction",
+    )
+    pre, post = artifact["pre_total_ms"], artifact["post_total_ms"]
+    budget = artifact["opt3_budget_ms"]
+    implied = artifact["opt3_implied_post_ms"]
+    residual = artifact["residual_ms"]
+    residual_frac = artifact["residual_frac_of_pre"]
+    speedup = artifact["speedup_vs_pre"]
+    lines = [
+        _source_header(evidence, "T14_v69_attribution").rstrip(),
+        r"\begin{tabular}{llrr}",
+        r"\toprule",
+        r"Optimization (V65) & Pre-optimization phase removed/reduced & ms removed & "
+        r"\% of reduction \\",
+        r"\midrule",
+    ]
+    for label, phase, removed in rows:
+        _require(_finite(removed) and removed > 0, f"T14_v69_attribution {label} is invalid")
+        lines.append(
+            f"{_tex_name(label)} & {_tex_name(phase)} & {removed:.2f} & "
+            f"{100 * removed / reduction:.1f} " + r"\\"
+        )
+    lines.append(r"\midrule")
+    lines.append(rf"Total removed & & {reduction:.2f} & 100.0 " + r"\\")
+    lines.append(r"\midrule")
+    lines.append(
+        r"\multicolumn{4}{l}{Pre-optimization all-hit reuse "
+        rf"{pre:.2f} ms $\to$ post-optimization {post:.2f} ms ({speedup:.2f}$\times$).}} \\"
+    )
+    lines.append(
+        r"\multicolumn{4}{l}{OPT-3 is a bounded envelope, not a direct measurement: it fits "
+        rf"within the {budget:.2f} ms pre-optimization}} \\"
+    )
+    lines.append(
+        r"\multicolumn{4}{l}{cache\_assemble budget; the implied post-optimization assemble of "
+        rf"{implied:.2f} ms is inferred, not measured.}} \\"
+    )
+    lines.append(
+        r"\multicolumn{4}{l}{Unattributed wall remainder "
+        rf"{residual:.2f} ms ({100 * residual_frac:.1f}\% of the pre-total, within the declared "
+        r"5\% tolerance).} \\"
+    )
+    lines.extend([r"\bottomrule", r"\end{tabular}"])
+    return _table(lines)
+
+
 def _render_f5(evidence: dict[str, Any]) -> str:
     artifact = evidence["artifacts"]["F5"]
     _require(
         artifact.get("shape") == "zipf(a=1.5),top=32,N=5,L=500,Q=32,A=16", "F5 shape is invalid"
     )
+    rows = _rows(evidence["artifacts"], "F5", 2)
+    for label, values in rows:
+        _require(
+            isinstance(values, list) and len(values) == 3, f"F5 {label} needs three seed values"
+        )
+    if artifact.get("status") == "withdrawn":
+        return _table(
+            [
+                _source_header(evidence, "F5").rstrip(),
+                r"\begin{minipage}{0.82\linewidth}",
+                r"\small\textbf{Throughput claim withdrawn (V53).} "
+                r"Historical V51 rows do not establish exact token geometry or equal decode work. "
+                r"The source rows are retained for audit, not plotted as validated throughput.",
+                r"\end{minipage}",
+            ]
+        )
     lines = [
         _source_header(evidence, "F5").rstrip(),
         r"\begin{minipage}{0.82\linewidth}",
@@ -423,10 +761,7 @@ def _render_f5(evidence: dict[str, Any]) -> str:
         r"Mode & mean QPS & \multicolumn{2}{l}{relative bar (20 mm per QPS)} \\",
         r"\midrule",
     ]
-    for label, values in _rows(evidence["artifacts"], "F5", 2):
-        _require(
-            isinstance(values, list) and len(values) == 3, f"F5 {label} needs three seed values"
-        )
+    for label, values in rows:
         mean = statistics.mean(values)
         lines.append(rf"{label} & {mean:.3f} & \rule{{{mean * 20:.1f}mm}}{{1.5ex}} & \\")
     lines.extend([r"\bottomrule", r"\end{tabular}", r"\end{minipage}"])
@@ -435,19 +770,32 @@ def _render_f5(evidence: dict[str, Any]) -> str:
 
 def render(evidence: dict[str, Any]) -> dict[str, str]:
     rendered = _render_t1(evidence)
+    visuals = render_visuals(evidence)
+    rendered["V1_mask_geometry.tex"] = visuals["V1_mask_geometry.tex"]
     rendered.update(
         {
             "T2.tex": _render_t2(evidence),
             "T3.tex": _render_t3(evidence),
+            "V2_efficiency_intuition.tex": visuals["V2_efficiency_intuition.tex"],
+            "V4_production_opportunity.tex": visuals["V4_production_opportunity.tex"],
             "T4.tex": _render_t4(evidence),
             "T4_16L.tex": _render_t4_16l(evidence),
             "T4_restart.tex": _render_t4_restart(evidence),
             "T5.tex": _render_t5(evidence),
             "T6_delta.tex": _render_t6(evidence),
             "T7_transfer.tex": _render_t7(evidence),
+            "T8_transfer_estimands.tex": _render_t8(evidence),
+            "T9_v65_serving.tex": _render_t9(evidence),
+            "T10_qa_confirmation.tex": _render_t10(evidence),
+            "T11_v59_crossover.tex": _render_t11(evidence),
+            "T12_v57_matched.tex": _render_t12(evidence),
+            "T13_v66_boundary.tex": _render_t13(evidence),
+            "T14_v69_attribution.tex": _render_t14(evidence),
+            "V3_transfer_estimands.tex": visuals["V3_transfer_estimands.tex"],
             "F5.tex": _render_f5(evidence),
         }
     )
+    rendered.update(visuals)
     _require(set(rendered) == set(GENERATED_FILES), "renderer output set is incomplete")
     return rendered
 
@@ -487,7 +835,7 @@ def main(argv: list[str] | None = None) -> int:
         evidence = load_evidence(args.evidence)
         missing = verify_sources(evidence, require_all=args.require_all_sources)
         write_or_check(render(evidence), args.output, check=args.check)
-    except (EvidenceError, KeyError, OSError, TypeError) as error:
+    except (ValueError, KeyError, OSError, TypeError) as error:
         print(f"paper render failed: {error}", file=sys.stderr)
         return 1
     action = "validated" if args.check else "rendered"

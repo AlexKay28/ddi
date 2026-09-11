@@ -1,6 +1,18 @@
 {
   "schema_version": 1,
   "sources": {
+    "flex_kernel_history": {
+      "path": "logs/timing_flex2.log",
+      "sha256": "2d61e4a52ba9af2aa41cbbc6532fd6f21026475a09c5d781c2702fc01eff4fd7",
+      "bytes": 1499,
+      "required": true
+    },
+    "flex_model_history": {
+      "path": "logs/timing_flex_model3.log",
+      "sha256": "a67edb5e970640a50662499717b2014328ef5a5b3ea034f2773824ba16061653",
+      "bytes": 4183,
+      "required": true
+    },
     "mask_implementation": {
       "path": "ddi/masks.py",
       "sha256": "94fcc2305c73aa73159417b38092eed1c11713494b22876d666560d508d38dfa",
@@ -53,19 +65,19 @@
       "path": "results/phase3_n2.jsonl",
       "sha256": "1c2d4b3068468e1f76249bb1bfdc9f579797fec06f0e45b9cc8e2ef5085407c2",
       "bytes": 425416,
-      "required": false
+      "required": true
     },
     "doc_sweep_n5": {
       "path": "results/phase3_n5.jsonl",
       "sha256": "6d18b180ae2df48856d304cc1184f4fbf6f76661226cd8e075eee3dea765bd34",
       "bytes": 425309,
-      "required": false
+      "required": true
     },
     "doc_sweep_n10": {
       "path": "results/phase3_n10.jsonl",
       "sha256": "1d0a7c012582a0af40c322e6c3b91540e083ee27b2bb5a896cc9230442470dda",
       "bytes": 425243,
-      "required": false
+      "required": true
     },
     "baseline_seeds": {
       "path": "results/sprint_a_baseline.jsonl",
@@ -91,6 +103,12 @@
       "bytes": 26673,
       "required": true
     },
+    "transfer_v54_sensitivity": {
+      "path": "experiments/transfer_v54_posthoc_sensitivity.json",
+      "sha256": "7da99a6fcb70f5c3bbf88fd13ca71e3c4e2182c6daf381f97a90d9fe3ec5f863",
+      "bytes": 134893,
+      "required": true
+    },
     "cache_summary": {
       "path": "results/cache_v51_throughput_summary.json",
       "sha256": "abd0036c4684b987344c4d08cc8947900d431396ec4898851b193db768882a38",
@@ -102,9 +120,127 @@
       "sha256": "dbadc100ea549d6b1fb92265a960c918b9918c3d620eea1c26168839f96e68e4",
       "bytes": 324560,
       "required": true
+    },
+    "cache_v53_report": {
+      "path": "VIBEQUEUE-53-REPORT.md",
+      "sha256": "7cd9223e128c5d82b61e59575035fe4bb54c9f48c5da721723fd5d214d85195e",
+      "bytes": 11513,
+      "required": true
+    },
+    "cache_v53_summary": {
+      "path": "results/cache_v53_local_20260907/summary.json",
+      "sha256": "28ae886d9dae851ed090b7ebb0744b33926060d9499c3f16a01221810a0e2189",
+      "bytes": 848,
+      "required": true
+    },
+    "cache_v53_timing": {
+      "path": "results/cache_v53_local_20260907/timing.jsonl",
+      "sha256": "055cf47312269ca147c6d4517d26b82aabc910b11fd6ca07f5eba5e3f54153a8",
+      "bytes": 219974,
+      "required": true
+    },
+    "cache_v53_validation": {
+      "path": "results/cache_v53_local_20260907/validation.jsonl",
+      "sha256": "8597c0b5394b4b17248065ad1ebc386a0a2d864f089f8e65d51d5e293f7b8d4a",
+      "bytes": 393637,
+      "required": true
+    },
+    "v57_matched_summary": {
+      "path": "results/v57_matched_qa_hotpot100_seed0_20260908T1238Z/summary.json",
+      "sha256": "2cba54f3e4491feaa10496fe793e0510a27156b6f430c572c3d519d85faf88b1",
+      "bytes": 4632,
+      "required": true
+    },
+    "v57_matched_post_audit": {
+      "path": "results/v57_matched_qa_hotpot100_seed0_20260908T1238Z/post_audit.json",
+      "sha256": "1be6fd17f56003d1c4f747ff505e3557ca5b0cbec9105dc8537dbaed14bc1c7e",
+      "bytes": 11418,
+      "required": true
+    },
+    "v58_cache_qa_summary": {
+      "path": "results/v58_cache_qa_100_20260908T122202Z/summary.json",
+      "sha256": "ac3ccd965ba3523eb7bca6602d558033f49948c158951430265a91ba0dfdfaaa",
+      "bytes": 4366,
+      "required": true
+    },
+    "v59_grid_summary": {
+      "path": "results/v59_ttft_grid_20260908T131148Z/summary.json",
+      "sha256": "841b49da77af2df1ef89339b0b0182a224144a61129d0e0710d50a2fdd17cb28",
+      "bytes": 286,
+      "required": true
+    },
+    "v59_grid_analysis": {
+      "path": "results/v59_ttft_grid_20260908T131148Z/analysis.json",
+      "sha256": "ae69953448685c38c2e1d2653d5d765b34ac43f40e9c8ec6451265a9f4445224",
+      "bytes": 10086,
+      "required": true
+    },
+    "v60_confirmation_result": {
+      "path": "results/v60_confirmation24_20260910T093500Z/result.json",
+      "sha256": "9421b268eefaf7fcf6bc60b80469ba43a8b6868f9c0dfec123647ff259547464",
+      "bytes": 1592,
+      "required": true
+    },
+    "v60_confirmation_requests": {
+      "path": "results/v60_confirmation24_20260910T093500Z/requests.jsonl",
+      "sha256": "ec08d056d6ebe9208cf831e8a63e2d527cc8afec90d377ad9356635767410a5c",
+      "bytes": 82257,
+      "required": true
+    },
+    "v64_qa_recomputation": {
+      "path": "results/v64_audit_20260910T091231Z_QA_RECOMPUTATION/recomputation.json",
+      "sha256": "7850dbd4664ac50ff2f8d4f7d8de5420441bdb31da86d04aad7f2d911174fb63",
+      "bytes": 9852,
+      "required": true
+    },
+    "v64_timing_recomputation": {
+      "path": "results/v64_audit_20260910T091755Z_TIMING_CLAIMS/recomputation.json",
+      "sha256": "d2ca2e2233e49c120aeb21c3ddedbe7add738f6f45f7f1dcc06e64d479f24ce1",
+      "bytes": 23111,
+      "required": true
+    },
+    "v65_benchmark_result": {
+      "path": "results/v65_benchmark_20260910T101710Z/result.json",
+      "sha256": "f0be727746f7788e668d39c57d29d56df047fad8cc64641a5574ea9bdcfac3a5",
+      "bytes": 71383,
+      "required": true
+    },
+    "v65_combined_result": {
+      "path": "results/v65_combined_20260910T102918Z/result.json",
+      "sha256": "1edacd6a725fe922ba18897db5a6fa73272e52e54bd5e4dbdb86274c6fdff5ab",
+      "bytes": 9300,
+      "required": true
+    },
+    "v61_timing_result": {
+      "path": "results/v61_timing_20260910T071010Z/result.json",
+      "sha256": "8a2b80e7c46746d670cf8fa7515f08a34c274884e4209b3cea323f33d8d2c43e",
+      "bytes": 16920,
+      "required": true
+    },
+    "v66_boundary_summary": {
+      "path": "results/v66_boundary_20260910T132922Z/summary.json",
+      "sha256": "3a4752465fe6cf0ec7b326e1a6f7108b5401dad588792188bf331f70b5a4a215",
+      "bytes": 8231,
+      "required": true
+    },
+    "v66_boundary_t9_followup": {
+      "path": "results/v66_boundary_20260910T132922Z/t9_followup_evidence_fragment.json",
+      "sha256": "8e25ccea000ceddeebed639c826ac22f349666dddcd9b4ba8a1559eca8d74316",
+      "bytes": 2106,
+      "required": true
+    },
+    "v69_attribution": {
+      "path": "results/v69_attribution_20260910T162613Z/attribution.json",
+      "sha256": "90f34eec2d9b24426a0af79ba757bedad178b8cb1abecf503cb0a87aea2188d1",
+      "bytes": 9971,
+      "required": true
     }
   },
   "artifacts": {
+    "V11_flex_history": {
+      "sources": ["flex_kernel_history", "flex_model_history"],
+      "status": "historical_unvalidated"
+    },
     "T1_mask_taxonomy": {
       "sources": ["mask_implementation"],
       "rows": [
@@ -191,14 +327,167 @@
         ["musique", "F1", "parity not reached", "parity not reached", [0.028023281514393483, -0.08539211208926023, 0.17898315394714426]]
       ]
     },
+    "T8_transfer_estimands": {
+      "sources": ["transfer_v54_sensitivity"],
+      "rows": [
+        ["Llama-3.1-8B", "hotpot_qa", "EM", 0.8062755481233742, 0.0, -0.05333333333333334, -0.05333333333333334],
+        ["Llama-3.1-8B", "hotpot_qa", "F1", 0.7269740403059193, 0.000012, -0.025423509823509823, -0.025435509823509824],
+        ["Llama-3.1-8B", "musique", "EM", 0.44035409035409034, 0.03333333333333333, 0.02, -0.013333333333333334],
+        ["Llama-3.1-8B", "musique", "F1", 0.4798673466965396, 0.038378, 0.03286507936507937, -0.005513079365079364],
+        ["Qwen2.5-7B", "hotpot_qa", "EM", 0.8545454545454545, 0.13, -0.02666666666666667, -0.15666666666666668],
+        ["Qwen2.5-7B", "hotpot_qa", "F1", 0.781115827454259, 0.134740, -0.01884557762498939, -0.1535855776249894],
+        ["Qwen2.5-7B", "musique", "EM", 0.5236802413273002, 0.06666666666666667, -0.03333333333333333, -0.1],
+        ["Qwen2.5-7B", "musique", "F1", 0.4518440651821461, 0.080792, -0.0020976705508156087, -0.08288967055081561]
+      ]
+    },
     "F5": {
       "sources": ["cache_summary", "cache_rows"],
+      "status": "withdrawn",
+      "reason": "V53: V51 does not establish exact token geometry or equal decode work; local revalidation is not clean-revision evidence.",
       "shape": "zipf(a=1.5),top=32,N=5,L=500,Q=32,A=16",
       "rows": [
         ["full causal", [1.6647, 1.6932, 1.6579]],
         ["DDI recompute", [1.5037, 1.5121, 1.4851]],
         ["DDI cache", [1.8725, 1.8447, 1.7697]]
       ]
+    },
+    "V53_cache_diagnostic": {
+      "sources": ["cache_v53_report", "cache_v53_summary", "cache_v53_timing", "cache_v53_validation"],
+      "status": "diagnostic_not_admissible",
+      "request_analysis": "Post-hoc descriptive grouping of measured requests by document hits; matched by seed/request; no request-level independence or QA quality claim.",
+      "shape": "zipf(a=1.5),top=32,N=5,L=500,Q=32,A=16",
+      "hit_rate": 0.9453333333333334,
+      "rows": [
+        ["cached DDI", [1.972357, 1.890489, 1.847594]],
+        ["fresh DDI", [1.595253, 1.593203, 1.599303]],
+        ["full causal", [1.613400, 1.600539, 1.631006]]
+      ],
+      "ratios": [
+        ["cache/fresh DDI", 1.192746, 1.091097, 1.294395],
+        ["cache/full causal", 1.178812, 1.067295, 1.290329]
+      ],
+      "behavior_failures": {
+        "greedy_ids": [25, 192],
+        "measured_streams": [19, 150],
+        "numerical_logits": [192, 192]
+      }
+    },
+    "T9_v65_serving": {
+      "sources": ["v65_benchmark_result", "v65_combined_result"],
+      "rows": [
+        ["benchmark", "A monolithic", 127.5165444239974, [113.45456354320049, 145.10829746723175]],
+        ["benchmark", "B canonical fresh", 417.41941310465336, [413.10473531484604, 429.8475421965122]],
+        ["benchmark", "C all-hit reuse", 62.29646783322096, [61.28952093422413, 64.31779824197292]],
+        ["combined", "A monolithic", 127.6210518553853, [112.6630399376154, 144.98275890946388]],
+        ["combined", "all-hit reuse", 58.77750087529421, [57.82945081591606, 59.34515222907066]],
+        ["combined", "mixed-hit", 386.3587770611048, [368.31169202923775, 399.27603863179684]],
+        ["ratio", "benchmark C/A", 0.48853635514214383, [0.4326919478917944, 0.5503906127960165]],
+        ["ratio", "benchmark B/A", 3.273452985964847, [2.9298197531478696, 3.6809983985748307]],
+        ["ratio", "combined A/all-hit", 2.1712568577244142, [1.9428229181932524, 2.4366334562690204]],
+        ["ratio", "combined A/mixed-hit", 0.3303174650933356, [0.29933196398092665, 0.3615261461312097]]
+      ],
+      "byte_identical_ac": [24, 24],
+      "schedule_walls_s": {"A": 7.478668473660946, "all_hit": 5.21568488702178}
+    },
+    "T10_qa_confirmation": {
+      "sources": [
+        "v60_confirmation_result",
+        "v60_confirmation_requests",
+        "v64_qa_recomputation",
+        "v65_combined_result"
+      ],
+      "rows": [
+        ["V64 (n=24)", "EM", 0.041667, -0.083333, 0.166667, "inconclusive"],
+        ["V64 (n=24)", "F1", 0.021982, -0.070833, 0.119518, "inconclusive"],
+        ["V65 (n=100)", "EM", -0.01, -0.07, 0.05, "not non-inferior"],
+        ["V65 (n=100)", "F1", -0.009466311466311468, -0.05269639249639249, 0.03121681096681094, "not non-inferior"]
+      ],
+      "floor": -0.02,
+      "precision": {"V64 (n=24)": 6, "V65 (n=100)": 4},
+      "prediction_equal": [78, 100],
+      "first_token_equal": [91, 100]
+    },
+    "T11_v59_crossover": {
+      "sources": ["v59_grid_summary", "v59_grid_analysis"],
+      "rows": [
+        [2, 32, 23.3469158411026, 32.81218186020851, 0.7161727744542904, 0.7061206251120414, 0.7308657452533515, null],
+        [2, 128, 38.73791545629501, 37.58580982685089, 1.0168622843857982, 0.9940769871073428, 1.0317575129780445, null],
+        [2, 512, 103.14722545444965, 55.83771876990795, 1.8502612869774133, 1.823649060200572, 1.8637195574422503, 0.7325555471258575],
+        [5, 32, 29.165208339691162, 45.9666233509779, 0.633292664144745, 0.6042114104312493, 0.651572696980924, null],
+        [5, 128, 67.43138656020164, 59.52955223619938, 1.1473551401769586, 1.1066850123049359, 1.2003289519928764, 0.9549614273773755],
+        [5, 512, 253.88519652187824, 110.01506261527538, 2.2535980060503538, 2.138204757391834, 2.3485167128417506, 0.7000201094212505],
+        [10, 32, 40.20017944276333, 67.93415918946266, 0.5900686994480374, 0.5786045722897784, 0.5998494543072115, null],
+        [10, 128, 122.72824719548225, 91.21947921812534, 1.3629634948339133, 1.3278997967013728, 1.4060702248562824, 0.9132288635153999],
+        [10, 512, 591.4918538182974, 223.5386837273836, 2.6351765777804137, 2.6035979148432515, 2.662254678447223, 0.6163202686585928]
+      ],
+      "cell_count": 27
+    },
+    "T12_v57_matched": {
+      "sources": ["v57_matched_summary", "v57_matched_post_audit"],
+      "rows": [
+        ["EM", 0.56, 0.3, 0.26, 0.16, 0.36],
+        ["F1", 0.7034227994227994, 0.4152806637806638, 0.28814213564213564, 0.19164323593073596, 0.3867463924963924],
+        ["presence", 0.61, 0.31, 0.3, 0.19, 0.4]
+      ],
+      "timing_ratios": [
+        ["prefill latency ratio", 1.0012970021240606, 1.0007564265039373, 1.0018467585791022],
+        ["request latency ratio", 0.9954692117357763, 0.9923899048153673, 0.9986132986581046]
+      ],
+      "n_requests": 100
+    },
+    "T13_v66_boundary": {
+      "sources": ["v66_boundary_summary", "v66_boundary_t9_followup"],
+      "data_role": "development",
+      "data_role_note": "Frozen V62 development split, seed 47, single seed, 15 timed repeat pairs per cell; development data only and no confirmation-quality claim.",
+      "rows": [
+        [32, "TTFT-only (d=1)", null, null],
+        [32, "d=8", null, null],
+        [32, "d=16", null, null],
+        [32, "d=32", null, null],
+        [32, "d=64", null, null],
+        [128, "TTFT-only (d=1)", 1.0, 0.9],
+        [128, "d=8", 1.0, 0.9],
+        [128, "d=16", 1.0, 0.9],
+        [128, "d=32", null, 0.9],
+        [128, "d=64", null, 0.9],
+        [512, "TTFT-only (d=1)", 0.7, 0.7],
+        [512, "d=8", 0.7, 0.7],
+        [512, "d=16", 0.8, 0.7],
+        [512, "d=32", 0.8, 0.7],
+        [512, "d=64", 0.8, 0.7]
+      ],
+      "byte_identical_repeats": [2775, 3600],
+      "repeats_per_cell": 15
+    },
+    "T14_v69_attribution": {
+      "sources": ["v69_attribution"],
+      "data_role": "development",
+      "data_role_note": "Derivation over pinned artifacts: pre/post totals trace to the confirmation-frozen V60/V65 runs (V64-adjudicated); the phase leaves are uniformly rescaled from the development-role V65 overhead profile (factor 0.945248). Supports no confirmation-quality claim.",
+      "rows": [
+        ["OPT-1 store-time validation markers", "validate_entry (per-request geometry+isfinite scan)", 85.6068411953898],
+        ["OPT-2 2 GiB LRU resident tier", "disk_load (synchronous per-doc torch.load)", 59.13778513100967],
+        ["OPT-3 single staged pinned H2D copy per layer (bounded envelope)", "cache_assemble (per-entry .to(device) + cat)", 14.200046578509188]
+      ],
+      "pre_total_ms": 221.24114073812962,
+      "post_total_ms": 62.29646783322096,
+      "reduction_ms": 158.94467290490866,
+      "residual_ms": 3.4781266722420128,
+      "residual_frac_of_pre": 0.01572097603835297,
+      "opt3_budget_ms": 23.043673551472935,
+      "opt3_implied_post_ms": 8.843626972963747,
+      "speedup_vs_pre": 3.5514235145792314
+    },
+    "V58_cache_qa": {
+      "sources": ["v58_cache_qa_summary"],
+      "status": "diagnostic_not_admissible"
+    },
+    "V61_timing_grid": {
+      "sources": ["v61_timing_result"],
+      "status": "cross_backend_timing_reference"
+    },
+    "V64_timing_recheck": {
+      "sources": ["v64_timing_recomputation"],
+      "status": "descriptive_reconstruction"
     }
   }
 }

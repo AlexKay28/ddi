@@ -119,10 +119,9 @@ def make_block_mask(
                 allow = kv_start < q_end
             elif N in q_segments and variant == "ddi_qf":
                 allow = True
-            elif N in q_segments:  # blind query block
-                allow = N in kv_segments
             else:
-                allow = bool((q_segments & kv_segments) - {N})
+                # Mixed doc/query rows need the union of both segments' candidates.
+                allow = bool(q_segments & kv_segments)
             if allow:
                 allowed_blocks.append(kv_block_idx)
         candidates.append(allowed_blocks)
@@ -224,10 +223,9 @@ def make_batched_block_mask(
                     allow = kv_block_idx * kv_block < q_start + q_block
                 elif -2 in q_segments and variant == "ddi_qf":
                     allow = True
-                elif -2 in q_segments:
-                    allow = -2 in kv_segments
                 else:
-                    allow = bool((q_segments & kv_segments) - {-2})
+                    # Mixed doc/query rows need the union of both segments' candidates.
+                    allow = bool(q_segments & kv_segments)
                 # Padded rows must retain a diagonal candidate to stay finite.
                 if -1 in q_segments and -1 in kv_segments:
                     allow = True
@@ -311,21 +309,49 @@ def patch_model_for_flex(model: torch.nn.Module) -> torch.nn.Module:
                     key_states = key_states.repeat_interleave(num_kv_groups, dim=1)
                     value_states = value_states.repeat_interleave(num_kv_groups, dim=1)
 
+                scale = float(getattr(attn_module, "scaling", attn_module.head_dim**-0.5))
                 bm = model_ref._flex_block_mask
                 if bm is not None:
-                    attn_output = flex_fn(query_states, key_states, value_states, block_mask=bm)
+                    attn_output = flex_fn(
+                        query_states,
+                        key_states,
+                        value_states,
+                        block_mask=bm,
+                        scale=scale,
+                    )
                 else:
                     # Decode fallback: sdpa with additive mask or causal.
                     # Decode is Q_LEN=1 (memory-bound), so flex's block-sparse
                     # kernel offers no benefit — sdpa is correct and fast here.
                     if attention_mask is not None:
                         attn_output = F.scaled_dot_product_attention(
-                            query_states, key_states, value_states, attn_mask=attention_mask
+                            query_states,
+                            key_states,
+                            value_states,
+                            attn_mask=attention_mask,
+                            scale=scale,
                         )
                     else:
                         attn_output = F.scaled_dot_product_attention(
-                            query_states, key_states, value_states, is_causal=True
+                            query_states,
+                            key_states,
+                            value_states,
+                            is_causal=True,
+                            scale=scale,
                         )
+
+                diagnostics = getattr(model_ref, "_flex_diagnostics", None)
+                if diagnostics is not None:
+                    diagnostics.append(
+                        {
+                            "layer": int(attn_module.layer_idx),
+                            "scale": scale,
+                            "query": query_states.detach().cpu(),
+                            "key": key_states.detach().cpu(),
+                            "value": value_states.detach().cpu(),
+                            "attention_output": attn_output.detach().cpu(),
+                        }
+                    )
 
                 attn_output = attn_output.transpose(1, 2).reshape(hidden_states.shape)
                 attn_output = attn_module.o_proj(attn_output)

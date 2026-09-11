@@ -5,9 +5,9 @@
 \label{sec:results-caching}
 
 Per-document caching is a design consequence evaluated in this paper.
-Under full causal attention, no document's KV block is reusable across
-requests: $\mathrm{doc}_2$'s keys and values depend on $\mathrm{doc}_1$,
-so changing any earlier document invalidates the prefix. Under a
+Under full causal attention, an unchanged exact prefix can be reused, but
+$\mathrm{doc}_2$'s keys and values depend on $\mathrm{doc}_1$, so changing a
+document invalidates the suffix after that position. Under a
 block-diagonal mask with the \emph{restart} position layout
 (Section~\ref{sec:method-positions}), a document's KV block can be a function
 of that document alone, subject to the implementation and position assumptions.
@@ -42,25 +42,31 @@ frequencies.
 \subsection{Throughput under document reuse}
 \label{sec:results-caching-throughput}
 
-The corrected synthetic harness measures disk lookup, cold KV computation and
-write, cache assembly and transfer, query prefill, and 16-token greedy decode.
-At Zipf $a=1.5$, 32 source documents, five 500-token documents per request, and
-a 32-token query, each of three seeds uses 10 warmups and 50 measured requests
-per mode. Cache hit rates are 0.948, 0.944, and 0.944. Cache/recompute speedups
-are 1.245$\times$, 1.220$\times$, and 1.192$\times$; treating seed as the
-replication unit gives mean 1.219$\times$ and a 95\% t-interval
-[1.152, 1.286]. Against full causal, the corresponding mean is
-1.094$\times$ [1.022, 1.166]. All rows are pinned to git revision
-\texttt{4ae5750}; raw rows are in \texttt{results/cache\_v51\_throughput.jsonl}.
+The legacy throughput claim is withdrawn following the workload audit.
+Sampling 500 token IDs and decoding them to text before retokenization does
+not produce an exact 500-token document: the local seed-0 reproduction yields
+513--555 tokens per document. Full causal always executed 16 decode forwards,
+whereas DDI could stop at EOS; output counts were not retained. The small
+behavioral diagnostic above does not validate the timed workload. Thus the
+previous 1.219$\times$ cache/recompute and 1.094$\times$ cache/full estimates
+do not establish an exact-shape, equal-work speedup. Historical raw rows remain
+unchanged in
+\texttt{results/cache\_v51\_throughput.jsonl} for audit only.
+
+The follow-up protocol specifies identical pretokenized inputs, 16 emitted tokens from one prefill
+and 15 decode forwards for every mode, separate natural-EOS checks, isolated
+content-identified caches, and counterbalanced seed-level timing. Local
+revalidation preserves source and diff hashes but is not clean-revision
+evidence; no replacement throughput claim is admitted here. Neither numerical
+identity nor natural-QA preservation follows from synthetic greedy agreement.
 
 \begin{figure}[t]
     \centering
     \input{generated/F5.tex}
-    \caption{F5 --- throughput at the measured restart-layout request shape.
-        One deterministic source-rendered bar per mode: full-causal recompute,
-        DDI recompute, and DDI per-document cache.}
+    \caption{F5 --- withdrawal of the unsupported exact-shape, equal-work
+        throughput comparison. Historical source rows remain available for audit.}
     \label{fig:f5}
 \end{figure}
 
-The estimate is not combined with unsupported archival Flex observations and
-does not establish a general serving-throughput claim across shapes or models.
+No cache speedup is combined with unsupported archival Flex observations, and
+no general serving-throughput claim across shapes or models is established.

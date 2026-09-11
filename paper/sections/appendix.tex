@@ -1,0 +1,216 @@
+\section{Quality Changes Are Not Gap Recovery}
+\label{app:quality}
+
+\paragraph{Matched protocol Q3 (V46/V54).}
+Qwen2.5-7B-Instruct and Llama-3.1-8B-Instruct each have three independently
+trained top-eight-layer checkpoints, paired with their base models under full,
+DDI-QF and blind masks. Each seed/dataset has 100 common natural-QA IDs across
+architectures and all six arms; the synthetic control has 20 records. Greedy
+generation is capped at 64 tokens, batch one, bf16. Retained prediction
+provenance records A100 80GB PCIe, torch 2.13.0+cu126, code/config identity,
+seed and checkpoint directory. These are three selected instances, not a
+population sample of training outcomes. Per-row provenance, rather than a
+single campaign-wide clean-source assertion, is the authority.
+
+Let $B_F,B_D,B_B$ denote base full/DDI/blind means and $T_F,T_D,T_B$ tuned
+means. The preregistered statistic
+\begin{equation}
+C=1-\frac{T_F-T_D}{B_F-B_B}
+\end{equation}
+normalizes the remaining tuned gap by base document headroom. It is not the
+fraction of the original full--DDI gap recovered through training. A decrease
+in full-path quality can raise $C$ without any DDI gain. V54 therefore retains
+$C$ and its original gates but separately reports
+\begin{equation}
+\Delta_D=T_D-B_D,\quad\Delta_F=T_F-B_F,\quad
+\Delta_G=(T_F-T_D)-(B_F-B_D)=\Delta_F-\Delta_D.
+\end{equation}
+Positive $\Delta_D,\Delta_F$ mean improvement; negative $\Delta_G$ means gap
+narrowing. Loss is sign-oriented before contrasts; stored raw loss remains
+lower-is-better. Presence and loss are supporting controls, not substitutes for
+failed primary EM/F1 gates.
+
+\begin{figure}[H]
+\centering\input{generated/V3_transfer_estimands.tex}
+\caption{Equal-seed means of paired training changes. H/M denote Hotpot/MuSiQue.
+Qwen's positive DDI changes coexist with negative full-path changes. Llama's
+Hotpot gap narrowing largely reflects full-path degradation. Bars are point
+estimates, not an architecture-equivalence or parity test.}
+\end{figure}
+
+Neither architecture reaches natural-QA parity under the retained rules. The
+only valid original architecture contrast is MuSiQue F1: Llama minus Qwen
+$C=+0.028$, equal-seed interval $[-0.085,+0.179]$. This does not establish a
+practical architecture difference or equivalence. Blind-control movement
+invalidates Llama Hotpot; insufficient headroom/preservation invalidates other
+specified cells. Small remaining gaps alone cannot override those gates.
+
+V54's post-hoc sensitivity jointly resamples common record IDs across the six
+arms and both architectures within each seed (10,000 draws, RNG seed 54).
+It does not resample a population of training seeds. Conditional intervals for
+Qwen DDI F1 change are $[+.095,+.176]$ on Hotpot and $[+.042,+.120]$ on MuSiQue.
+They clarify the observed training changes but do not replace the original
+decision procedure. Full results and inputs are in
+\path{experiments/transfer_v54_posthoc_sensitivity.json} and
+\path{experiments/transfer_v54_inputs.json}; see \path{VIBEQUEUE-54-REPORT.md}.
+
+\newpage
+\section{Cache Anatomy and Provenance}
+\label{app:cache}
+
+\paragraph{Request-level derivation.}
+The postprocessor reads the hash-pinned V53 compact summary, 540 timing rows
+and 192 validation rows. It requires all $(\mathrm{seed},\mathrm{request},
+\mathrm{mode})$ keys, exact five-by-500 document geometry, query length 32,
+16 generated IDs and 15 decode forwards. Measured requests are indices 10--59;
+the corresponding validation case is \texttt{stream\_k}, without renumbering.
+Cached/fresh generated IDs must match those retained in validation. The
+renderer recomputes each QPS as $50/\sum t_i$ and checks the compact summary.
+Grouping uses hits in the \emph{timing} cache, not the separate validation cache.
+
+\begin{table}[H]
+\centering\small\input{generated/A1_cache_bins.tex}
+\caption{Post-hoc measured hit bins. Cache/fresh milliseconds are medians on
+matched requests; the last column is the median of within-request fresh/cache
+latency ratios, not the ratio of medians. Equal IDs counts exact 16-token
+sequence agreement. Small bins and unequal seed composition preclude a causal
+hit-rate effect. No request-level confidence intervals are asserted.}
+\end{table}
+
+\paragraph{Behavioral anatomy.}
+Each seed validates cold, warm, permuted and partial-reuse cases plus all 60
+stream requests. Greedy failures are 0, 6 and 19 of 64 comparisons by seed;
+measured-stream failures are 0, 4 and 15 of 50. The additional failures comprise
+five warmup requests and one explicit permutation. Every numerical comparison
+fails the unchanged $10^{-4}$ absolute/relative gate. All 384 natural-generation
+outputs reach the 16-token cap; no early EOS was observed in this exact-ID stream.
+Natural checks reuse already populated validation entries and are not cold
+latency measurements. Teacher-forced comparisons follow fresh DDI tokens to
+keep same-prefix logit errors meaningful after greedy trajectories diverge.
+
+For example, seed 1 \texttt{stream\_7} differs at its first token: fresh chooses
+220, cache 198. The fresh top-two margin is .125, the cache margin zero, and
+maximum first-step logit error .21875. This is consistent with argmax changes
+near a tie; it does not identify a kernel-level root cause or prove an adequate
+precision fix. A passing tiny fp32 CPU test cannot establish full-model bf16
+equivalence. These examples are diagnostic, not a QA correctness judgment.
+
+\paragraph{Three generations must remain separate.}
+The pre-V51 1.72$\times$ claim is withdrawn because the benchmark populated
+but did not consume real KVs. V51's real-cache 1.219$\times$ claim is also
+withdrawn: random IDs were decoded and retokenized, changing nominal lengths,
+and full versus DDI decode work was not contractually equal. V53 is a new
+exact-ID diagnostic on a different torch runtime, not an identical replication.
+Its seed-wise rates must not be pooled with either older campaign.
+
+\paragraph{Source identity and scope.}
+The V53 manifest hashes checkpoint/tokenizer contents and preserves executing
+sources. Base SHA is \texttt{16dd67d7e53a8168cf6580e6d0197c219e6ba198}; the
+diagnostic script was untracked at launch, despite an empty tracked diff.
+The manifest says \texttt{clean\_revision=false}, and both manifest and summary
+say \texttt{admissible\_paper\_evidence=false}. The report remains unchanged:
+\path{VIBEQUEUE-53-REPORT.md}. Exact inputs, logits, source snapshots and audit
+live under \path{results/cache_v53_local_20260907/}. This paper additionally pins
+the compact summary/timing/validation byte sizes and full SHA-256 values in
+\path{paper/evidence.json}; hashes make postprocessing reproducible, not the
+execution clean or correctness-preserving.
+
+\paragraph{Where the optimized warm-path win came from (V69).}
+The audited all-hit reuse acceleration of the main text (221.24\,ms before the
+V65 optimizations, 62.30\,ms after, 3.55$\times$) is attributed by a
+derivation over pinned artifacts, not by a new run: the pre/post totals trace
+to the confirmation-frozen V60/V65 runs (V64-adjudicated) and the phase leaves
+are uniformly rescaled from the V65 overhead profile (factor 0.945248).
+Store-time validation markers remove 85.61\,ms (53.9\% of the reduction) and
+the 2\,GiB LRU resident tier removes the synchronous per-document disk load of
+59.14\,ms (37.2\%); the remaining 14.20\,ms (8.9\%) is a bounded envelope
+within the pre-optimization cache\_assemble budget --- inferred, not directly
+measured --- and the unattributed wall remainder is 3.48\,ms (1.6\% of the
+pre-total, within the declared 5\% tolerance). Development-role evidence; it
+supports no confirmation-quality claim.
+
+\begin{table}[H]
+\centering\small\input{generated/T14_v69_attribution.tex}
+\caption{Attribution of the 221.2\,ms $\to$ 62.3\,ms all-hit reuse reduction
+(V69 derivation over pinned V60/V65 artifacts). OPT-1 and OPT-2 are measured
+pre-optimization phases removed by the V65 changes; OPT-3 is a bounded
+envelope, not a direct measurement. Development-role evidence; no
+confirmation-quality claim.}
+\label{tab:v69attribution}
+\end{table}
+
+\newpage
+\section{Artifact Ledger and Missing Joint Design}
+\label{app:ledger}
+
+Paths below are relative to the repository root. The authoritative full hashes
+and byte sizes are in \path{paper/evidence.json}. No report was modified to
+retroactively admit a result. \path{paper/generated/analysis.json} contains the
+new request-bin statistics, seed QPS and retained failure totals.
+
+\begin{small}
+\begin{tabular}{@{}p{2.2cm}p{8cm}p{5.2cm}@{}}
+\toprule
+Evidence & Exact artifacts & Row selection and unit \\
+\midrule
+Q1 / T2 & \path{results/runs.jsonl}; \path{results/sprint_a_strict_base.jsonl} &
+\texttt{phase2\_train\_free}, Qwen-7B; tags \texttt{88162acd}/\texttt{fee7d916}; 100 IDs per arm. \\[6pt]
+Q2 / T5 & \path{results/phase3_n2.jsonl}, \path{results/phase3_n5.jsonl}, \path{results/phase3_n10.jsonl} &
+Hotpot full/QF, seed 0, tag \texttt{3a59828b}; match final ID suffix. \\[6pt]
+P1 / T3 & \path{results/runs.jsonl} &
+\texttt{phase3\_timing}, Qwen-7B, \texttt{L=512:Q=64}, SDPA, tag \texttt{88162acd}. \\[6pt]
+Q3 / V54 & \path{experiments/transfer_v54_inputs.json}; \path{experiments/transfer_v54_posthoc_sensitivity.json} &
+12 prediction paths; pair dataset/seed/record ID across six arms and architectures. \\[6pt]
+C1 / V53 & \path{results/cache_v53_local_20260907/summary.json}, \path{timing.jsonl}, \path{validation.jsonl} in that directory &
+Timing: \texttt{warmup=false}; join seed/request to validation \texttt{stream\_k}. \\
+\bottomrule
+\end{tabular}
+\end{small}
+
+\paragraph{Checkpoint identity cannot be inferred from the display label.}
+Q2's raw run IDs name the base model, but
+\path{scripts/phase3_doc_sweep2.sh} and
+\path{logs/phase3_doc_sweep2.log} identify the checkpoint
+\path{results/checkpoints/Qwen__Qwen2.5-7B-Instruct__ddi_qf__8L}.
+File-specific Q2 config hashes are \texttt{94b5cfd00bbc44e0},
+\texttt{59a0f85d992e8ca4}, and \texttt{b5f6c833f633be8e}. Do not aggregate all
+base-labeled rows in the shared historical store. Q3 instead records
+\texttt{checkpoint\_revision} and separate base/tuned identities in predictions.
+Its exact per-seed manifests are under \path{results/transfer_heldout/}.
+
+\paragraph{Schemas and missing fields.}
+Legacy scalar JSONL has \texttt{run\_id, metric, value, provenance}; quality
+record IDs are the run-ID suffix. Modern predictions have a separate
+\texttt{record\_id}, decoded prediction, possible answers, a four-metric object,
+and provenance. Neither QA schema stores per-record prefill times, document
+token lengths or cache hit states. Timing repeats are JSON strings inside the
+scalar \texttt{value}. V53 has request-level geometry, IDs, hits and latency,
+but no gold QA answers. These schema differences explain the missing cells in
+Figure~\ref{fig:coverage}; matching only the model and mask is not enough.
+
+\paragraph{Historical Flex lineage.}
+Figure~\ref{fig:flexhistory} parses detailed milliseconds, not rounded ratios,
+from hash-pinned \path{logs/timing_flex2.log} and
+\path{logs/timing_flex_model3.log}. The scripts preserved at Git revision
+\texttt{2029129}, \path{scripts/timing_flex_test.py} and
+\path{scripts/timing_flex_model.py}, distinguish raw Q/K/V timing from the
+whole-model forward. Their document mask lacks an intra-document causal
+condition. Preserved logs establish reported timings, not exact launch-source
+identity or current-mask parity. The separate 3.98$\times$ archived claim is
+recorded in that revision's changelog; absent its matching raw log, it remains
+unplotted. The old square-matrix sparsity summaries are not reused.
+
+\paragraph{Minimum future joint record.}
+Retain an immutable request ID, exact document/query IDs, gold answers,
+checkpoint/tokenizer/source hashes, mask/layout, cache namespace and pre-state,
+hit identities, actual geometry, generated IDs and stopping reason. Record
+natural-generation EM/F1 separately from fixed-work TTFT, end-to-end time and
+decode forwards. Randomize or counterbalance execution order and preserve
+per-seed pairing. Evaluate cold/warm/reordered/partial states and a real
+optimized prefix-cache baseline before claiming an advantage over prefix reuse.
+
+Reports \path{VIBEQUEUE-54-REPORT.md}, \path{VIBEQUEUE-53-REPORT.md},
+\path{VIBEQUEUE-55-REPORT.md} and \path{EVIDENCE_TO_CLAIM.md} define the retained
+estimands, withdrawals and failed kernel gates. A future matched campaign may
+fill the coverage map; the present appendix does not count that unrun design
+as an experiment or relax any original gate.

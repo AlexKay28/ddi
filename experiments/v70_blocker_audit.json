@@ -1,0 +1,111 @@
+{
+  "schema_version": "v70_blocker_audit_v1",
+  "ticket": "VIBEQUEUE-70",
+  "created_utc": "2026-09-11T07:07:26Z",
+  "decision": "STOP_BEFORE_PREREGISTRATION_AND_TRAINING",
+  "trigger": "The required V67 harness performs real model training and generation, but does not implement the registered k-arm treatment, bf16 cache perturbation, or cache-vs-fresh gate. Extending it would extend invalid evidence.",
+  "partial_v70_files_found": [],
+  "gpu_runs_started": 0,
+  "gpu_hours_used": 0.0,
+  "confirmation_manifest_created": false,
+  "preregistration_created": false,
+  "findings": [
+    {
+      "id": "k_treatment_disconnected",
+      "severity": "blocker",
+      "evidence": [
+        "scripts/v67_allinone.py:114-290 accepts arm_name but uses it only for logging/result labels and a finite-weight error label",
+        "scripts/v67_allinone.py:442-454 loops over k0/k1/k5 without passing k into token construction, masks, positions, model inputs, or loss",
+        "scripts/v67_allinone.py:608-634 maps arm names to k only in a post-hoc estimated latency formula",
+        "scripts/v67_train.py:149-402 likewise records arm but never uses it in model computation",
+        "The tested ddi.link_token_contract.build_request_layout helper is never imported or called by either V67 training script"
+      ],
+      "impact": "The reported k0/k1/k5 differences cannot be attributed to link tokens. The scripts do not create link-token arms."
+    },
+    {
+      "id": "bf16_perturbation_not_numerical",
+      "severity": "blocker",
+      "evidence": [
+        "scripts/v67_allinone.py:62-77 and scripts/v67_train.py:76-98 apply tokenizer.encode followed by tokenizer.decode to document text",
+        "No bfloat16 cast, independently encoded K/V tensor, or cache payload is involved in that operation"
+      ],
+      "impact": "The registered 0.15 bf16 re-encode perturbation is not implemented. Tokenizer round-tripping can alter text but cannot model the claimed bf16 K/V numerical perturbation."
+    },
+    {
+      "id": "cache_gate_not_measured",
+      "severity": "blocker",
+      "evidence": [
+        "scripts/v67_allinone.py:315-338 generates A and D from one monolithic inference.encode batch using ddi_qf and full masks",
+        "CanonicalCache and DocCache are imported at scripts/v67_allinone.py:33-34 but never instantiated or called",
+        "The real cache path ddi.cache.generate_tokens_with_doc_cache is not called",
+        "No B fresh-independent-encoding versus C persisted-cache pair is produced"
+      ],
+      "impact": "The frozen cache-vs-fresh non-inferiority gate has no observations. A-versus-D is only a DDI-mask versus full-reference comparison."
+    },
+    {
+      "id": "registered_statistics_not_computed_by_harness",
+      "severity": "blocker",
+      "evidence": [
+        "scripts/v67_allinone.py:518 imports paired_bootstrap but never calls it",
+        "scripts/v67_allinone.py:603-636 computes only a latency estimate and no EM/F1 confidence intervals or gate verdicts",
+        "results/v67_arms_20260910T191742Z/result.json contains per-record A/D metrics but no paired confidence intervals or cache-vs-fresh metrics"
+      ],
+      "impact": "The registered two-pair, 10,000-resample seed-47 gate is not reproducibly implemented by the run script."
+    },
+    {
+      "id": "reproducibility_and_artifact_mismatch",
+      "severity": "high",
+      "evidence": [
+        "scripts/v67_allinone.py:101-107 seeds perturbations with Python hash(record['id']), which varies unless PYTHONHASHSEED is fixed before interpreter startup",
+        "The script does not reset torch RNG before each nominal arm, so training-mode dropout can produce differences between otherwise identical arm computations",
+        "experiments/v67_preregistration.md freezes 500 steps per arm, while results/v67_arms_20260910T191742Z/result.json reports 300",
+        "results/v67_arms_20260910T191742Z contains only full_run.log and result.json: no arm checkpoints",
+        "The recorded loss_curve samples step 1 and every 25 steps, not every optimization step"
+      ],
+      "impact": "The observed nominal-arm differences and convergence claims are not treatment-identifiable or fully reproducible, and the V67 evidence does not satisfy its frozen budget/artifact contract."
+    }
+  ],
+  "interpretation": {
+    "synthetic_metrics": false,
+    "real_model_training_observed_in_code": true,
+    "real_generated_predictions_observed_in_artifact": true,
+    "registered_experiment_implemented": false,
+    "v67_h1_link_token_claim_supported": false,
+    "v67_cache_vs_fresh_gate_supported": false,
+    "safe_to_extend_v67_harness": false
+  },
+  "unexecuted_by_stop_rule": [
+    "v70 preregistration",
+    "300-ID confirmation construction",
+    "V70 script adaptation",
+    "V70 helper tests",
+    "nvidia-smi preflight",
+    "20-step k0 smoke",
+    "1000-step k0 and k5 training",
+    "development evaluation and selection",
+    "n=100 and n=300 confirmation evaluation",
+    "latency comparison",
+    "V70 verdict"
+  ],
+  "required_remediation_before_a_new_preregistration": [
+    "Implement k0 and k5 in the actual model token stream, masks, positions, training loss, and generation path, with an integration test proving distinct inputs and computations",
+    "Define and implement the 0.15 perturbation on independently encoded bf16 K/V payloads, or revise the hypothesis and preregistration to describe the actual perturbation",
+    "Evaluate real fresh independently encoded document K/V versus persisted/reloaded document K/V, plus full reference, with per-record predictions",
+    "Implement both paired gates using 10,000 bootstrap resamples and seed 47",
+    "Use process-independent record seeds, reset all model RNGs per arm, save every-step loss curves and checkpoints, and make the run fail if AdamW8bit is unavailable",
+    "Run a corrected V67-equivalent validation before treating V70 as a longer-training follow-up"
+  ],
+  "source_sha256": {
+    "experiments/v67_preregistration.md": "24aa491c7947440bb62b77d2c7e0dca5dd445e0e16d0b7f588cb4829660b45c5",
+    "experiments/v67_hypothesis_draft.md": "47aedad3fe57b31d3b3436a256e3384ff8444f442553dd3af5a319c8e0fe8760",
+    "experiments/v67_fresh_dev_split.json": "eb187bb32a0d5bb14db430bfea3e2b77204cc76d222ab61afd7b0fc535fc4f35",
+    "experiments/v62_split_manifest.json": "5ad3761106ecaed967b28d21c3919fa1869ebf70bf0e178c1e773a14bf8ee098",
+    "results/v67_arms_20260910T191742Z/result.json": "5e48d0fb317ba93edea9a228c92764d5a8b3fa772077ea7036bbcc12abbef368",
+    "results/v67_verdict_20260910T201000Z/verdict.json": "500ac42853964905c49ef2a6fd3fdbf199b32212cdc504d7f9aace908e9eb082",
+    "results/v68_anatomy_20260910T131036Z/differing_records.jsonl": "c7184d0ce3ef323efb8d61c472d016dfbe4640a9dfae96c1fde1eeaca5983928",
+    "scripts/v67_allinone.py": "d89656eec00bf8d6488feb4df5c498dc593dfcb4259b6c51f9183957d681a448",
+    "scripts/v67_train.py": "d88f75b6d25826b86acb0c67abf84cedd0fcb877c9186de85773213742643d1b",
+    "tests/test_v67_helpers.py": "31c9d5f73b2ad11b0901be1814f4f8d9e002e38250e25e0ca802b59aa42c07ff",
+    "tests/test_v67_link_masks.py": "4022e93504ae5b2b9f0fd267465a9a4658d6df9d0853a92d35d44a0ef5e983d5"
+  }
+}

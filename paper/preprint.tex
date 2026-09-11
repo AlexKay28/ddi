@@ -13,16 +13,33 @@
 % Compile checked-in artifacts:  ./paper/build.sh
 % =====================================================================
 
-\documentclass[11pt]{article}
+\documentclass[10pt]{article}
 
 % --- geometry & layout ------------------------------------------------
-\usepackage[letterpaper,margin=1in]{geometry}
+\usepackage[letterpaper,margin=.8in]{geometry}
 \usepackage{parskip}
+\setlength{\columnsep}{.25in}
+\setlength{\textfloatsep}{7pt plus 2pt minus 2pt}
+\setlength{\floatsep}{6pt plus 2pt minus 2pt}
 
 % --- graphics, colour, links ------------------------------------------
 \usepackage{graphicx}
+\usepackage{caption}
+\usepackage{float}
+\captionsetup{font=small,labelfont=bf,skip=8pt}
 \usepackage{xcolor}
 \usepackage[hidelinks]{hyperref}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\usepgfplotslibrary{groupplots}
+\pgfplotsset{compat=1.18}
+\definecolor{ddiBlue}{HTML}{1263D6}
+\definecolor{ddiGold}{HTML}{F07818}
+\definecolor{ddiGreen}{HTML}{008C69}
+\definecolor{ddiPurple}{HTML}{773BBD}
+\definecolor{ddiRed}{HTML}{D1495B}
+\setlength{\emergencystretch}{2em}
+\raggedbottom
 
 % --- tables & typography ----------------------------------------------
 \usepackage{booktabs}
@@ -81,14 +98,14 @@
 % =====================================================================
 % Title block.
 %
-% AUTHORS: replace the two "Placeholder Author" entries below with real
-% names and affiliations before circulating; keep the \and separator so
-% arXiv's parser is happy.
+% Author metadata is approved for this preprint.
 % =====================================================================
-\title{Decoupled Document Inference: A Characterization Study of
-       Block-Diagonal Attention in RAG Prefill}
+\title{Prefill Once, Reuse Anywhere?\\
+       Quality, Sparsity, and Document KV Reuse in RAG}
 
-\author{Placeholder Author \and Placeholder Author}
+\author{Aleksandr Kaigorodov\\
+        Yandex\\
+        \texttt{alexkay28@yandex-team.ru}}
 
 \date{\today}
 
@@ -97,50 +114,49 @@
 \maketitle
 
 \begin{abstract}
-Retrieval-augmented prompts concatenate mutually independent documents, then pay
-quadratic prefill cost to model the resulting cross-document interactions.
-\emph{Decoupled Document Inference} (DDI) replaces the lower-triangular causal
-mask with a block-diagonal one: each document is causal within itself and blind
-to every other document, while the query and answer regions bridge the blocks.
-We frame the study as a characterization rather than a method-wins result:
-we ask how answer quality changes when cross-document attention is removed on
-the reported retrieval-QA cells, and what removing it can buy
-in terms of prefill cost and per-document key/value cache reuse. A top-8-layer
-self-distillation recipe is evaluated on Qwen2.5-7B and Llama-3.1-8B with
-three independently trained seeds and fixed held-out manifests. Neither model
-reaches the preregistered natural-QA parity gate. Only musique F1 admits a
-cross-architecture contrast: Llama minus Qwen normalized closure is 0.028
-with a three-seed bootstrap interval of $[-0.085, 0.179]$, so no practical
-architecture difference is established.
-Canonical mask tests validate the intended attention semantics. SDPA realizes
-no sparsity benefit from a 4D additive mask. Earlier numerical Flex timing
-claims are omitted because their cited historical log is unavailable; they are
-not treated as validated model-throughput evidence.
-On the 100-record hotpot_qa control, explicit positions propagated through
-cached decode yield a single-run estimate of 0.47 restart versus 0.45
-sequential EM. The legacy evaluator omitted those decode positions, so neither
-its apparent restart wall nor its RoPE-base interpretation is evidence.
-Generated artifacts are deterministic projections of compact preserved evidence;
-the manifest identifies every raw source by path, byte size, and full SHA-256.
+Repeated retrieval makes document prefill an attractive target for reuse.
+Decoupled Document Inference (DDI) isolates document attention and uses restart
+positions to make independently computed document KVs reusable. Two approaches
+compose: \textbf{sparse cold prefill} reduces attention work on cache misses;
+\textbf{warm KV reuse} loads stored document states and skips document prefill.
+At $N=25,L=512,Q=64$, DDI-QF removes
+95.04\% of causal prefill pairs, but measured dense-SDPA prefill remains near the
+full-causal latency. Historical Flex logs separately report 8.24$\times$ kernel
+and 1.77$\times$ whole-model prefill gains at a larger geometry; their older
+mask semantics and failed parity gates prevent treating these as validated
+current-DDI speedups. Natural-QA mask and document-count studies show quality
+losses; matched three-seed self-distillation does not reach the prescribed parity
+gates. A deployment validation program then
+closes the loop on matched requests. On 100 frozen HotpotQA records, full
+attention reaches EM/F1 .56/.70 against DDI-QF's .30/.42 under dense SDPA --- the
+isolation cost is real. Persisted document-KV reuse itself, however, becomes an
+audited win: on 24 frozen requests, optimized all-hit reuse serves TTFT
+\textbf{2.05$\times$ faster than the original monolithic DDI baseline}
+(ratio 0.4885, 95\% CI $[0.433,0.550]$) with \textbf{byte-identical outputs};
+end-to-end wall time improves 1.43$\times$. The win is scoped: mixed-hit traffic
+remains slower than the baseline, and quality non-inferiority on 100 untouched
+records is \textbf{not established} (EM $-0.010$ $[-0.070,+0.050]$, F1 $-0.0095$
+$[-0.053,+0.031]$ against a preregistered $-0.02$ floor). Segmented causal
+attention accelerates sparse cold prefill only at long-document shapes
+(1.12--1.29$\times$ at $L{=}512$). We therefore claim a measured, audited
+warm-path speedup with byte-identical serving --- not yet a quality-preserving
+general win --- and report the measured panels that bound it.
 \end{abstract}
 
 % ---------------------------------------------------------------------
 % Body — every section is a separate .tex under sections/. Keep the
 % split so a section can be reviewed independently from checked-in artifacts.
 % ---------------------------------------------------------------------
-\input{sections/00_intro.tex}
-\input{sections/01_related_work.tex}
-\input{sections/02_method.tex}
-\input{sections/03_experimental_design.tex}
-\input{sections/04_results_quality.tex}
-\input{sections/05_results_efficiency.tex}
-\input{sections/06_results_caching.tex}
-\input{sections/08_limitations_conclusion.tex}
+\input{sections/main_story.tex}
 
 % ---------------------------------------------------------------------
 % Bibliography — references.bib lives next to this file and is the
 % single source of truth (also read by any tooling that greps citations).
 % ---------------------------------------------------------------------
 \bibliography{references}
+
+\clearpage
+\appendix
+\input{sections/appendix.tex}
 
 \end{document}

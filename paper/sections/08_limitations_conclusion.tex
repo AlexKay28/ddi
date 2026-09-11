@@ -14,7 +14,7 @@ per-sample block-diagonal 4D additive masks (\texttt{ddi.batch}), but no
 admissible batched-throughput result is retained. The current full-model Flex
 parity gate fails for every tested mask, so raw batched-kernel checks do not
 support an end-to-end batch-throughput claim. Server-side throughput at higher
-batch sizes is outside this paper. VIBEQUEUE-49 is deferred; any future timing
+batch sizes is outside this paper. Compiled timing is deferred; any future timing
 requires the unchanged exact model-parity gates to pass first.
 
 \paragraph{Preprint scope.}
@@ -31,7 +31,7 @@ The matched transfer study has only three independently trained seeds per
 architecture and 100 records per natural-QA seed manifest. Its bootstrap
 intervals are decision guards, not precise population estimates. Of four
 natural-QA dataset/metric cells, only musique F1 passes the controls in both
-architectures. Its closure contrast does not establish a practical
+architectures. Its retained normalized-remaining-gap contrast does not establish a practical
 architecture difference. The other three contrasts are unavailable rather
 than negative: Qwen EM lacks sufficient document-use headroom, and the Llama
 hotpot blind control moves after tuning. Synthetic QA is saturated and serves
@@ -42,8 +42,8 @@ universal transfer.
 The paper makes no trend claim across model scale. Its quality conclusions are
 limited to the measured Qwen2.5-7B-Instruct and Llama-3.1-8B-Instruct
 checkpoints, datasets, and frozen manifests. Powered expansion and 14B/32B
-cells are retained under VIBEQUEUE-48 as optional future work, not as missing
-prerequisites for this bounded characterization.
+cells are optional future work, not missing prerequisites for this bounded
+characterization.
 
 \paragraph{Uncertainty of quality comparisons.}
 The legacy Qwen full-causal baseline has three seed-selected splits with
@@ -52,19 +52,18 @@ descriptive intervals: three 100-record splits yield 95\% t-intervals of
 and [0.259, 0.444] for musique EM and F1. These intervals describe the mean
 full-baseline score across those splits only. The matched transfer study
 separately records fixed held-out IDs, paired per-example outcomes, and three
-independently trained checkpoints per architecture, and applies its
-preregistered paired-bootstrap and gate procedure. Other legacy quality cells
+independently trained checkpoints per architecture. V54 additionally reports a
+post-hoc joint paired-record sensitivity conditional on those fixed inputs; it
+does not supply a population interval. Other legacy quality cells
 remain single-run estimates and do not support comparison confidence intervals,
 parity conclusions, or statistical-certainty claims.
 
 \paragraph{Realization gap.}
-If the analytical/realized gap of Section~\ref{sec:results-efficiency-gap}
-does not close under the Phase~3 diagnostics --- if it is a structural
-property of small-block varlen kernels on current hardware --- the
-compute implications of DDI are smaller than the arithmetic suggests. The
-bounded cache estimate is reported separately rather than compensating for
-that limitation. We flag this in the results sections rather than only here,
-so a reader cannot miss the constraint.
+The retained SDPA observations show no TTFT gain at their fixed $(N,\ell,Q)$
+cells despite lower pair counts. They do not establish why. The cache throughput
+claim is withdrawn rather than compensating for that limitation. We flag this
+in the results sections rather than only here, so a reader cannot miss the
+constraint.
 
 \section{Conclusion}
 \label{sec:conclusion}
@@ -73,15 +72,15 @@ We present a characterization of block-diagonal attention over retrieved
 documents in decoder-only language models. The paper reports Qwen quality
 estimates after self-distillation finetuning (Section~\ref{sec:results-quality}),
 SDPA prefill timing observations at matched shapes
-(Section~\ref{sec:results-efficiency}), and a restart-layout per-document
-KV-cache throughput estimate at one request shape (Section~\ref{sec:results-caching}). The matched
-transfer study finds partial closure without natural-QA parity in either
+(Section~\ref{sec:results-efficiency}), and an audit of restart-layout per-document
+KV-cache measurement validity (Section~\ref{sec:results-caching}). The matched
+transfer study retains its normalized remaining-gap statistic without natural-QA parity in either
 architecture; on its sole valid natural-QA cross-architecture cell, no
 practical architecture difference is established. Other legacy quality
 comparisons outside the descriptive baseline intervals remain single-run
-estimates. Under the corrected cache harness assumptions, the three-seed
-cache/recompute estimate is 1.219$\times$ (95\% t-CI [1.152, 1.286]); it does
-not imply cross-shape or serving-wide dominance. The
+estimates. The cache throughput claim is withdrawn because the retained V51
+comparison does not establish exact token geometry or equal decode work;
+local dirty-source revalidation is not admitted as replacement evidence. The
 corrected restart control reports 0.47 versus 0.45 EM on 100 hotpot\_qa
 records; it is not a statistical comparison.
 

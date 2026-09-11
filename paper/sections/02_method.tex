@@ -20,7 +20,7 @@ the blocks.
 Table~\ref{tab:mask-taxonomy} enumerates the mask variants in scope:
 \texttt{full} (baseline), \texttt{ddi\_qf} (documents isolated, whole
 query bridges), \texttt{ddi\_strict} (documents isolated, only the last
-query row bridges), and \texttt{blind} (all-zero mask over documents,
+query row bridges), and \texttt{blind} (no query or answer access to documents,
 retained as a control that verifies each metric measures retrieval).
 
 \begin{table}[t]
@@ -35,27 +35,42 @@ retained as a control that verifies each metric measures retrieval).
 }
 \end{table}
 
+Figure~\ref{fig:mask-geometry} shows the information-flow change directly.
+The crossed document edge is the removed interaction; query and answer access
+remain available under \texttt{ddi\_qf}. This distinction prevents interpreting
+DDI as merely dropping the retrieved context.
+
+\begin{figure}[t]
+\centering
+\resizebox{\linewidth}{!}{\input{generated/V1_mask_geometry.tex}}
+\caption{Information-flow intuition for full causal attention and DDI-QF.
+    Arrows summarize permitted earlier-to-later information flow rather than
+    individual token-level edges. DDI removes cross-document attention while
+    preserving document integration through query and answer rows.}
+\label{fig:mask-geometry}
+\end{figure}
+
 \subsection{Cost model}
 \label{sec:method-cost}
 
-Counting attended (query,\,key) pairs, treating all documents as equal
-length $\ell$ for readability, and writing $T = N\ell + Q$:
+For prefill, count lower-triangular attended (query,\,key) pairs and treat all
+documents as equal length $\ell$. With $T=N\ell+Q$, $N>1$, and $Q>0$:
 \begin{align}
-\text{full}       \;&\approx\; \tfrac{1}{2}\, T^2, \label{eq:cost-full} \\
-\text{\texttt{ddi\_qf}}     \;&\approx\; \tfrac{N}{2}\, \ell^2 \;+\; Q\,N\ell \;+\; \tfrac{1}{2}\, Q^2, \label{eq:cost-qf} \\
-\text{\texttt{ddi\_strict}} \;&\approx\; \tfrac{N}{2}\, \ell^2 \;+\; \tfrac{1}{2}\, Q^2 \;+\; T. \label{eq:cost-strict}
+P_{\mathrm{full}} &= \tfrac{T(T+1)}{2}, \label{eq:cost-full} \\
+P_{\text{\texttt{ddi\_qf}}} &= \tfrac{N\ell(\ell+1)}{2}+QN\ell+\tfrac{Q(Q+1)}{2}, \label{eq:cost-qf} \\
+P_{\text{\texttt{ddi\_strict}}} &= \tfrac{N\ell(\ell+1)}{2}+N\ell+\tfrac{Q(Q+1)}{2}. \label{eq:cost-strict}
 \end{align}
-As $Q \to 0$ the analytical speedup approaches $N$: independent
-same-length blocks are the setting in which DDI's asymptotic advantage is
-maximal. At finite $Q$ the $Q\,N\ell$ term dominates once $Q$ is comparable
-to $\ell$, which sets a lower bound on the speedup DDI can realize for
-short-document, long-query workloads.
+The \texttt{ddi\_strict} expression includes its one last-query-row bridge;
+answer rows are outside this prefill count and directly attend documents for
+every non-blind variant. At $N=1$, the implementation deliberately returns the
+full causal mask, so these isolation-family expressions are not a separate
+semantic behavior. As $Q \to 0$, the full-to-block-diagonal pair-count ratio
+approaches $N$. A larger query adds the $QN\ell$ bridge term and lowers that
+ratio; pair counts are not wall-clock speedup predictions.
 
-The gap between the analytical prediction (Equations~\ref{eq:cost-full}--\ref{eq:cost-strict})
-and the realized wall-clock speedup is itself a measurement target:
-Section~\ref{sec:results-efficiency} reports the ratio as a function of $N$
-and $\ell$, isolating where realization is bottlenecked by per-block launch
-overhead versus memory bandwidth versus non-prefill time.
+Section~\ref{sec:results-efficiency} compares these pair counts with retained
+SDPA TTFT observations only at $\ell=512$, $Q=64$, and the listed $N$ values.
+It does not identify a backend mechanism or report an $N$--$\ell$ timing grid.
 
 \subsection{Position layouts and caching}
 \label{sec:method-positions}
@@ -85,15 +100,14 @@ restart control without a parity conclusion.
 \subsection{Non-inferiority margin \texorpdfstring{$\Delta$}{Delta}}
 \label{sec:method-delta}
 
-The original design proposed a non-inferiority margin $\Delta$ derived from
-full-baseline seed variation. The available artifacts do not provide fixed
-held-out IDs, paired outcomes, or independent checkpoint replications for the
-mask comparisons, so this paper does not use $\Delta$ to make parity claims.
-Instead, the baseline spread is reported as descriptive context for the
-single-run quality estimates.
+Legacy tables do not provide fixed held-out IDs, paired outcomes, or independent
+checkpoint replications, so they remain descriptive. Separately, the matched
+three-seed transfer study retains fixed manifests, paired outcomes, and its
+preregistered gates; its normalized remaining tuned gap is not a training
+recovery estimand (Section~\ref{sec:results-quality}).
 
 Concretely, $\Delta$ is computed as $k\cdot \sigma_{\text{full}}$ for a
 fixed $k$ committed alongside the baseline it was derived from, using the
 in-repo \texttt{ddi-delta} tool. Table~\ref{tab:t6-delta} reports the
-resulting baseline summaries. They are not comparison confidence intervals or
-a parity band for the other rows.
+resulting legacy baseline summaries. They are not comparison confidence
+intervals or a parity band for the other legacy rows.

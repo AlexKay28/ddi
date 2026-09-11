@@ -1,0 +1,272 @@
+{
+  "schema": "v64_audit_preregistration_v1",
+  "purpose": "V64 CHECK-phase step 2: preregistration of recomputation methods, frozen BEFORE any outcome metric is computed or inspected. Methods only; no outcome numbers in this file.",
+  "created_utc": "2026-09-10T09:08:52Z",
+  "step_chain": {
+    "step_1": "results/v64_audit_20260910_Inventory/ (immutable inventory: INVENTORY.json + AUDIT_BASELINE.md)",
+    "step_2": "this file + experiments/v64_audit_preregistration.md",
+    "step_3": "recomputation exactly per analyses.qa and analyses.timing",
+    "step_4": "fill claims_table_skeleton TBD cells"
+  },
+  "preregistration_integrity": {
+    "status": "frozen_before_outcome_inspection",
+    "amendment_policy": "append-only, UTC-timestamped, before corresponding results are unblinded; never silent edits",
+    "amendments": []
+  },
+  "additivity": {
+    "existing_files_modified": 0,
+    "gpu_used": false,
+    "tracker_writes": false
+  },
+  "frozen_inputs": [
+    {
+      "path": "experiments/v60_confirmation_manifest.json",
+      "sha256": "2dffebf5d04065021dfb2b9e694651b34f0ebfae4f3d4b9aabd672908aa6cb07",
+      "role": "id-freeze sidecar: 24 ids, seed 0, data_role=confirmation_frozen, created_utc=2026-09-10T09:30:00Z"
+    },
+    {
+      "path": "results/v60_confirmation24_20260910T093500Z/requests.jsonl",
+      "sha256": "ec08d056d6ebe9208cf831e8a63e2d527cc8afec90d377ad9356635767410a5c",
+      "role": "per-record outcomes: 24 lines; per arm A/B/C_cold/C_all_hit/D quality.{em,f1,presence}, ttft_median_seconds, ttft_seconds x3 repeats, backend labels"
+    },
+    {
+      "path": "results/v60_confirmation24_20260910T093500Z/manifest.json",
+      "sha256": "21524c7df6ec564fd855fd957e48efa92bc381d1da5a42b27695c51f5b570f48",
+      "role": "run manifest; verbatim data_role=development + data_role_note"
+    },
+    {
+      "path": "results/v60_confirmation24_20260910T093500Z/result.json",
+      "sha256": "9421b268eefaf7fcf6bc60b80469ba43a8b6868f9c0dfec123647ff259547464",
+      "role": "stored aggregates + timing_caveat; contains NO non-inferiority interval"
+    },
+    {
+      "path": "scripts/run_canonical_qa_dev.py",
+      "sha256": "636793a19f2f40eab6db905a1be6dab9525687d5a7544962379004634428c611",
+      "role": "runner source: hardcoded data_role L235/L443; canonical_backend default eager L222"
+    },
+    {
+      "path": "results/v64_audit_20260910_Inventory/INVENTORY.json",
+      "sha256": "ba7850ddafc431d20b2c63eb6220615de6b2c400055e7e027bb2c626a5acb51b",
+      "role": "immutable step-1 inventory: both data_role strings verbatim, per-arm label table"
+    },
+    {
+      "path": "results/v64_audit_20260910_Inventory/AUDIT_BASELINE.md",
+      "sha256": "fa594464b9b5642fba282dce713e73be981b53c9297140eca81a7162c60c47f8",
+      "role": "step-1 baseline narrative"
+    }
+  ],
+  "step_3_input_gate": "re-verify every sha256 above at step-3 start; on any mismatch stop and re-inventory; never recompute on drifted inputs",
+  "frozen_record_ids": [
+    "5a72f0e25542991f9a20c5cf",
+    "5a72f7df5542991f9a20c5d7",
+    "5a7300b85542994cef4bc41a",
+    "5a7306a655429901807daf67",
+    "5a73090455429901807daf6e",
+    "5a730a6b5542992359bc3210",
+    "5a730abe5542994cef4bc42f",
+    "5a7319e755429901807daf86",
+    "5a731a635542994cef4bc458",
+    "5a7320565542991f9a20c61d",
+    "5a7322a25542991f9a20c634",
+    "5a7323ad5542994cef4bc476",
+    "5a7323ef5542994cef4bc477",
+    "5a7324205542994cef4bc478",
+    "5a73250a5542991f9a20c643",
+    "5a73266d5542994cef4bc47d",
+    "5a7326cd5542991f29ee2d11",
+    "5a7327265542994cef4bc480",
+    "5a732aa055429901807daf9f",
+    "5a732aaa5542992359bc325a",
+    "5a7331de5542994cef4bc4a8",
+    "5a7332935542991f9a20c67d",
+    "5a7336d05542992359bc3293",
+    "5a7339c85542991f9a20c6a2"
+  ],
+  "frozen_record_ids_source": "experiments/v60_confirmation_manifest.json (sha 2dffebf5...); ids fixed, no substitutions, no exclusions",
+  "analyses": {
+    "qa": {
+      "name": "QA paired non-inferiority recomputation",
+      "unit": "record",
+      "n": 24,
+      "exclusions": "none; missing/unparsable per-record entry aborts the analysis with count reconciliation against 24; records never silently dropped",
+      "metrics": ["em", "f1"],
+      "metrics_source": "requests.jsonl arms.*.quality.{em,f1} exactly as stored; presence reported but outside the decision rule; no post-hoc metric changes",
+      "contrasts": [
+        {
+          "id": "B_minus_A",
+          "definition": "arm B (canonical_per_document_ddi_qf, cache=disabled, standard) minus arm A (original_monolithic_ddi_qf, standard)",
+          "status": "primary"
+        },
+        {
+          "id": "C_all_hit_minus_A",
+          "definition": "arm C (all_hit scenario) minus arm A",
+          "status": "co-reported"
+        },
+        {
+          "id": "C_cold_minus_A",
+          "definition": "arm C (cold scenario) minus arm A",
+          "status": "completeness_only"
+        }
+      ],
+      "point_estimate": "mean of per-record paired deltas d_i = canonical_i - A_i, per metric per contrast",
+      "interval": {
+        "type": "paired_bootstrap_percentile",
+        "confidence": 0.95,
+        "sides": 2,
+        "resamples": 10000,
+        "seed": 47,
+        "rng": "numpy.random.default_rng(47) (PCG64), fresh instance for this analysis",
+        "resampling": "records with replacement; single index matrix rng.integers(0, 24, size=(10000, 24)) drawn once and shared by EM and F1 (paired)",
+        "ci_method": "np.quantile(resampled_means, [0.025, 0.975]), default linear interpolation"
+      },
+      "decision_rule": {
+        "applies_to": "primary contrast B_minus_A",
+        "rule": "non-inferiority holds iff CI lower bound >= -0.02 for BOTH em and f1 (mirrors the original -0.02 floor)",
+        "classification": {
+          "pass": "rule satisfied",
+          "inconclusive": "rule not satisfied but mean delta >= 0 for both metrics (direction favorable, underpowered)",
+          "fail": "rule not satisfied and mean delta < 0 for either metric"
+        },
+        "co_reported_rule": "same rule applied to co-reported contrasts, reported alongside; headline verdict is the primary only; no gate-shopping"
+      },
+      "context": "stored aggregates contain no non-inferiority interval; step 3 produces the first one from raw per-record outcomes only"
+    },
+    "timing": {
+      "name": "TTFT timing recomputation",
+      "estimand": "ratio of median TTFTs",
+      "median_definition": "median over the 24 per-record arms.<X>.ttft_median_seconds (each the median of its 3 stored ttft_seconds repeats); same definition under which the stored aggregates recompute",
+      "ratios": [
+        {
+          "id": "B_over_C",
+          "definition": "medianTTFT(B) / medianTTFT(C_all_hit)",
+          "status": "primary_reconstruction",
+          "note": "the quantity behind the falsified Tracker claim B->C 1.77x"
+        },
+        {
+          "id": "C_over_A",
+          "definition": "medianTTFT(C_all_hit) / medianTTFT(A)",
+          "status": "primary_reconstruction"
+        },
+        {
+          "id": "A_over_C",
+          "definition": "medianTTFT(A) / medianTTFT(C_all_hit) = 1 / C_over_A",
+          "status": "primary_reconstruction",
+          "note": "preregistered because C-is-X-times-A vs A-is-X-times-C reciprocal confusion is part of the 1.77x defect"
+        },
+        {
+          "id": "C_cold_median",
+          "definition": "medianTTFT(C_cold), reported for completeness",
+          "status": "completeness_only"
+        },
+        {
+          "id": "B_over_C_cold",
+          "definition": "medianTTFT(B) / medianTTFT(C_cold)",
+          "status": "completeness_only"
+        },
+        {
+          "id": "C_cold_over_A",
+          "definition": "medianTTFT(C_cold) / medianTTFT(A)",
+          "status": "completeness_only"
+        }
+      ],
+      "interval": {
+        "type": "paired_bootstrap_percentile_over_records",
+        "confidence": 0.95,
+        "sides": 2,
+        "resamples": 10000,
+        "seed": 47,
+        "rng": "fresh numpy.random.default_rng(47); single index matrix rng.integers(0, 24, size=(10000, 24)) drawn once and shared by ALL ratios in this analysis",
+        "resampling": "records with replacement, paired across arms; per resample each arm's median TTFT recomputed from resampled records' ttft_median_seconds, then the ratio",
+        "ci_method": "np.quantile(..., [0.025, 0.975]), default linear interpolation"
+      },
+      "gate": "none: descriptive reconstructions only; numbers attach to the step-4 claims table (esp. adjudicating B->C 1.77x)",
+      "explicit_non_goals": [
+        "mean of per-request paired latency ratios is NOT computed (not preregistered, not needed for the claims)",
+        "no V61 grid recomputation in this step"
+      ]
+    }
+  },
+  "metadata_adjudication": {
+    "data_role": {
+      "conflict": "run manifest.json/result.json data_role='development' (+ data_role_note 'must never serve as untouched confirmation') vs experiments/v60_confirmation_manifest.json data_role='confirmation_frozen'; both verbatim strings recorded in immutable step-1 INVENTORY.json",
+      "adjudication": "data_role=confirmation_frozen is authoritative because the id-freeze preceded execution: freeze manifest (sha 2dffebf5..., created_utc 2026-09-10T09:30:00Z) predates the run artifact (results dir stamped 20260910T093500Z)",
+      "runner_label": "the 'development' string is a hardcoded runner default (scripts/run_canonical_qa_dev.py L235/L443, unconditional dict literals); recorded as a provenance defect, NOT as evidence of contamination",
+      "scope_limit": "genuine untouched status (id intersections vs V58/V60/V61 observed manifests, observed_exclusion_count=100) is checklist item 2's separate question, decided on its own evidence; this rule only adjudicates which label is authoritative for the frozen-id question"
+    },
+    "backend_labels": {
+      "authoritative_source": "per-request records: requests.jsonl arms[*].backend, identical across all 24 records",
+      "executed_backend": "sdpa for all five arms (A, B, C_cold, C_all_hit, D)",
+      "consequence": "A-vs-B/C is a same-backend comparison (monolithic vs canonical execution); the runner default canonical_backend='eager' (L222, overridden by --canonical-on-sdpa) explains the narrative; retained outputs (B/C = 'sdpa') show --canonical-on-sdpa was in effect",
+      "defects": "narrative 'eager' claims for the canonical arms, wherever they appear, are metadata defects entered in the step-4 claims table; per-request records always outrank narrative",
+      "corollary": "result.json timing_caveat 'cross-backend comparisons are inadmissible' rests on a mislabeled premise (comparison is same-backend); caveat preserved verbatim in the inventory, wording corrected in step 4"
+    }
+  },
+  "claims_table_skeleton": {
+    "fill_step": 4,
+    "columns": ["id", "claim", "prior_text_verbatim_and_where_stored", "corrected_text", "evidence_sha"],
+    "rows_policy": "no row may be added or dropped post hoc; corrected_text and evidence_sha filled only in step 4 from step-3 recomputation",
+    "rows": [
+      {
+        "id": "C1",
+        "claim": "paired EM delta B-A",
+        "prior_text": "'+.0417' (prose only: V59-V63-CONSOLIDATED-REVIEW.md:67; VIBEQUEUE-64 description; no stored aggregate key)",
+        "corrected_text": null,
+        "evidence_sha": null
+      },
+      {
+        "id": "C2",
+        "claim": "paired F1 delta B-A",
+        "prior_text": "'+.0220' (same two prose sources)",
+        "corrected_text": null,
+        "evidence_sha": null
+      },
+      {
+        "id": "C3",
+        "claim": "paired non-inferiority (EM and F1, floor -0.02)",
+        "prior_text": "never stored in any artifact; only point estimates exist",
+        "corrected_text": null,
+        "evidence_sha": null
+      },
+      {
+        "id": "C4",
+        "claim": "B->C 1.77x timing claim",
+        "prior_text": "VIBEQUEUE-60 comment claim; not stored in any artifact; consolidated review stores corrected arithmetic ('B/C about 1.888x ... C/A about 1.771x', V59-V63-CONSOLIDATED-REVIEW.md:60-61)",
+        "corrected_text": null,
+        "evidence_sha": null
+      },
+      {
+        "id": "C5",
+        "claim": "data_role label",
+        "prior_text": "'development' (run manifest/result.json, hardcoded) vs 'confirmation_frozen' (freeze manifest); both verbatim in INVENTORY.json",
+        "corrected_text": null,
+        "evidence_sha": null
+      },
+      {
+        "id": "C6",
+        "claim": "backend narrative",
+        "prior_text": "'eager' narratives for canonical arms vs retained per-request backend='sdpa' for all five arms",
+        "corrected_text": null,
+        "evidence_sha": null
+      },
+      {
+        "id": "C7",
+        "claim": "b_vs_c_equal_all",
+        "prior_text": "result.json:aggregate.b_vs_c_equal_all + per-record flags",
+        "corrected_text": null,
+        "evidence_sha": null
+      }
+    ]
+  },
+  "reporting": {
+    "precision": "EM/F1 deltas and CIs 6 decimals; TTFT ms 4 decimals; ratios 4 decimals; CIs as [lower, upper]",
+    "determinism": "RNG type, seed, draw order, shared index matrices, and quantile method fully pinned; a rerun on the same pinned inputs must reproduce every number bit-for-bit",
+    "verdict_policy": "step 3 reports frozen decision-rule verdicts verbatim including unfavorable ones; underpowered/inconclusive is recorded, the test is never altered, no observations added opportunistically"
+  },
+  "rollback": {
+    "audit_property": "additive-only",
+    "step_2_footprint": ["experiments/v64_audit_preregistration.md", "experiments/v64_audit_preregistration.json"],
+    "rollback_command": "rm experiments/v64_audit_preregistration.md experiments/v64_audit_preregistration.json",
+    "side_effects": "none: no existing file edited, no GPU, no Tracker",
+    "self_sha_note": "sha256 of both files printed in the step-2 completion output (session log); not self-embedded"
+  }
+}

@@ -188,3 +188,29 @@ as its only current efficiency/system evidence. It makes no Flex
 model-throughput, batching, or serving claim and retains no numerical historical
 Flex result. `EVIDENCE_TO_CLAIM.md` preserves the exact reopen protocol: all
 applicable parity gates must pass unchanged before timing may begin.
+
+## VIBEQUEUE-53 cache workload audit
+
+The cache interpretation in the preceding entry is superseded. V51's nominal
+shape is not exact after decode/retokenize, and full causal versus DDI does not
+establish equal decode work. The throughput claim is withdrawn. Historical
+source rows and their hashes remain unchanged, but F5 now renders the withdrawal
+rather than validated-looking bars. Exact-input local revalidation preserves
+source/diff hashes and is not clean-revision evidence. SDPA timing is unaffected.
+
+## VIBEQUEUE-55 manuscript reconciliation
+
+The manuscript now distinguishes legacy descriptive tables from the matched
+three-seed transfer study and the withdrawn cache-throughput result. It states
+that strict has one query bridge row while answer rows directly attend documents,
+and that the `N=1` full-causal return is an isolation-free correctness
+convention. Full-causal caching is qualified to unchanged exact prefixes; DDI
+per-document reuse remains conditional on restart layout and implementation.
+
+The retained `N=25, l=512, Q=64` arithmetic is now exact: 82,747,680 full
+prefill pairs versus 4,104,480 DDI-QF pairs, a 20.1603x pair-count ratio and
+95.0398% sparsity. Unsupported SDPA dispatch, materialization, and bottleneck
+attribution was removed; the retained result is only no observed TTFT gain at
+the listed fixed-shape cells. No author-approved metadata or TeX engine was
+available in this checkout, so placeholders and PDF compilation remain
+submission blockers.

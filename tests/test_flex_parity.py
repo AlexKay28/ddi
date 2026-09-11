@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from ddi.flex_parity import compare_logits
+from ddi.flex_parity import ParityMetrics, compare_logits, first_divergence, passes_prefill_gate
 
 
 def test_compare_logits_reports_exact_match() -> None:
@@ -24,3 +24,38 @@ def test_compare_logits_reports_token_argmax_movement() -> None:
 def test_compare_logits_rejects_nonfinite_values() -> None:
     with pytest.raises(ValueError, match="finite"):
         compare_logits(torch.tensor([float("nan")]), torch.tensor([0.0]))
+
+
+def test_prefill_gate_requires_cosine_and_exact_argmax() -> None:
+    assert passes_prefill_gate(ParityMetrics(0.0, 0.0, 0.999, 1.0))
+    assert not passes_prefill_gate(ParityMetrics(0.0, 0.0, 0.998, 1.0))
+    assert not passes_prefill_gate(ParityMetrics(0.0, 0.0, 1.0, 0.99))
+
+
+def test_first_divergence_retains_qkv_equality() -> None:
+    same = torch.ones(1)
+    reference = [
+        {
+            "layer": 0,
+            "scale": 0.5,
+            "query": same,
+            "key": same,
+            "value": same,
+            "attention_output": torch.tensor([1.0]),
+        }
+    ]
+    candidate = [
+        {
+            "layer": 0,
+            "scale": 0.5,
+            "query": same.clone(),
+            "key": same.clone(),
+            "value": same.clone(),
+            "attention_output": torch.tensor([2.0]),
+        }
+    ]
+    result = first_divergence(reference, candidate)
+    assert result is not None
+    assert result["layer"] == 0
+    assert result["qkv_equal"] == {"query": True, "key": True, "value": True}
+    assert result["max_attention_abs_error"] == 1.0

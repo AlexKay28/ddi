@@ -1,0 +1,498 @@
+\section{Two Paths to Less Document Prefill}
+\label{sec:thesis}
+
+Retrieval-augmented generation often encodes the same passage in many different
+requests. A document may occur first in one prompt, last in the next, and beside
+different evidence in a third. Under full causal attention its hidden states
+depend on preceding tokens. Reuse of an unchanged exact prefix is possible;
+reusing an arbitrary document after a changed predecessor is a different problem.
+Efficient KV memory management \citep{kwon2023pagedattention} does not, by itself,
+remove this dependency. DDI changes the attention graph to isolate documents,
+then uses restart positions to support independently computed document states.
+
+Two potential savings must be distinguished. A \textcolor{ddiGold}{\textbf{cold
+document}} still needs computation, but its attention is confined to its own
+block. A \textcolor{ddiGreen}{\textbf{warm document}} can load previously computed
+KVs and avoid that document's prefill. Sparse execution and reuse therefore
+address different work. The measured V53 cache implementation uses dense SDPA
+for its component computations. It is not evidence that a block-sparse kernel
+realizes the analytical reduction in attention pairs.
+
+\paragraph{Measuring both paths and their limits.}
+This version reports a completed deployment validation program, not only
+separate panels. Sections~\ref{sec:quality}--\ref{sec:cache} now include
+matched natural-QA campaigns that join quality, timing and cache state on the
+same frozen requests (V57, V58, V65), an audited 24-record confirmation with
+preregistered intervals (V64), and a geometry crossover study (V59). The
+headlines are narrow by design and now carry a measured boundary: on
+development data the optimized warm reuse path beats the monolithic baseline
+only above measured hit-fraction crossovers --- first-token latency wins above
+$h\geq 0.9$ at $L=128$ and $h\geq 0.7$ at $L=512$ (all-hit TTFT speedups up to
+$\sim$4.3$\times$ at $L=512$, $N=10$), diluting with decode budget until full
+64-token generations win only above $h\geq 0.8$ at $L=512$ and never with CI
+support at $L=128$ or at $L=32$ at any decode budget --- with outputs
+byte-identical to the monolithic baseline on 2775/3600 timed repeats
+(divergences are bf16 reduction-order flips deeper in the trajectory, first
+token always identical); quality non-inferiority is not established; the
+sparse cold path wins only at long-document shapes.
+
+\paragraph{Reading the evidence.}
+\textcolor{ddiBlue}{Blue/orange} mark attention structure and fresh computation;
+\textcolor{ddiGreen}{green/purple} mark reuse and behavioral checks. Every
+figure identifies measured, analytical, or missing evidence; legacy quality
+values stay descriptive, and V53 remains a local diagnostic with failed gates.
+Appendix~\ref{app:ledger} gives the source ledger and raw-row selection rules.
+
+\section{What Isolation Changes}
+\label{sec:mechanism}
+
+DDI-QF preserves causal attention within each document and within the query,
+removes cross-document attention, and lets every query row see document keys.
+Answer rows can attend all document columns, the query, and preceding answers.
+Thus integration moves to the query and answer path rather than disappearing.
+In DDI-strict only the last query row bridges to documents; answer rows still
+have direct document access. The blind control removes document access from
+both query and answer. At one document, the implemented DDI family explicitly
+returns full causal attention: this is a correctness convention, not evidence
+for general multi-document isolation.
+
+\begin{figure}[H]
+\centering\resizebox{.88\linewidth}{!}{\input{generated/V1_mask_geometry.tex}}
+\caption{Allowed attention and execution paths. The illustration has three
+two-token documents followed by query and answer rows. White gaps remove
+cross-document edges. Dashed flow denotes the unvalidated sparse-kernel target;
+solid flow denotes the implemented dense-SDPA cache path. The matrix is a
+semantic illustration, not a measured workload.}
+\label{fig:mechanism}
+\end{figure}
+
+\paragraph{Independence has conditions.}
+Restart positions begin each document at zero and place the query after the
+longest document. Cache identity must include checkpoint, tokenizer, layout,
+and exact token content; a document text label alone is not sufficient.
+Entries are assembled in current retrieval order, with explicit positions
+propagated through decoding. This enables the intended reuse across changed
+predecessors, but different numerical execution paths may still change logits
+and argmax decisions. V53 tests that distinction rather than assuming it away.
+
+\begin{figure}[H]
+\centering\resizebox{.88\linewidth}{!}{\input{generated/V8_cache_requests.tex}}
+\caption{Reordering does not change which stored document identity is requested.
+Hits load real KV tensors; the new document is computed. This is an illustrative
+two-request example, not a claim that arbitrary reordered requests preserve
+outputs. Full-causal unchanged-prefix reuse remains a valid alternative.}
+\label{fig:requests}
+\end{figure}
+
+\paragraph{Relation to prior work.}
+Independent context processing is related to parallel context windows
+\citep{ratner2023pcw} and parallel context encoding \citep{yen2024cepe}; passage
+encoding followed by integration also appears in Fusion-in-Decoder
+\citep{izacard2021fid}. Here the concrete object is the attention mask and its
+cached execution in a decoder-only model. These relationships motivate the
+mechanism, not a claim of measured superiority over those systems.
+
+\section{Quality: Masks and Document Count}
+\label{sec:quality}
+
+\paragraph{Protocol Q1: descriptive mask comparison.}
+The retained base Qwen2.5-7B-Instruct cells use greedy QA evaluation, batch one,
+bf16 on A100 80GB PCIe with torch 2.13.0+cu126. Each natural-dataset/mask cell
+has 100 records from seed 0, not 100 model replications. Hotpot uses 10 real
+paragraphs and MuSiQue 20; document and query token lengths vary. EM and F1
+are primary, presence and teacher-forced answer loss are supporting metrics.
+The strict arm comes from a separate retained run, so the plotted categorical
+comparison is descriptive rather than a jointly randomized mask intervention.
+
+\begin{figure}[H]
+\centering\resizebox{.74\linewidth}{!}{\input{generated/V6_mask_quality.tex}}
+\caption{Measured quality by mask, not by numerical sparsity. Full, QF, strict,
+and blind differ in edge semantics as well as edge counts. Points are 100-record
+means without comparison confidence intervals. Qwen-7B base; T2 in the ledger.}
+\label{fig:masks}
+\end{figure}
+
+\paragraph{Protocol Q2: document-count ablation.}
+A single sequentially tuned top-eight-layer Qwen checkpoint is evaluated at
+$N=2,5,10$ on Hotpot. The retained files share 100 record IDs across both masks
+and all document counts. The loader keeps supporting evidence and removes
+distractors, maintaining original relative order. This is a paired descriptive
+comparison of records, not independent checkpoint replication. It has the same
+A100/bf16 runtime family as Q1, seed 0, and dirty-source provenance. Actual
+token lengths and per-record sparsity were not stored.
+
+\begin{figure}[H]
+\centering\resizebox{.74\linewidth}{!}{\input{generated/V5_doc_quality.tex}}
+\caption{Document-count quality curves for one tuned checkpoint, with identical
+record IDs across the six arms. Lines connect the three observed counts only.
+They are not quality--sparsity curves: increasing $N$ also changes distractor
+content and total token length. No numerical sparsity is assigned to these QA
+points. Full/DDI EM is .62/.55, .59/.49, and .46/.46.}
+\label{fig:docquality}
+\end{figure}
+
+The equal EM means at ten documents do not establish per-example agreement or
+parity. F1 remains different, and aggregate equality can hide compensating
+errors. Training gains and degradation of the full path must also be separated.
+The stronger matched three-seed Qwen/Llama protocol does not reach natural-QA
+parity; Appendix~\ref{app:quality} decomposes its changes without replacing the
+original statistical gates.
+
+\paragraph{Protocol Q3: the matched joint evaluation (V57).}
+The previously missing join now exists. One campaign evaluates full versus
+DDI-QF on the \emph{same} 100 frozen HotpotQA seed-0 requests with exact input
+IDs, geometry and natural stopping, then times identical fixed-work passes.
+
+\begin{table}[H]
+\centering\footnotesize\input{generated/T12_v57_matched.tex}
+\caption{Matched quality and timing on identical requests (V57, base Qwen-7B,
+bf16 SDPA, dirty-source diagnostic). The isolation quality cost and the
+near-unity dense-SDPA prefill ratio are now measured on the same records rather
+than inferred from separate experiments.}
+\label{tab:v57matched}
+\end{table}
+
+Full attention reaches EM/F1 .56/.70 against DDI-QF's .30/.42 on identical
+requests: the document-isolation quality cost is real and large for the base
+model, while prefill latency remains statistically indistinguishable
+(1.0013$\times$, CI $[1.0008,1.0018]$). This confirms on matched data what the
+separate panels suggested.
+
+\section{Structural Savings versus Measured Prefill}
+\label{sec:prefill}
+
+For $N$ equal-length documents of $L$ tokens and a query of $Q$ tokens, counting
+the causal diagonal gives the exact prefill pair counts
+\begin{align}
+P_F &= (NL+Q)(NL+Q+1)/2,\\
+P_D &= NL(L+1)/2+QNL+Q(Q+1)/2,\\
+s &= 1-P_D/P_F.
+\end{align}
+These are allowed attention pairs, not measured FLOPs, memory traffic, or a
+wall-clock model. For unequal documents, replace $NL$ by $\sum_i L_i$ and
+$NL(L+1)$ by $\sum_i L_i(L_i+1)$. Without those token lengths, a natural-QA
+record has no defensible numerical location on a sparsity axis.
+
+\paragraph{Protocol P1: controlled synthetic timing.}
+The retained T3 slice uses base Qwen2.5-7B-Instruct, A100 80GB PCIe, bf16 SDPA,
+torch 2.13.0+cu126, driver 580.65.06. Random token IDs give exact lengths,
+batch one, $L=512,Q=64$, $N\in\{1,3,5,9,13,25\}$, and seed 0. Each cell has
+five CUDA-event timed repeats after three discarded warmups. Repeats estimate
+variation of one synthetic cell, not a population of prompts. Prefill FTT and
+decode TPOT are separately recorded; no end-to-end latency column or QA score
+was measured. Construction outside the timed forward is not a serving cost.
+
+\begin{figure}[H]
+\centering\resizebox{.85\linewidth}{!}{\input{generated/V2_efficiency_intuition.tex}}
+\caption{Matched geometry, different quantities. Left: exact structural pair ratio.
+Right: measured prefill milliseconds; the two series nearly coincide. Five
+repeats per cell, medians shown. At $N=25$, 95.04\% fewer pairs accompanies
+1900.95 ms full versus 1891.02 ms DDI-QF, not a material demonstrated speedup.}
+\label{fig:prefill}
+\end{figure}
+
+At the largest retained point, $P_F=82{,}747{,}680$ and
+$P_D=4{,}104{,}480$, yielding $20.1603\times$ fewer allowed pairs. The
+median full/DDI latency ratio is only about $1.0053\times$. Across the retained
+slice it remains near one. The observation establishes a realization gap for
+this implementation, not its cause. No profiling here identifies dispatch,
+matrix materialization, bandwidth saturation, or a hardware bottleneck.
+
+\paragraph{SDPA and Flex address the same attention computation.}
+FlexAttention is a candidate implementation \citep{flex_attention}, but its
+full-model parity proxy fails. SDPA accepts an attention mask; a Flex block mask
+can expose blocks that need not be computed. Neither API name alone guarantees
+a particular dispatch or speed. The historical Flex measurements in the next
+section show observed acceleration, separately from the validated-result
+boundary. Other lengths and repeated attempts are not pooled into this
+fixed-$L$ figure. The old stored \texttt{analytical\_speedup} uses a
+quadratic approximation; all structural numbers here use exact triangular
+counts instead.
+
+\paragraph{What this cannot answer.}
+Even a correct sparse timing result on random IDs would not locate the Hotpot
+points in Figure~\ref{fig:docquality} on a speed axis. A quality--prefill
+frontier requires exact shared requests, checkpoint, runtime, masking, and
+decode policy. The current experiments share some labels, not that joint unit.
+
+\section{Flex: From Kernel Gains to Model Gains}
+\label{sec:flex}
+\begingroup\small
+
+\paragraph{Historical observations, retained with their scope.}
+Two A100 80GB/torch 2.13.0+cu126 logs at $Q=64$ measure existing-Q/K/V kernel
+time and, separately, tuned Qwen-7B model-forward time. Model timing averages
+five post-warmup repeats with \texttt{use\_cache=False}; compilation and mask
+construction are excluded. Neither measures end-to-end generation.
+
+\begin{figure}[H]
+\centering\resizebox{.74\linewidth}{!}{\input{generated/V11_flex_history.tex}}
+\caption{Observed historical Flex/full divided by Flex/document-isolated timing.
+At $N=25,L=2048$, kernel time falls from 142.292 to 17.263 ms (8.24$\times$),
+while whole-model prefill falls from 8059.75 to 4541.25 ms (1.77$\times$).
+These are separate experiments, not a measured runtime decomposition.
+Historical/unvalidated: the old document mask permits bidirectional intra-document
+attention, unlike current causal DDI-QF; model parity is not established.}
+\label{fig:flexhistory}
+\end{figure}
+
+\textbf{Baseline choice matters.} SDPA/full versus Flex/document-isolated is
+7079.58/4541.25 ms: 1.56$\times$, combining backend and mask changes.
+A separate archived 3.98$\times$ (17762/4458 ms) lacks its matching raw log
+and is not plotted. The later DDI-QF proxy at $N=2,L=128,Q=64$ fails parity:
+95\% argmax agreement versus required 100\%; cosine .998553 versus .999.
+
+\paragraph{Four timing scopes and Amdahl's law.}
+The \emph{kernel} consumes Q/K/V; the \emph{attention module} also includes
+projections and positions; \emph{model prefill} includes all layers and logits;
+the \emph{request} also includes decode and its stated I/O/scheduling costs.
+No isolated attention-module timing is available here. If a component occupies
+fraction $f$ of baseline time and is accelerated by $S$, with other work unchanged,
+\begin{equation}
+S_{\mathrm{total}}=\frac{1}{(1-f)+f/S}.
+\end{equation}
+
+\begin{figure}[H]
+\centering\resizebox{.60\linewidth}{!}{\input{generated/V12_amdahl.tex}}
+\caption{Illustration, not profiling: assumed component shares explain dilution.
+At $f=.1$, a 2$\times$ component speedup gives only 1.053$\times$ overall;
+3$\times$ gives 1.071$\times$. Even eliminating that component yields at most
+1.111$\times$ overall. No $f$ is inferred from the independent historical logs.}
+\label{fig:amdahl}
+\end{figure}
+
+KV reuse avoids the document forward, not only attention; loading, query and
+decode still cost time. Ratios avoid ambiguous ``200\% speedup'' claims.
+
+\paragraph{Candidate implementation measured: segmented causal attention (V61).}
+The historical gaps motivated a current implementation with canonical
+within-document causality, native GQA and correct all-document query
+integration, evaluated against an FP64 reference calibration. Same-mask
+segmented-FA2 versus SDPA-DDI prefill passes the material-speed gate in exactly
+two of eight cells: \textbf{1.118$\times$} $[1.115,1.121]$ at $N{=}5,L{=}512$
+and \textbf{1.287$\times$} $[1.285,1.289]$ at $N{=}10,L{=}512$; short shapes
+regress to 0.65--0.97$\times$ under fixed kernel/launch overhead. The sparse
+cold-path win is therefore real but long-document-scoped, and its cross-kernel
+numerical criterion (RMS relative error $\leq .02$ versus FP64) was calibrated
+on one layer/geometry and still requires independent task-level confirmation.
+\endgroup
+
+\section{KV Reuse: Throughput with Failed Fidelity Gates}
+\label{sec:cache}
+
+\paragraph{Protocol C1: the exact-work V53 diagnostic.}
+One A100 80GB PCIe runs base Qwen2.5-7B-Instruct with bf16 SDPA (torch
+2.5.1+cu121); checkpoint and tokenizer contents are hashed in its manifest.
+Exact inputs: $N=5,L=500,Q=32,A=16$, 32-document universe, Zipf 1.5; seeds
+0/1/2 with 10 warmup and 50 measured requests per mode, counterbalanced; one
+prefill emits token 1 and exactly 15 decode forwards emit the rest (EOS ignored
+only in fixed-work timing). Synchronized wall time includes masks, disk
+lookup/write, cold document computation, KV assembly/transfer, query prefill
+and decoding, and excludes sampling and diagnostic copies. Modes: cached DDI,
+fresh DDI, full causal recomputation. \textbf{There is no optimized
+full-prefix-cache baseline}, no concurrency sweep, and no gold QA answers in
+the random-token stream.
+
+\begin{figure}[H]
+\centering\resizebox{.76\linewidth}{!}{\input{generated/V4_production_opportunity.tex}}
+\caption{V53 measured QPS and paired seed ratios, diagnostic only. Purple dots
+are three seed values; green squares and whiskers are means and descriptive
+95\% df=2 t-intervals. Right-hand ratios are computed within seed before
+averaging. This is not a capacity envelope or correctness-preserving speedup:
+19/150 measured request pairs change outputs.}
+\label{fig:qps}
+\end{figure}
+
+The cache hits 709 of 750 measured document lookups, or 94.53\%. Cached/fresh
+QPS ratios average 1.192746 with interval $[1.091097,1.294395]$; cached/full
+averages 1.178812 with $[1.067295,1.290329]$. Three seeds provide weak
+replication, and individual requests share cache history. These intervals do
+not support a serving-wide claim. In particular, the numerator and denominator
+can generate different token sequences despite equal work counts.
+
+\begin{center}
+\fcolorbox{ddiRed}{ddiRed!6}{\parbox{.94\linewidth}{
+\textbf{Failed gates remain visible.} Greedy IDs differ in 25/192 comparisons
+(19/150 measured streams); all 192/192 numerical checks fail
+$10^{-4}$; max same-prefix logit error 1.1416. Not clean-revision evidence.}}
+\end{center}
+
+\paragraph{Why the historical estimate is withdrawn.}
+Pre-V51 runners populated but did not consume real KVs; V51 introduced real
+reuse but retokenized inputs and did not equalize decode work, so its claim is
+withdrawn. Exact V53 inputs fix those ambiguities but fail numerical and greedy
+equivalence. Appendix~\ref{app:cache} preserves all three evidence generations.
+
+\paragraph{From failed gates to an audited warm-path win (V58--V65).}
+A five-step validation program then rebuilt the reuse path on matched natural-QA
+requests. V58 measured cache-versus-fresh on 100 HotpotQA records: all 1{,}000
+warm lookups hit, fixed-work speedup 1.093$\times$ $[1.082,1.105]$, but exact
+and QA gates failed; divergence localized to independently projected layer-0
+document states, not assembly. V60 introduced a \emph{canonical} per-document
+encoder shared by cold and cached execution, achieving bitwise cold/hit
+agreement. V59 measured where reuse pays: the benefit is geometry-dependent
+(Table~\ref{tab:v59crossover}). V64 audited the intermediate claims under a
+preregistered seed-47 method, adjudicating the 24-record confirmation as
+\texttt{confirmation\_frozen} and correcting earlier comment-level arithmetic.
+V65 then optimized the measured overheads and re-ran the comparison against the
+\emph{original} monolithic baseline.
+
+\begin{table}[H]
+\centering\footnotesize\input{generated/T11_v59_crossover.tex}
+\caption{Measured TTFT geometry crossover (V59, restart checkpoint, bf16 SDPA,
+three seeds, ten retained repeats). Reuse loses at 32-token documents, needs
+very high hit rates at 128, and becomes materially faster at 512-token
+documents. Dirty-source diagnostic; no quality claim.}
+\label{tab:v59crossover}
+\end{table}
+
+\begin{table}[H]
+\centering\footnotesize\input{generated/T9_v65_serving.tex}
+\caption{The audited warm-path result (V65, seed 47, synchronized repeats,
+bootstrap CIs). Optimized all-hit reuse serves TTFT 2.05$\times$ faster than
+the original monolithic DDI baseline with byte-identical outputs on all 24
+frozen records; end-to-end wall improves 1.43$\times$. Mixed-hit traffic
+remains slower than the baseline: the win is bounded by the measured
+hit-fraction crossovers of Table~\ref{tab:v66boundary} (development data).
+Cold canonical prefill is still 3.27$\times$ slower than monolithic.}
+\label{tab:v65serving}
+\end{table}
+
+A V66 follow-up then measured the serving boundary of that win on a frozen
+development grid over document lengths, document counts, hit fractions and
+decode budgets: optimized reuse beats the monolithic baseline only above
+measured hit-fraction crossovers (Table~\ref{tab:v66boundary}), and its
+outputs are byte-identical to the monolithic baseline on 2775/3600 timed
+repeats (divergences are bf16 reduction-order flips deeper in the trajectory;
+the first token is always identical).
+
+\begin{table}[H]
+\centering\footnotesize\input{generated/T13_v66_boundary.tex}
+\caption{Measured serving boundary of the optimized warm path versus the
+monolithic baseline (V66 T9 follow-up). Frozen V62 development split, seed 47,
+single seed, 15 timed repeat pairs per cell; crossover $h$ is the smallest
+nominal grid hit fraction whose verdict is a CI-supported win under the frozen
+materiality rule (wall: synchronized wall at that decode budget; TTFT:
+decode-budget-independent). Development data only; quality non-inferiority
+not established.}
+\label{tab:v66boundary}
+\end{table}
+
+The V65 gates were declared in the run manifest before execution: the reuse arm
+must beat the monolithic baseline with byte-identical outputs, and it does
+(C/A $=0.4885$, CI $[0.4327,0.5504]$). Quality under reuse, however, remains
+the open gate.
+
+\paragraph{Where the audited win came from (V69).}
+A derivation over the pinned V60/V65 artifacts attributes the
+221.24\,ms $\to$ 62.30\,ms all-hit reuse reduction (3.55$\times$): 53.9\% of
+the reduction is the per-request \texttt{validate\_entry} scan removed by
+store-time validation markers, 37.2\% the synchronous per-document disk load
+removed by the LRU resident tier, and 8.9\% a bounded envelope for the single
+staged pinned host-to-device copy per layer; the unattributed wall remainder
+is 1.6\% of the pre-total, within the declared 5\% tolerance.
+Table~\ref{tab:v69attribution} (Appendix~\ref{app:cache}) carries the
+decomposition; the envelope is inferred, not measured, and the derivation
+supports no confirmation-quality claim.
+
+\begin{table}[H]
+\centering\footnotesize\input{generated/T10_qa_confirmation.tex}
+\caption{QA non-inferiority under the preregistered $-0.02$ floor (paired
+bootstrap, seed 47). The 24-record canonical confirmation is favorable but
+underpowered; the 100-record untouched confirmation is near-neutral
+(prediction-equal 78/100) yet fails the rule. Quality preservation under reuse
+is \textbf{not established}.}
+\label{tab:qaconfirmation}
+\end{table}
+
+\section{Hits, Fidelity, and an Analytical Surface}
+\label{sec:hits}
+
+\paragraph{Request-matched panels now exist at three scales.}
+The V53 hit-bin diagnostics (150 request triplets grouped by observed hit
+count; all-hit requests median 498.3\,ms cached versus 626.8\,ms fresh, while a
+three-of-five-hit bin of four requests was slower) are retained in
+Appendix~\ref{app:cache}. They are superseded as headline evidence by the
+matched QA campaigns of Sections~\ref{sec:quality} and~\ref{sec:cache}: V58
+and V65 join quality, outputs, timing and hit state on the same frozen
+requests, and V65 measures cold, all-hit and mixed-hit schedules directly.
+What remains unique here is the axis distinction.
+
+\paragraph{Cache hit rate is not mask sparsity.}
+Sparsity is determined by token geometry and permitted edges. Hit rate depends
+on request popularity, cache history, capacity, eviction and key identity.
+Reordering documents can change hits without changing the mask's pair count;
+changing an attention mask need not change the request popularity distribution.
+There is consequently no empirical function $h(s)$ in this evidence.
+
+\begin{figure}[H]
+\centering\resizebox{.88\linewidth}{!}{\input{generated/V9_analytical_surface.tex}}
+\caption{An analytical surface, not a measured hit-rate dependency. Color is
+full-causal pair count divided by remaining DDI-plus-reuse pair work, $P_F/P_h$,
+at $L=500,Q=32$ (logarithmic color scale, 1--200$\times$).
+The independent axes are document count and assumed hit rate. The circle marks
+the actual V53 geometry: \textbf{77.96\% sparsity and 94.53\% hits}, not the
+95.04\% sparsity of the different T3 workload. No latency is inferred.}
+\label{fig:surface}
+\end{figure}
+
+Let $D=NL(L+1)/2$ and $R=QNL+Q(Q+1)/2$. With an assumed hit fraction $h$,
+remaining pair work is $P_h=(1-h)D+R$ and the plotted ratio is $P_F/P_h$.
+Even at $h=1$, query integration remains. This accounting omits I/O, KV storage,
+assembly, scheduling and decode; it cannot predict QPS. Equal-length documents
+make hit fraction also a document-compute fraction here. With unequal lengths,
+a token- or cost-weighted hit rate would be needed.
+
+\section{The Joint Evaluation Exists; What It Does Not Yet Prove}
+\label{sec:coverage}
+
+\begin{figure}[H]
+\centering\input{generated/V10_coverage.tex}
+\caption{Evidence coverage after the validation program. The previously red
+quality--timing and quality--reuse joins are now measured on frozen requests
+(V57, V58, V65); remaining red cells are quality non-inferiority at scale,
+mixed/partial-hit schedules and a validated sparse-plus-reuse combination.}
+\label{fig:coverage}
+\end{figure}
+
+The validation program implemented the decisive study this paper previously
+only specified: exact tokenized natural-QA requests with gold answers and
+frozen document identities; named checkpoints; full-causal, monolithic-DDI,
+canonical-fresh and cached arms on one backend; cold/all-hit/mixed cache
+states; natural stopping for QA and separate fixed-work timing; one request
+identity joining QA metrics, outputs, TTFT, end-to-end latency and hits; and
+preregistered gates with independent audit (V64). Its verdicts are the paper's
+result tables, not aspirations.
+
+\paragraph{Limits of the current result.}
+The audited win covers one checkpoint, HotpotQA, 24 frozen requests and an
+LRU-warm single-GPU path; cold encode (690.97\,ms per document median) and
+fresh-process disk loads (~62.6\,ms per pass) are excluded from all-hit walls
+by design and reported separately. Quality non-inferiority fails narrowly at
+$n{=}100$: a larger preregistered confirmation or a quality intervention is
+required, not a relaxed margin. No optimized prefix-cache baseline or
+concurrency sweep exists; the segmented-kernel criterion is calibrated, not
+task-level confirmed.
+
+\paragraph{Conclusion.}
+The paper's two mechanisms now have measured, bounded verdicts. \textbf{Warm
+document-KV reuse} is an audited win: 2.05$\times$ TTFT versus the original
+monolithic baseline with byte-identical outputs, 1.43$\times$ end-to-end ---
+winning only above the measured hit-fraction crossovers (TTFT: $h\geq 0.9$ at
+$L=128$, $h\geq 0.7$ at $L=512$; first-generation-token wall: $h\geq 1$ and
+$h\geq 0.7$; full 64-token generations: no CI-supported win at $L=128$,
+$h\geq 0.8$ at $L=512$, never at $L=32$), with mixed-hit schedules still
+slower and quality non-inferiority unproven. \textbf{Sparse cold prefill} is real only at
+long-document shapes (1.12--1.29$\times$ at $L{=}512$) and the canonical cold
+path remains 3.27$\times$ slower than monolithic, so the cold lever is not yet
+competitive. The isolation quality cost is large for base models
+(.56/.70 versus .30/.42 EM/F1 matched). The honest claim is a measured,
+correctly-scoped warm-path acceleration --- not yet a quality-preserving general
+replacement for full causal attention.
+
+\paragraph{Reproducibility.}
+All displayed empirical figures are generated from the pinned ledger, including
+the V57/V58/V59/V60/V61/V64/V65/V66/V69 validation artifacts. The renderer rejects
+changed hashes, incomplete request joins, geometry/work mismatches and dropped
+failed gates. Reports document historical decisions; the appendix states which
+conclusions remain diagnostic.

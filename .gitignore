@@ -231,3 +231,11 @@ results/*
 !results/transfer_heldout/*.json
 logs/
 hf_cache/
+
+# V70 session: local caches and LaTeX intermediates
+.v70_cache/
+wget-log
+paper/preprint.aux
+paper/preprint.bbl
+paper/preprint.blg
+paper/preprint.out

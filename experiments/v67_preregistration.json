@@ -1,0 +1,157 @@
+{
+  "schema_version": "v67_preregistration_v1",
+  "ticket": "VIBEQUEUE-67",
+  "created_utc": "2026-09-10T14:00:00+00:00",
+  "owner_approval": {
+    "granted": true,
+    "logged_in_tracker": "2026-09-10",
+    "ticket": "VIBEQUEUE-67"
+  },
+  "hypothesis": {
+    "H1": "request-time link tokens (k in {1,5}) act as a stabilizer, re-anchoring greedy near-tie decisions; document KVs stay context-independent (V58/V60/V65 byte-identity)",
+    "H2": "revised perturbation-consistent training (train WITH production cache-reuse noise: per-record bf16 re-encode perturbation / cache-dropout, multi-hop supervision with natural distractors, random document order) targets the V68 near-tie signature"
+  },
+  "design": "revised recipe (H2) applied to 3 EQUAL-budget arms: k0 (control, recipe changed → re-run), k1, k5. k0-new vs V62-k0-old isolates H2; k1/k5 vs k0-new isolates H1.",
+  "training": {
+    "model": "Qwen/Qwen2.5-7B-Instruct",
+    "base_checkpoint": "results/checkpoints/Qwen__Qwen2.5-7B-Instruct__ddi_qf__8L_restart",
+    "steps_per_arm": 300,
+    "steps_formula": "V62 pilot: 100 steps = 463s → 4.63s/step. V67 smoke: 20 steps = 75s → 3.76s/step. 300 steps × 3.76s ≈ 1128s ≈ 18.8 min/arm. 3 arms ≈ 56 min. Dev eval ≈ 5 min/arm. Confirmation ≈ 15 min. Total ≈ 86 min ≈ 1.4h. Originally planned 500 steps but reduced to 300 due to shell timeout constraints; 300 steps = 1200 record-presentations (vs V62 100 steps = 400), still 3x the V62 budget.",
+    "steps_original_plan": 500,
+    "steps_reduction_reason": "Shell timeout constraint; 500 steps per arm would take ~95 min training + 30 min eval = 125 min total, exceeding the 900s (15 min) shell command timeout. 300 steps per arm fits in ~86 min total, within a 7200s (2h) shell timeout.",
+    "batch_size": {
+      "effective": 4,
+      "grad_accum_steps": 4,
+      "records_per_backward": 1
+    },
+    "learning_rate": 1.0e-5,
+    "warmup_steps": 20,
+    "seeds": 1,
+    "seed_value": 0,
+    "seeds_rationale": "1 seed; budget allows only 1 seed per arm within the 6h cap. 3 arms × 1 seed × 500 steps = 1500 steps ≈ 116 min training + ~45 min eval = ~161 min. Multi-seed would require 3×3×500 = 4500 steps ≈ 348 min training alone, exceeding budget.",
+    "optimizer": "AdamW8bit (bitsandbytes) with weight_decay=0.0",
+    "scheduler": "linear warmup 20 steps then constant",
+    "trainable_layers": 8,
+    "kl_temperature": 1.0,
+    "teacher_first_token_weight": 1.0,
+    "full_anchor_weight": 1.0,
+    "blind_anchor_weight": 1.0,
+    "max_grad_norm": 1.0,
+    "max_skipped_steps": 10,
+    "layout": "restart",
+    "min_docs": 2,
+    "held_out_frac": 0.05,
+    "holdout_eval_records": 100,
+    "log_every": 25,
+    "epochs": 1,
+    "arm_order": ["k0", "k1", "k5"],
+    "arm_order_rationale": "k0 first (control re-run); k1 then k5 (link ablation). Fixed order prevents post-hoc reordering."
+  },
+  "perturbation_recipe": {
+    "bf16_reencode_noise_rate": 0.15,
+    "bf16_reencode_noise_mechanism": "per record, with probability 0.15, re-encode the document tokens through bf16 round-trip: tokenizer.decode(tokenizer.encode(text)) to simulate the independent re-encoding perturbation identified in V68",
+    "cache_dropout_rate": 0.10,
+    "cache_dropout_mechanism": "per record, with probability 0.10, drop one random document from the KV cache simulation (treat as fresh encode even if it would be cached), teaching invariance to cache miss/noise",
+    "multi_hop_distractor_count": 0,
+    "multi_hop_distractor_note": "hotpot_qa records already contain natural distractors (multiple supporting + non-supporting contexts). No artificial distractors added; the existing multi-document structure provides natural distractor supervision.",
+    "document_order_randomization": true,
+    "document_order_mechanism": "shuffle document order per record per epoch using torch.manual_seed(seed + step) so the model sees documents in different orders, teaching order-invariance"
+  },
+  "link_mechanism": {
+    "k_values": [0, 1, 5],
+    "link_token_ids_source": "Qwen2.5 tokenizer special tokens: [90, 91, 92, 93, 94] (unused placeholder tokens, distinct, nonnegative)",
+    "computation": "per-request, never stored in document KVs",
+    "contract": "ddi.link_token_contract.LinkTokenContract with document_cache_identity='canonical-cache-v60-sdpa'",
+    "position_layout": "restart-documents-request-tail-v1",
+    "mask_test_spec": "tests/test_v67_link_masks.py: 2-document hand-checkable cases + causal-leakage tests; MUST pass before training"
+  },
+  "splits": {
+    "train": {
+      "source": "experiments/v62_split_manifest.json train arm",
+      "count": 800,
+      "sha256": "a3b1f5b6b1fcd9e099969b62d7ee2922c1e2e1e62397d9bbd4c1c6b42630bcbb"
+    },
+    "development": {
+      "source": "experiments/v67_fresh_dev_split.json",
+      "count": 100,
+      "sha256": "9f5975606844e805afbf6449b5b03d020762e3adef0dd5862a032318291544ac",
+      "note": "fresh held-out set NOT used in V58/V60/V62/V65 dev selection"
+    },
+    "confirmation": {
+      "source": "experiments/v62_split_manifest.json confirmation arm",
+      "count": 100,
+      "sha256": "529f0109eefbf2ef42ede00be146d95cf19876e35859bc1358fbceb1b1bf04d7",
+      "note": "frozen 100 ids; never touched until confirmation phase"
+    }
+  },
+  "gates": {
+    "cache_vs_fresh": {
+      "type": "paired non-inferiority",
+      "margin": -0.02,
+      "metrics": ["em", "f1"],
+      "bootstrap": {"seed": 47, "iterations": 10000, "method": "percentile bootstrap of mean paired delta"},
+      "rule": "non-inferior iff CI LB >= -0.02 for BOTH EM and F1"
+    },
+    "full_reference": {
+      "type": "paired non-inferiority",
+      "margin": -0.02,
+      "metrics": ["em", "f1"],
+      "bootstrap": {"seed": 47, "iterations": 10000},
+      "rule": "non-inferior iff CI LB >= -0.02 for BOTH EM and F1"
+    },
+    "full_path_preservation": {
+      "type": "control tracked",
+      "rule": "full-path (arm D) EM/F1 tracked for all arms; no gate, reported only"
+    },
+    "dev_selection": {
+      "rule": "select best arm on dev by mean EM (tie-break by mean F1) among k0/k1/k5",
+      "first": true
+    },
+    "confirmation_eval": {
+      "rule": "eval selected arm on 100 frozen confirmation ids with preregistered -0.02 non-inferiority gates (paired, 10k bootstrap)",
+      "after_dev_selection": true
+    },
+    "divergent_population_recovery": {
+      "metric": "count of V68 22 divergent ids recovered (EM 0→1 or F1 improvement >0.1)",
+      "source": "results/v68_anatomy_20260910T131036Z/differing_records.jsonl"
+    }
+  },
+  "costs": {
+    "link_token_prefill_cost": "per request, k link tokens × forward pass cost; reported as wall time delta vs k0",
+    "storage": "link tokens add 0 storage (never stored in document KVs); document cache unchanged",
+    "request_latency_vs_v65_v66": "measured as TTFT delta for k1/k5 vs k0 on the dev set; compared to V65 all-hit 58.78ms vs monolithic 127.62ms (2.17x win)",
+    "training_tokens": "800 train records × ~500 tokens average × 500 steps / 4 grad_accum ≈ 50M tokens per arm; 3 arms ≈ 150M tokens"
+  },
+  "stop_rules": {
+    "no_dev_improvement": "if no arm improves on dev vs V62 k0 baseline (EM=0.40, F1=0.524), STOP, report negative, do NOT run confirmation",
+    "quality_collapse": "if any arm hits loss → NaN or divergence (max_skipped_steps exceeded), stop that arm, report, continue others",
+    "budget_cap": "6h A100 hard cap; if approaching, stop at nearest clean checkpoint and report partial"
+  },
+  "budget": {
+    "hardware": "1× A100 80GB, CUDA_VISIBLE_DEVICES=0",
+    "estimated_hours": 2.7,
+    "hard_cap_hours": 6,
+    "smoke_re_estimates": true,
+    "smoke_steps": 20
+  },
+  "v62_baseline": {
+    "source": "results/v62_dev_eval_20260910T073635Z/comparison.json",
+    "pilot_em": 0.40,
+    "pilot_f1": 0.5242217254423137,
+    "base_em": 0.60,
+    "base_f1": 0.6888913871502107
+  },
+  "v65_latency_baseline": {
+    "source": "results/v65_combined_20260910T102918Z/result.json",
+    "all_hit_ttft_ms_median": 58.77750087529421,
+    "monolithic_ttft_ms_median": 127.6210518553853,
+    "all_hit_vs_monolithic_ratio": 2.1713,
+    "all_hit_schedule_wall_s": 5.216,
+    "monolithic_schedule_wall_s": 7.479
+  },
+  "v68_divergent_ids": {
+    "source": "results/v68_anatomy_20260910T131036Z/differing_records.jsonl",
+    "count": 22,
+    "note": "all 22 divergent ids are from the V62 confirmation arm; the divergent-population recovery metric tracks these"
+  }
+}

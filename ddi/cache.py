@@ -36,13 +36,24 @@ from ddi.positions import Layout, build_positions
 
 @dataclass(frozen=True)
 class CacheEntry:
-    """Per-document KV block. `layout` is stored so callers can refuse cross-layout hits."""
+    """Per-document KV block. `layout` is stored so callers can refuse cross-layout hits.
+
+    `validated_by`/`validated_sha256` are store-time integrity markers (V65): non-empty
+    when the producer ran full finite-value + geometry validation before persisting the
+    payload (see `ddi.canonical_cache`), empty on entries that were never store-validated.
+    """
 
     key: str
     k_per_layer: list[torch.Tensor]
     v_per_layer: list[torch.Tensor]
     doc_len: int
     layout: str
+    cache_identity: str = ""
+    token_ids_sha256: str = ""
+    tensor_dtype: str = ""
+    schema_version: int = 2
+    validated_by: str = ""
+    validated_sha256: str = ""
 
 
 def compute_key(model_id: str, dtype: torch.dtype, doc_text: str) -> str:
@@ -80,7 +91,13 @@ class DocCache:
     def has(self, key: str) -> bool:
         return self._path(key).exists()
 
-    def get(self, key: str) -> CacheEntry | None:
+    def get(
+        self,
+        key: str,
+        *,
+        expected_identity: str | None = None,
+        expected_token_ids_sha256: str | None = None,
+    ) -> CacheEntry | None:
         path = self._path(key)
         if not path.exists():
             return None
@@ -92,12 +109,27 @@ class DocCache:
         if not isinstance(blob, dict) or "k" not in blob or "v" not in blob or "meta" not in blob:
             raise ValueError(f"cache file {path} is malformed: missing k/v/meta keys")
         meta = blob["meta"]
+        if meta.get("key") != key:
+            raise ValueError(f"cache file {path} payload key does not match requested key")
+        if expected_identity is not None and meta.get("cache_identity", "") != expected_identity:
+            return None
+        if (
+            expected_token_ids_sha256 is not None
+            and meta.get("token_ids_sha256", "") != expected_token_ids_sha256
+        ):
+            return None
         return CacheEntry(
             key=meta["key"],
             k_per_layer=blob["k"],
             v_per_layer=blob["v"],
             doc_len=meta["doc_len"],
             layout=meta["layout"],
+            cache_identity=meta.get("cache_identity", ""),
+            token_ids_sha256=meta.get("token_ids_sha256", ""),
+            tensor_dtype=meta.get("tensor_dtype", ""),
+            schema_version=int(meta.get("schema_version", 1)),
+            validated_by=meta.get("validated_by", ""),
+            validated_sha256=meta.get("validated_sha256", ""),
         )
 
     def put(self, entry: CacheEntry) -> None:
@@ -116,6 +148,12 @@ class DocCache:
                     "key": entry.key,
                     "doc_len": entry.doc_len,
                     "layout": entry.layout,
+                    "cache_identity": entry.cache_identity,
+                    "token_ids_sha256": entry.token_ids_sha256,
+                    "tensor_dtype": entry.tensor_dtype,
+                    "schema_version": entry.schema_version,
+                    "validated_by": entry.validated_by,
+                    "validated_sha256": entry.validated_sha256,
                 },
             }
             # WHY .tmp + os.replace: writes to the target path must be atomic so a concurrent
@@ -134,6 +172,40 @@ class DocCache:
         return sum(1 for _ in self.cache_dir.glob("*.pt"))
 
 
+def _concat_to_device(tensors: list[torch.Tensor], device: torch.device) -> torch.Tensor:
+    """Concatenate same-shaped cache blocks along dim=-2 and move them onto `device`.
+
+    V65 fast path: for a CUDA target fed from CPU-resident blocks, the per-entry sequence
+    segments are fused into one pinned staging buffer per tensor and uploaded with a
+    single (non-blocking) copy, replacing one small blocking `.to(device)` per entry with
+    one large transfer per layer. The buffer is filled strictly in argument order, so the
+    result is bit-identical to `torch.cat([t.to(device) for t in tensors], dim=-2)` —
+    both are pure memory movement of the same values into the same contiguous layout.
+    Everything else (non-CUDA target, device-resident blocks, mixed dtypes) deliberately
+    takes the original cat path; a mixed-dtype input must keep raising from `torch.cat`
+    rather than being silently cast by `copy_`.
+    """
+    reference = tensors[0]
+    if (
+        device.type != "cuda"
+        or all(tensor.device == device for tensor in tensors)
+        or any(tensor.dtype != reference.dtype for tensor in tensors)
+    ):
+        return torch.cat([tensor.to(device) for tensor in tensors], dim=-2)
+    total_len = sum(tensor.shape[-2] for tensor in tensors)
+    staging = torch.empty(
+        (*reference.shape[:-2], total_len, reference.shape[-1]),
+        dtype=reference.dtype,
+        pin_memory=True,
+    )
+    offset = 0
+    for tensor in tensors:
+        end = offset + tensor.shape[-2]
+        staging[..., offset:end, :].copy_(tensor)
+        offset = end
+    return staging.to(device, non_blocking=True)
+
+
 def assemble_dynamic_cache(
     entries: list[CacheEntry], device: torch.device
 ) -> DynamicCache:
@@ -146,7 +218,8 @@ def assemble_dynamic_cache(
     if layer_count == 0 or len(entries[0].v_per_layer) != layer_count:
         raise ValueError("cache entries must contain matching non-empty K/V layers")
 
-    layers = []
+    keys_per_layer: list[list[torch.Tensor]] = []
+    values_per_layer: list[list[torch.Tensor]] = []
     for layer in range(layer_count):
         keys = []
         values = []
@@ -165,9 +238,18 @@ def assemble_dynamic_cache(
                 reference_shape = shape
             elif shape != reference_shape:
                 raise ValueError("cache entries have incompatible K/V shapes")
-            keys.append(key.to(device))
-            values.append(value.to(device))
-        layers.append((torch.cat(keys, dim=-2), torch.cat(values, dim=-2)))
+            keys.append(key)
+            values.append(value)
+        keys_per_layer.append(keys)
+        values_per_layer.append(values)
+
+    layers = [
+        (
+            _concat_to_device(keys_per_layer[layer], device),
+            _concat_to_device(values_per_layer[layer], device),
+        )
+        for layer in range(layer_count)
+    ]
     return DynamicCache.from_legacy_cache(tuple(layers))
 
 
@@ -253,6 +335,8 @@ def compute_doc_kv(
     tokenizer: PreTrainedTokenizerBase,
     doc_text: str,
     layout: Layout,
+    *,
+    cache_identity: str = "",
 ) -> CacheEntry:
     """Single-doc prefill, extract per-layer K/V from past_key_values into a CacheEntry.
 
@@ -295,10 +379,16 @@ def compute_doc_kv(
 
     model_id = getattr(model.config, "_name_or_path", "") or type(model).__name__
     key = compute_key(model_id, model.dtype, doc_text)
+    token_ids_sha256 = hashlib.sha256(
+        doc_ids.to(torch.int64).contiguous().numpy().tobytes()
+    ).hexdigest()
     return CacheEntry(
         key=key,
         k_per_layer=k_list,
         v_per_layer=v_list,
         doc_len=doc_len,
         layout=layout,
+        cache_identity=cache_identity,
+        token_ids_sha256=token_ids_sha256,
+        tensor_dtype=str(k_list[0].dtype),
     )

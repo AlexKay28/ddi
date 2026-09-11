@@ -1,0 +1,26 @@
+{
+  "Llama-3.1-8B": {
+    "base": {
+      "0": "results/transfer_llama_base_seed0_predictions.jsonl",
+      "1": "results/transfer_llama_base_seed1_predictions.jsonl",
+      "2": "results/transfer_llama_base_seed2_predictions.jsonl"
+    },
+    "tuned": {
+      "0": "results/transfer_llama_tuned_seed0_predictions.jsonl",
+      "1": "results/transfer_llama_tuned_seed1_predictions.jsonl",
+      "2": "results/transfer_llama_tuned_seed2_predictions.jsonl"
+    }
+  },
+  "Qwen2.5-7B": {
+    "base": {
+      "0": "results/r5b1_qwen25_7b_base_seed0_20260902T1059Z_predictions.jsonl",
+      "1": "results/transfer_qwen_base_seed1_20260902T114019Z_predictions.jsonl",
+      "2": "results/transfer_qwen_base_seed2_20260902T142821Z_predictions.jsonl"
+    },
+    "tuned": {
+      "0": "results/transfer_qwen_tuned_seed0_predictions.jsonl",
+      "1": "results/transfer_qwen_tuned_seed1_predictions.jsonl",
+      "2": "results/transfer_qwen_tuned_seed2_predictions.jsonl"
+    }
+  }
+}

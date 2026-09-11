@@ -1,0 +1,37 @@
+{
+  "config": {
+    "dataset": "hotpot_qa",
+    "record_ids": [
+      "5a72f0e25542991f9a20c5cf",
+      "5a72f7df5542991f9a20c5d7",
+      "5a7300b85542994cef4bc41a",
+      "5a7306a655429901807daf67",
+      "5a73090455429901807daf6e",
+      "5a730a6b5542992359bc3210",
+      "5a730abe5542994cef4bc42f",
+      "5a7319e755429901807daf86",
+      "5a731a635542994cef4bc458",
+      "5a7320565542991f9a20c61d",
+      "5a7322a25542991f9a20c634",
+      "5a7323ad5542994cef4bc476",
+      "5a7323ef5542994cef4bc477",
+      "5a7324205542994cef4bc478",
+      "5a73250a5542991f9a20c643",
+      "5a73266d5542994cef4bc47d",
+      "5a7326cd5542991f29ee2d11",
+      "5a7327265542994cef4bc480",
+      "5a732aa055429901807daf9f",
+      "5a732aaa5542992359bc325a",
+      "5a7331de5542994cef4bc4a8",
+      "5a7332935542991f9a20c67d",
+      "5a7336d05542992359bc3293",
+      "5a7339c85542991f9a20c6a2"
+    ],
+    "seed": 0
+  },
+  "created_utc": "2026-09-10T09:30:00+00:00",
+  "data_role": "confirmation_frozen",
+  "observed_exclusion_count": 100,
+  "schema_version": "v60_confirmation_frozen_v1",
+  "selection_rule": "first hotpot_qa val record ids, in dataset order, that never appear in any V58/V60/V61 observed manifest"
+}

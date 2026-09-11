@@ -126,7 +126,7 @@ remain out of scope per [#82](https://github.com/AlexKay28/ddi/issues/82).
 |---|---|---|
 | **C1** | Quality estimates under `ddi_qf` and `full` | The matched Qwen/Llama study uses three trained seeds and frozen manifests; neither architecture reaches natural-QA parity, and the sole valid architecture contrast establishes no practical difference. Other legacy rows remain single-run estimates |
 | **C3** | Analytical cost versus qualified timing observations | SDPA has no sparsity benefit from a 4D mask; the unhashable historical Flex timing table and its numerical claims are removed. V49 Flex timing is deferred and did not run because the V47 parity gate fails |
-| **C4** | End-to-end per-document cache reuse and a restart control | Exact short greedy generation is validated for original, reordered, and partial-hit requests. At `N=5,L=500`, corrected cache/recompute throughput is 1.219x (three-seed 95% t-CI [1.152, 1.286]); numerical logit identity fails and no cross-shape serving claim is made. The historical 1.72x result is withdrawn |
+| **C4** | End-to-end per-document cache reuse and a restart control | The small-shape V51 diagnostic matches short greedy generation but fails numerical identity. V53 withdraws the 1.219x throughput claim: V51 did not establish exact token geometry or equal decode work. Local revalidation is not clean-revision evidence. The historical 1.72x result also remains withdrawn |
 
 ### Fine-tuning evidence is in scope; further expansion is deferred
 

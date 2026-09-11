@@ -17,10 +17,25 @@ computed against the \texttt{full} arm on identical shapes.
 \subsection{SDPA timing versus sparsity}
 \label{sec:results-efficiency-analytical}
 
-Table~\ref{tab:t3} reports median TTFT, TPOT, and analytical mask sparsity at
+Table~\ref{tab:t3} reports median TTFT, TPOT, and exact DDI-QF mask sparsity at
 $\ell=512$ and $Q=64$ under SDPA. Full/DDI TTFT ratios remain near one even as
-sparsity rises, so the additive mask does not realize the analytical pair-count
-reduction on this backend.
+the retained pair count falls, so these measurements show no observed TTFT gain
+for the additive-mask DDI path at these cells.
+
+Figure~\ref{fig:efficiency-intuition} puts the analytical opportunity and the
+realized measurement side by side. Sparsity rises to 95.04\%, while the
+full/DDI-QF TTFT ratio remains near 1. The visual separation is intentional:
+one panel counts permitted attention pairs and the other measures this SDPA
+implementation.
+
+\begin{figure}[t]
+\centering
+\input{generated/V2_efficiency_intuition.tex}
+\caption{Analytical sparsity does not automatically become realized latency.
+    Left: exact DDI-QF mask sparsity. Right: median full/DDI-QF SDPA TTFT ratio
+    on the same $\ell=512$, $Q=64$ cells; values above one favor DDI.}
+\label{fig:efficiency-intuition}
+\end{figure}
 
 \begin{table}[t]
 \centering
@@ -41,42 +56,17 @@ reduction on this backend.
 The checked-in F3 PDF was removed because its matching raw Flex timing log is
 absent and it did not match the output of the retired renderer.
 
-\subsection{On the realization gap}
+\subsection{Observed realization gap}
 \label{sec:results-efficiency-gap}
 
-A gap between analytical and realized speedup is expected --- the
-analytical count in Section~\ref{sec:method-cost} is a pair count, not a
-wall-clock model --- and quantifying its size is a first-class result of
-this study, not a failure to explain. Candidates for the gap fall into a
-short list. Per-block kernel launch overhead is dominant at small $\ell$
-and dilutes with larger blocks. Memory bandwidth caps saturate the
-sub-quadratic regime and prevent the compute reduction from translating
-proportionally. The query block's $Q \cdot N \ell$ term
-(Equation~\ref{eq:cost-qf}) dominates once $N$ is small, so the
-analytical speedup is itself modest in that regime. And end-to-end,
-prefill may simply not be the bottleneck at the shapes measured, so a
-prefill-only win dilutes to near-nothing in real serving.
-
-\paragraph{Measurement to date: structural on \texttt{sdpa}.}
-The realization ratio measured on the primary instruct model at
-$Q = 64$, $L = 512$ under the \texttt{sdpa} backend collapses from
-$\approx 0.98$ at $N = 1$ to $\approx 0.06$ at $N = 25$, while
-analytical speedup grows monotonically from $1.0\times$ to
-$\approx 16.6\times$ and mask sparsity climbs to $\approx 94\%$.
-Realized wall-clock speedup remains pinned near $1.0\times$ throughout.
-The picture that emerges is that the analytical/realized \emph{gap
-itself grows} with $N$ under this kernel: DDI's block-diagonal sparsity
-does not convert to wall-clock speedup at any tested shape with
-\texttt{sdpa}.
-
-The root cause is structural, not incidental: passing a 4D additive
-attention mask to \texttt{sdpa} forces it off the fused flash/efficient
-kernel and onto the slow math backend, which materializes the full
-$T \times T$ attention matrix regardless of sparsity. The mask that
-should skip computation instead adds overhead. FlashAttention-2 was
-scoped as the kernel-fixable alternative but could not be compiled
-on the test platform (system \texttt{nvcc} 12.2 cannot compile
-torch 2.13 headers; no prebuilt wheel exists for Python 3.13).
+The count in Section~\ref{sec:method-cost} is a pair count, not a wall-clock
+model. At the largest retained cell ($N=25$, $\ell=512$, $Q=64$), full causal
+has 82,747,680 prefill pairs and DDI-QF has 4,104,480: a 20.1603$\times$
+ratio and 95.0398\% sparsity. The corresponding median TTFT values are
+1900.95 ms and 1891.02 ms. Across the listed $N$ values at this fixed
+$(\ell,Q)$, the retained observations do not show a TTFT gain. They do not
+identify SDPA dispatch, matrix materialization, a bottleneck, or behavior at
+other document lengths; profiling would be required for those claims.
 
 \subsection{Unpreserved Flex observations}
 \label{sec:results-efficiency-flex}
@@ -86,8 +76,8 @@ block-sparse backend. The previous manuscript included an archived numerical
 timing table, but its cited raw log is unavailable. We therefore remove the
 table and all numerical Flex speedup claims rather than reconstructing them
 from prose or unrelated runs. No Flex model-throughput result is retained.
-VIBEQUEUE-49 timing is deferred outside this bounded paper and did not begin
-because the required full-model parity gate fails. Future timing remains
+Compiled timing is deferred outside this bounded paper because the required
+full-model parity gate fails. Future timing remains
 reopenable only after the unchanged cosine and token-argmax gates pass for every
 applicable mask and path.
 

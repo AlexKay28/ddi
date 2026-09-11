@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-09-07 - V53 exact-work cache audit
+
+The V51 throughput interpretation below is superseded, not its raw evidence.
+Seed-0 nominal 500-token documents retokenize to 513--555 tokens; full causal
+runs fixed decode forwards while DDI may stop at EOS. The 1.219x/1.094x claims
+are withdrawn in the evidence manifest, rendered F5, paper and claim summaries.
+V53 adds an opt-in exact-ID equal-work diagnostic and separate behavioral
+validation without changing shipped generation defaults. Local source/diff
+hashes are preserved; no clean-revision replacement evidence is claimed.
+
 ## 2026-09-06 — real end-to-end document KV reuse
 
 The cache audit found that the historical `ddi_cache` runners never consumed cached K/V:

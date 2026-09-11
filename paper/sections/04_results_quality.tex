@@ -28,9 +28,10 @@ they do not establish a model-family-wide property of the mask.
 The transfer protocol trains three top-8-layer \texttt{ddi\_qf} checkpoints
 per architecture and evaluates base and tuned \texttt{full},
 \texttt{ddi\_qf}, and \texttt{blind} arms on seed-specific frozen manifests.
-Each natural-QA manifest contains 100 records. Within each architecture,
-normalized closure measures the recovered fraction of base
-\texttt{full}-to-\texttt{ddi\_qf} headroom. Both Qwen and Llama fail the
+Each natural-QA manifest contains 100 records. Within each architecture, the
+preregistered statistic $C=1-(\mathrm{tuned\ full}-\mathrm{tuned\ ddi})/(\mathrm{base\ full}-\mathrm{base\ blind})$
+is retained unchanged for its historical decision role. It is a base-headroom-normalized
+\emph{remaining tuned gap}, not a fraction recovered by training. Both Qwen and Llama fail the
 preregistered parity gate on musique F1, with mean closure 0.452 and 0.480,
 respectively. Hotpot F1 is also below parity for Qwen, while Llama hotpot is
 invalidated by movement of the blind control. Both EM cross-architecture
@@ -44,6 +45,29 @@ estimate is below the preregistered 0.10-headroom practical threshold and the
 interval crosses zero. Thus no practical architecture difference is
 established; this is not evidence that the architectures are equivalent.
 
+Table~\ref{tab:t8-transfer-estimands} separates the training estimands. Positive
+$\Delta$ DDI is a paired base-to-tuned DDI improvement, positive $\Delta$ full
+is full-path improvement, and negative $\Delta$ gap narrows the full--DDI gap.
+The table does not replace $C$ or its preregistered gates. The post-hoc paired
+example-resampling intervals are conditional on the retained checkpoints and
+fixed records, rather than population confidence intervals.
+
+Figure~\ref{fig:transfer-estimands} visualizes why the historical scalar $C$
+must not be read as ``training recovery.'' DDI scores can improve while the
+full path moves downward; the change in the full--DDI gap is therefore a
+combination of both effects. The bars are paired changes from the retained
+three-seed study, not independent confidence intervals.
+
+\begin{figure}[t]
+\centering
+\resizebox{\linewidth}{!}{\input{generated/V3_transfer_estimands.tex}}
+\caption{Separated paired transfer estimands. H and M denote hotpot\_qa and
+    musique. Positive $\Delta$ DDI or $\Delta$ full means that arm improved;
+    negative $\Delta$ gap means the full--DDI gap narrowed. A narrowing gap can
+    coincide with full-path degradation, so it is not by itself a parity result.}
+\label{fig:transfer-estimands}
+\end{figure}
+
 \begin{table}[t]
 \centering\small
 \caption{T7 --- matched three-seed transfer decisions. The contrast is
@@ -52,6 +76,15 @@ established; this is not evidence that the architectures are equivalent.
     conclusion is drawn for that cell.}
 \label{tab:t7-transfer}
 \input{generated/T7_transfer.tex}
+\end{table}
+
+\begin{table}[t]
+\centering\small
+\caption{T8 --- V54 separated transfer estimands on the natural-QA primary
+metrics. $C$ is the retained historical normalized remaining tuned gap;
+$\Delta$ columns are paired base-to-tuned changes.}
+\label{tab:t8-transfer-estimands}
+\input{generated/T8_transfer_estimands.tex}
 \end{table}
 
 \begin{table}[t]
