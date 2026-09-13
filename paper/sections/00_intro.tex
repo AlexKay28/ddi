@@ -2,6 +2,8 @@
 % Introduction.
 % Adapted from RESEARCH_PLAN.md §1. Tighter, third-person, present tense.
 % =====================================================================
+% NOTE: This file is NOT included in preprint.tex. The active paper body is sections/main_story.tex.
+% This file is retained for historical reference only.
 \section{Introduction}
 \label{sec:intro}
 
@@ -12,22 +14,20 @@ documents followed by the dialog:
 \; [\mathrm{query}]\;[\mathrm{answer}].
 \end{equation*}
 Standard causal attention makes prefill quadratic in the length of the
-entire concatenation, but the retrieved documents are mutually independent
-artifacts: they were selected by a retriever, they share no discourse
-relationship, and $\mathrm{doc}_7$ attending into $\mathrm{doc}_2$ encodes
-a dependency that does not exist in the data. The prefill step pays $O(T^2)$
-to model interactions that are largely spurious.
+entire concatenation. Retrieved documents are often selected independently,
+but whether cross-document interactions matter is an empirical question. The
+prefill step still pays $O(T^2)$ for all such interactions.
 
-Two costs follow, and the second dominates in production:
+Two costs motivate the design:
 \begin{enumerate}
-    \item \textbf{Compute.} Cross-document attention becomes the dominant term
-          once $N$ grows.
+    \item \textbf{Compute.} Full causal prefill includes cross-document
+          query--key pairs that block-diagonal masking removes.
     \item \textbf{Cache invalidation.} Under lower-triangular attention,
-          $\mathrm{doc}_2$'s keys and values depend on $\mathrm{doc}_1$, so
-          no document's KV block is reusable. Changing a single document in
-          the retrieved set --- or even its position --- invalidates the
-          entire prefix. A document that appears in a thousand requests is
-          prefilled a thousand times.
+          $\mathrm{doc}_2$'s keys and values depend on $\mathrm{doc}_1$.
+          An unchanged exact prefix remains reusable, but changing a document
+          invalidates the suffix after that position. Under DDI's restart
+          layout, per-document reuse is a conditional implementation property
+          examined in Section~\ref{sec:results-caching}.
 \end{enumerate}
 Prefix caching~\citep{kwon2023pagedattention} mitigates the second cost only
 when \emph{exact} prefixes repeat; it does not admit the more common case in
@@ -39,24 +39,30 @@ We characterize a mask family that isolates each retrieved document from
 every other. The two design points explored in the prior literature ---
 Fusion-in-Decoder~\citep{izacard2021fid} and Parallel Context
 Windows~\citep{ratner2023pcw} --- correspond to a single choice on this axis;
-this preprint measures three axes of that choice on single-hop
-retrieval. Concretely:
+this preprint measures three axes of that choice on retrieval-QA
+cells. Concretely:
 \begin{itemize}
     \item We formalize the mask family (Section~\ref{sec:method}) and its
           cost model.
-    \item We fix a non-inferiority margin $\Delta$ from the seed variance of
-          the full-causal baseline (Section~\ref{sec:method}) so parity
-          claims are falsifiable rather than eyeballed.
-    \item We measure how much cross-document attention can be removed on
-          single-hop parity-detection benchmarks
-          (Section~\ref{sec:results-quality}) and report the realized
-          prefill speedup on the same axes
+    \item We report descriptive full-baseline seed intervals and use their
+          spread as context rather than as mask-comparison inference
+          (Section~\ref{sec:method}).
+    \item We distinguish a matched three-seed transfer study from legacy
+          descriptive quality estimates, and report quality changes after
+          removing cross-document attention on the stated retrieval-QA cells
+          (Section~\ref{sec:results-quality}).
+    \item We compare exact prefill pair counts with retained SDPA TTFT
+          observations at fixed document length and query length
           (Section~\ref{sec:results-efficiency}).
-    \item We measure per-document KV-cache reuse under a position-restart
-          layout (Section~\ref{sec:results-caching}). This is co-headline: a
-          cache hit skips prefill entirely, which no kernel improvement under
-          full causal attention can match.
+    \item We audit restart-layout cache behavior, withdraw an unsupported
+          exact-shape throughput comparison, and report a bounded
+          restart-layout generation control (Section~\ref{sec:results-caching}).
 \end{itemize}
 The framing throughout is a characterization study rather than a benchmark
-win. Multi-hop failure characterization, PCW comparison, and fine-tuning
-are out of scope for this preprint (Section~\ref{sec:limitations}).
+win. A matched self-distillation study is evaluated on Qwen2.5-7B and
+Llama-3.1-8B using fixed held-out manifests and three independently trained
+seeds per architecture. The sole admissible natural-QA
+cross-architecture contrast does not establish a practical architecture
+difference; unavailable cells are not interpreted as null effects. Direct comparison against PCW and
+broader failure-envelope evaluation are out of scope for this preprint
+(Section~\ref{sec:limitations}).

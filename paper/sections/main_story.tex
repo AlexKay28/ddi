@@ -1,0 +1,376 @@
+\section{Two Paths to Less Document Prefill}
+\label{sec:thesis}
+
+Retrieval-augmented generation re-encodes the same passages across requests,
+but full-causal attention makes their hidden states position-dependent.
+Efficient KV memory management \citep{kwon2023pagedattention} does not, by
+itself, remove this dependency. DDI changes the attention graph to isolate
+documents, then uses restart positions to support independently computed
+document states. Two savings are distinguished: a
+\textcolor{ddiGold}{\textbf{cold document}} still needs computation confined
+to its own block; a \textcolor{ddiGreen}{\textbf{warm document}} can load
+previously computed KVs and skip that document's prefill.
+
+\paragraph{Contributions.}
+This paper reports a completed validation program with six results:
+\begin{enumerate}
+\item A trained $k{=}5$ link-token contract makes the persisted cache
+\textbf{byte-identical to fresh} (C$-$B $=0$, CI $[0,0]$, $n{=}300$) ---
+to our knowledge the first exact cache-vs-fresh equality with interval
+support, replicated across two seeds (Qwen2.5-7B) and two model families
+(Qwen2.5-7B, Llama-3.1-8B).
+\item The trained contract's serving boundary is measured on the
+\textbf{same contract}: lossless and faster (all-hit TTFT up to
+5.55$\times$, 240 cells, zero identity violations).
+\item The 95\%-sparsity $\to$ 0\%-speedup gap under SDPA is an
+\textbf{implementation property} (slow math backend dispatch), not a mask
+limitation --- Block-Attention achieves 98.7\% TTFT reduction with a custom
+kernel.
+\item Training only isolation masks makes full-causal execution
+\textbf{out-of-distribution} for the trained weights --- a characterization
+consistent across both families.
+\item An optimized \textbf{prefix-cache baseline} degrades to monolithic speed
+under document reordering; DDI reuse is unaffected.
+\item All claims are \textbf{hash-pinned and preregistered}: the renderer
+rejects changed artifacts, failed gates stay visible, and a retracted
+experiment is documented in-text.
+\end{enumerate}
+
+\paragraph{The 2025--2026 landscape.}
+Block-Attention~\citep{ma2025blockattention} divides passages into blocks
+with independent KV states and \emph{fine-tunes the full model}, achieving
+98.7\% TTFT reduction. Our work differs in training scope: we characterize
+the quality--serving boundary when only the top 8 layers are trainable.
+Sparse RAG~\citep{zhu2025sparserag} encodes documents in parallel and
+selectively attends via control tokens; our approach removes cross-document
+attention structurally. LazyAttention~\citep{xia2026lazyattention} solves
+the positional-encoding problem by deferring rotation inside attention
+kernels; our restart layout targets the same goal via per-document position
+restart. ProphetKV~\citep{wang2026prophetkv} uses query-driven token
+prioritization to retain 96--101\% of full-prefill accuracy at 20\%
+recomputation; our trained contract achieves exact equality but with $5N$
+link-token overhead rather than recomputation. Other related work ---
+Writing in the Margins~\citep{russak2024wim}, PCED~\citep{corallo2026pced},
+Graph-KV~\citep{wang2025graphkv} --- is complementary or addresses different
+inputs. The key differentiator is \emph{training depth}: Block-Attention
+succeeds with full-model fine-tuning; our work asks how far lightweight
+self-distillation goes and what serving boundary remains.
+
+\section{What Isolation Changes}
+\label{sec:mechanism}
+
+DDI-QF preserves causal attention within each document and within the query,
+removes cross-document attention, and lets every query row see document
+keys. Answer rows attend all document columns, the query, and preceding
+answers. At one document, the mask returns full causal attention by
+convention.
+
+\begin{figure}[H]
+\centering\resizebox{.88\linewidth}{!}{\input{generated/V1_mask_geometry.tex}}
+\caption{Allowed attention and execution paths. Three two-token documents
+followed by query and answer rows. White gaps remove cross-document edges.
+Dashed flow: unvalidated sparse-kernel target; solid flow: implemented
+dense-SDPA cache path.}
+\label{fig:mechanism}
+\end{figure}
+
+Restart positions begin each document at zero and place the query after
+the longest document. Cache identity must include checkpoint, tokenizer,
+layout, and exact token content. This enables reuse across changed
+predecessors, but different numerical execution paths may still change
+logits and argmax decisions.
+
+\begin{figure}[H]
+\centering\resizebox{.88\linewidth}{!}{\input{generated/V8_cache_requests.tex}}
+\caption{Reordering does not change which stored document identity is
+requested. Hits load real KV tensors; the new document is computed.}
+\label{fig:requests}
+\end{figure}
+
+Independent context processing relates to parallel context windows
+\citep{ratner2023pcw}, parallel context encoding \citep{yen2024cepe}, and
+Fusion-in-Decoder \citep{izacard2021fid}; here the concrete object is the
+attention mask and its cached execution in a decoder-only model.
+
+\section{The Quality Cost of Isolation}
+\label{sec:quality}
+
+Base Qwen2.5-7B-Instruct is evaluated on HotpotQA (100 records, seed 0,
+greedy, batch one, bf16, A100 80GB) under four masks. Full attention
+reaches EM/F1 .56/.70 against DDI-QF's .30/.42 on identical matched
+requests (Table~\ref{tab:v57matched}); the isolation quality cost is real
+and large. Document-count ablation shows equal EM at $N{=}10$ (.46/.46)
+but persistent F1 differences; the three-seed Qwen/Llama transfer protocol
+does not reach natural-QA parity (Appendix~\ref{app:quality}).
+
+\begin{figure}[H]
+\centering\resizebox{.74\linewidth}{!}{\input{generated/V6_mask_quality.tex}}
+\caption{Quality by mask, not by numerical sparsity. Points are 100-record
+means without comparison CIs.}
+\label{fig:masks}
+\end{figure}
+
+\begin{figure}[H]
+\centering\resizebox{.74\linewidth}{!}{\input{generated/V5_doc_quality.tex}}
+\caption{Document-count quality curves for one tuned checkpoint. Lines
+connect three observed counts; these are not quality--sparsity curves.
+Full/DDI EM is .62/.55, .59/.49, .46/.46.}
+\label{fig:docquality}
+\end{figure}
+
+\begin{table}[H]
+\centering\footnotesize\input{generated/T12_v57_matched.tex}
+\caption{Matched quality and timing on identical requests (V57). The
+isolation cost (.56/.70 vs .30/.42) and near-unity prefill ratio are
+measured on the same records.}
+\label{tab:v57matched}
+\end{table}
+
+\section{The Realization Gap: Why 95\% Sparsity Gives 0\% Speedup}
+\label{sec:prefill}
+
+For $N$ equal-length documents of $L$ tokens and a query of $Q$ tokens,
+the exact prefill pair counts are $P_F = (NL{+}Q)(NL{{+}Q}{+}1)/2$ and
+$P_D = NL(L{+}1)/2 + QNL + Q(Q{+}1)/2$, giving sparsity
+$s = 1 - P_D/P_F$. At $N{=}25$, $L{=}512$: 95.04\% fewer pairs. Yet the
+measured SDPA latency ratio is only $\sim$1.005$\times$ (Fig.~\ref{fig:prefill}).
+
+\begin{figure}[H]
+\centering\resizebox{.85\linewidth}{!}{\input{generated/V2_efficiency_intuition.tex}}
+\caption{Structural pair ratio (left) vs measured prefill ms (right). At
+$N{=}25$: 95.04\% fewer pairs accompanies 1900.95 vs 1891.02 ms --- no
+material speedup.}
+\label{fig:prefill}
+\end{figure}
+
+\paragraph{Why.}
+The 4D additive mask triggers SDPA's \emph{slow math backend}, which
+computes the full $QK^\top$ and masks afterward. The block-sparse structure
+is invisible to this kernel. This is an \emph{implementation} property, not
+a mask property: Block-Attention~\citep{ma2025blockattention} achieves
+98.7\% TTFT reduction with a custom implementation, and
+FlexAttention~\citep{flex_attention} compiles block masks into sparse kernels
+(historical 1.77$\times$ whole-model gain, though with older mask semantics
+and unvalidated parity). The trained-contract serving path
+(Section~\ref{sec:cache}) bypasses the issue entirely by reusing cached KV.
+
+\begin{figure}[H]
+\centering\resizebox{.74\linewidth}{!}{\input{generated/V11_flex_history.tex}}
+\caption{Historical Flex timing: at $N{=}25,L{=}2048$, kernel time falls
+8.24$\times$ while whole-model prefill falls only 1.77$\times$ (Amdahl
+dilution). Historical/unvalidated: old mask permits bidirectional
+intra-document attention.}
+\label{fig:flexhistory}
+\end{figure}
+
+\begin{figure}[H]
+\centering\resizebox{.60\linewidth}{!}{\input{generated/V12_amdahl.tex}}
+\caption{Amdahl illustration: at $f{=}.1$, a 2$\times$ component speedup
+gives only 1.053$\times$ overall. KV reuse avoids the document forward, not
+only attention.}
+\label{fig:amdahl}
+\end{figure}
+
+Segmented causal attention (V61) passes the material-speed gate in two of
+eight cells: \textbf{1.118$\times$} at $N{=}5,L{=}512$ and
+\textbf{1.287$\times$} at $N{=}10,L{=}512$; short shapes regress under
+fixed kernel overhead. The sparse cold-path win is real but
+long-document-scoped.
+
+\section{Warm-Path Reuse: From Failed Gates to Lossless Win}
+\label{sec:cache}
+
+\paragraph{The diagnostic with failed gates (V53).}
+The exact-work V53 diagnostic (50 requests, 3 seeds, $N{=}5,L{=}500$)
+measured 94.53\% cache hits and 1.19$\times$ QPS ratio, but greedy IDs
+differ in 19/150 streams and all numerical checks fail $10^{-4}$. The
+failed gates stay visible.
+
+\begin{center}
+\fcolorbox{ddiRed}{ddiRed!6}{\parbox{.94\linewidth}{
+\textbf{Failed gates remain visible.} 25/192 greedy-ID comparisons differ;
+all 192/192 numerical checks fail $10^{-4}$. Not clean-revision evidence.}}
+\end{center}
+
+\begin{figure}[H]
+\centering\resizebox{.76\linewidth}{!}{\input{generated/V4_production_opportunity.tex}}
+\caption{V53 QPS and paired seed ratios, diagnostic only. Not a
+correctness-preserving speedup: 19/150 request pairs change outputs.}
+\label{fig:qps}
+\end{figure}
+
+\paragraph{The audited warm-path win (V58--V65).}
+A five-step program rebuilt the reuse path on matched natural-QA requests.
+V58 measured cache-vs-fresh on 100 HotpotQA records (1.093$\times$
+speedup, but exact and QA gates failed). V60 introduced a canonical
+per-document encoder achieving bitwise cold/hit agreement. V65 optimized
+overheads and re-ran against the monolithic baseline:
+
+\begin{table}[H]
+\centering\footnotesize\input{generated/T9_v65_serving.tex}
+\caption{Audited warm-path result (V65, seed 47, bootstrap CIs). All-hit
+reuse: 2.05$\times$ TTFT, byte-identical on 24 frozen records, 1.43$\times$
+end-to-end. Mixed-hit traffic remains slower. Cold canonical prefill is
+3.27$\times$ slower than monolithic.}
+\label{tab:v65serving}
+\end{table}
+
+V66 measured the serving boundary on a frozen development grid:
+
+\begin{table}[H]
+\centering\footnotesize\input{generated/T13_v66_crossover.tex}
+\caption{Serving boundary (V66). Frozen V62 dev split, seed 47, 15 timed
+repeats per cell. Crossover $h$ = smallest nominal hit fraction with a
+CI-supported win. Development data only.}
+\label{tab:v66boundary}
+\end{table}
+
+\begin{table}[H]
+\centering\footnotesize\input{generated/T11_v59_crossover.tex}
+\caption{TTFT geometry crossover (V59). Reuse loses at 32-token documents,
+needs high hit rates at 128, wins at 512.}
+\label{tab:v59crossover}
+\end{table}
+
+\paragraph{Anatomy of residual divergences (V68).}
+A preregistered classification of the 22 differing records in the $n{=}100$
+confirmation finds 8 near-tie flips, 11 semantic changes, 3 truncation
+artifacts; bidirectional (loses EM on 5, gains on 4). The pattern is
+bf16 sensitivity, not cache corruption (Table~\ref{tab:v68anatomy}).
+
+\begin{table}[H]
+\centering\footnotesize\input{generated/T16_v68_anatomy.tex}
+\caption{Anatomy of 22 differing cached/fresh records (V68).
+Bidirectional, low-magnitude bf16 perturbation.}
+\label{tab:v68anatomy}
+\end{table}
+
+\begin{table}[H]
+\centering\footnotesize\input{generated/T10_qa_confirmation.tex}
+\caption{QA non-inferiority under the $-0.02$ floor (paired bootstrap,
+seed 47). The 100-record confirmation fails under the \emph{untrained}
+contract; the trained contract is in Table~\ref{tab:v70gates}.}
+\label{tab:qaconfirmation}
+\end{table}
+
+\paragraph{The trained contract: exact-zero quality (V70, V72).}
+An earlier quality-recovery attempt was retracted after a validity audit;
+its artifacts are preserved in the appendix. The rebuilt V70 experiment
+trains $k{=}5$ fixed link tokens with a differentiable independent-KV
+contract (1000 steps, seed 47, top-8 layers) and evaluates a reopened
+persisted cache on 300 untouched records. Both preregistered gates pass:
+C$-$B is exactly zero (CI $[0,0]$ on EM and F1; byte-identical
+generations), and C$-$D passes (EM $+0.240$, F1 $+0.275$). The result is
+replicated at a second seed (V72, seed 1) and on Llama-3.1-8B ($n{=}300$,
+$k{=}5$ selected: C$-$B 0.000000, CI $[0,0]$) --- the byte-identity property
+is contract-level, not model-specific. The D-arm anomaly (trained
+full-causal degrades to EM 0.19--0.31 vs isolated paths 0.43--0.57) is
+consistent across both seeds and families: training only presents
+isolation masks, so full-causal execution is out-of-distribution for the
+trained weights.
+
+\begin{table}[H]
+\centering\footnotesize\input{generated/T15_v70_gates.tex}
+\caption{Trained reuse-contract confirmation (V70). 300 untouched records,
+paired bootstrap (10k, seed 47, margin $-0.02$). C$-$B exactly zero; C$-$D
+passes.}
+\label{tab:v70gates}
+\end{table}
+
+To our knowledge no prior work reports exact byte-identical
+cache-vs-fresh equality with interval support: KVLink
+\citep{yang2025kvlink} reports approximate recovery, CacheBlend
+\citep{yao2025cacheblend} recomputes 5--18\% of tokens per layer,
+CacheClip \citep{yang2025cacheclip} uses an auxiliary model for selected
+tokens.
+
+\paragraph{The trained contract keeps the serving win (V71).}
+V71 measures the trained $k{=}5$ contract's serving boundary on the frozen
+V66 grid (240 cells, 15 repeats, seed 47). The primary gate (A/CP paired
+ratio, frozen V66 materiality rule) and secondary sanity gate (CP$\equiv$BP
+byte-identical per repeat) both hold: zero identity violations across all
+240 cells. The boundary improves or holds at every shape
+(Table~\ref{tab:v71boundary}). All-hit TTFT reaches 5.55$\times$ at
+$L{=}512,N{=}10$. The $5N$ link-token overhead is invisible at $L{=}512$
+($\sim$1\% of prefill). Quality-lossless and faster-than-baseline are now
+measured on the same contract.
+
+\begin{table}[H]
+\centering\footnotesize\input{generated/T17_v71_boundary.tex}
+\caption{V66$\to$V71 boundary diff (untrained $\to$ trained). Smaller $h$
+= reuse wins at lower hit rates. ``appears'' = V66 never won, V71 does.}
+\label{tab:v71boundary}
+\end{table}
+
+\paragraph{Prefix-cache baseline (V73).}
+An optimized exact-prefix KV cache was benchmarked against DDI warm reuse
+and monolithic on reorder-heavy HotpotQA. When document order is fixed,
+prefix caching matches monolithic (it recomputes the same prefill). Under
+reordering, prefix caching degrades to monolithic speed while DDI reuse
+retains its win --- DDI's cache keys are order-independent.
+
+\section{Coverage and Limits}
+\label{sec:coverage}
+
+\begin{figure}[H]
+\centering\input{generated/V10_coverage.tex}
+\caption{Evidence coverage. Previously red quality--timing and
+quality--reuse joins are measured (V57, V58, V65, V68, V70, V71, V72);
+remaining red: mixed/partial-hit schedules beyond crossovers and a
+validated sparse-plus-reuse combination.}
+\label{fig:coverage}
+\end{figure}
+
+\begin{figure}[H]
+\centering\resizebox{.88\linewidth}{!}{\input{generated/V9_analytical_surface.tex}}
+\caption{Analytical surface: $P_F/P_h$ at $L{=}500,Q{=}32$ (log color).
+Axes are document count and assumed hit rate. No latency is inferred.}
+\label{fig:surface}
+\end{figure}
+
+The audited win covers one checkpoint, HotpotQA, 24 frozen requests, and an
+LRU-warm single-GPU path. The trained contract closes quality gates at
+$n{=}300$ (replicated cross-family), and its serving boundary keeps the
+warm-path win with zero identity violations across 240 cells. No concurrency
+sweep exists; the segmented-kernel criterion is calibrated, not
+task-level confirmed. The V69 attribution of the 221$\to$62\,ms reduction
+(53.9\% validate\_entry, 37.2\% disk load, 8.9\% H2D) is in
+Appendix~\ref{app:cache}.
+
+\paragraph{Conclusion.}
+\textbf{Warm document-KV reuse} is an audited win: 2.05$\times$ TTFT with
+byte-identical outputs, winning above measured crossovers; a trained
+link-token contract makes the cache byte-identical to fresh (C$-$B $=0$,
+CI $[0,0]$, $n{=}300$), replicated at a second seed and on Llama-3.1-8B;
+the trained contract's serving boundary keeps the win (all-hit TTFT up to
+5.55$\times$, 240 cells, zero identity violations). An optimized
+prefix-cache baseline degrades under reordering; DDI reuse is unaffected.
+\textbf{Sparse cold prefill} is real only at long-document shapes
+(1.12--1.29$\times$); the cold path remains 3.27$\times$ slower than
+monolithic. The honest claim is a measured, correctly-scoped warm-path
+acceleration that becomes quality-lossless after contract training ---
+not yet a general replacement for full causal attention at scale.
+
+\paragraph{Three paths from here.}
+\textit{(1) Deferred positional encoding} (LazyAttention~\citep{xia2026lazyattention}):
+apply RoPE inside the attention kernel rather than baking it into cached
+keys, enabling position-agnostic reuse at $\sim$0.2\% overhead. This could
+replace DDI's restart layout and eliminate the position-quality wall.
+\textit{(2) Query-driven selective recomputation}
+(ProphetKV~\citep{wang2026prophetkv}): a lightweight query pass over cached
+KV identifies cross-document bridging tokens, then selectively recomputes
+only those with full attention --- directly addressing the multi-hop quality
+loss.
+\textit{(3) Full-model fine-tuning} (Block-Attention~\citep{ma2025blockattention}):
+the SDPA backend fix (pinning to \texttt{math} during training) now enables
+training all 28 layers, directly testing whether Block-Attention's 98.7\%
+TTFT reduction is replicable with DDI's mask.
+Each is independently buildable on the existing codebase and orthogonal to
+the others; together they suggest a path from the current bounded win to a
+general-purpose RAG efficiency method.
+
+\paragraph{Reproducibility.}
+All displayed figures are generated from the pinned ledger (V57--V72
+artifacts). The renderer rejects changed hashes, incomplete request joins,
+and dropped failed gates. Protocol details, the V69 attribution, and the
+evidence ledger are in the appendix.

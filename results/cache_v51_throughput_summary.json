@@ -1,0 +1,27 @@
+{
+  "source": "results/cache_v51_throughput.jsonl",
+  "git_sha": "4ae575066c636647e4bac96c0f1a28fc4bf481a1",
+  "model": "Qwen/Qwen2.5-7B-Instruct",
+  "shape": "zipf(a=1.5),top=32,N=5,L=500,Q=32,A=16",
+  "warmup_requests_per_seed_mode": 10,
+  "measured_requests_per_seed_mode": 50,
+  "seeds": [0, 1, 2],
+  "qps": {
+    "ddi_cache": [1.8725, 1.8447, 1.7697],
+    "ddi_recompute": [1.5037, 1.5121, 1.4851],
+    "full_causal": [1.6647, 1.6932, 1.6579]
+  },
+  "cache_hit_rate": [0.948, 0.944, 0.944],
+  "paired_speedup": {
+    "cache_over_ddi_recompute": {
+      "per_seed": [1.2452, 1.2200, 1.1917],
+      "mean": 1.2190,
+      "ci95_t": [1.1524, 1.2855]
+    },
+    "cache_over_full_causal": {
+      "per_seed": [1.1249, 1.0895, 1.0674],
+      "mean": 1.0939,
+      "ci95_t": [1.0219, 1.1659]
+    }
+  }
+}

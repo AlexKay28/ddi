@@ -1,0 +1,20 @@
+# V78: ProphetKV-style query-driven selective recomputation
+# Quality recovery for DDI's block-diagonal mask by selectively
+# recomputing the top-p% query-relevant tokens with full cross-document attention.
+#
+# Source: ProphetKV (arXiv 2602.02579), Algorithm 1
+#
+# Run: MODEL=Qwen/Qwen2.5-7B-Instruct python -m ddi.run experiments/v78_selective_recompute.yaml
+
+kind: quality
+seed: 47
+model: "${MODEL}"
+datasets: [hotpot_qa]
+masks: [ddi_qf]
+layout: restart
+max_records: 100
+max_new_tokens: 64
+metrics: [em, f1, presence]
+recompute_ratio: 0.2
+heldout_manifest: results/heldout
+predictions_store: results/v78_predictions.jsonl

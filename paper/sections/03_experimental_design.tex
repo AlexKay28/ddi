@@ -3,6 +3,8 @@
 % Adapted from RESEARCH_PLAN.md §5 (models), §6 (axes), §8 (grid, ground
 % rules, datasets).
 % =====================================================================
+% NOTE: This file is NOT included in preprint.tex. The active paper body is sections/main_story.tex.
+% This file is retained for historical reference only.
 \section{Experimental Design}
 \label{sec:design}
 
@@ -10,29 +12,33 @@
 \label{sec:design-models}
 
 Model selection follows three criteria: a shared architectural family
-(decoder-only, RoPE, GQA) so the mask logic transfers unchanged; two
-independently-trained families so parity claims cannot rest on a
-single-lab artifact; and public reproducibility for every primary claim.
+(decoder-only, RoPE, GQA) so the mask implementation is comparable; and a
+primary Qwen study plus a matched Llama replication whose limits are reported
+explicitly.
 
 \begin{table}[t]
 \centering
-\caption{Models. Both base and instruct variants of each primary model
-    are evaluated. The third family (YandexGPT-5-Lite-8B) is not
-    externally reproducible and appears only in the appendix as a
-    supplementary confirmation.}
+\caption{Models. Qwen2.5-7B-Instruct is the primary study. Llama-3.1-8B uses
+    the matched three-seed transfer protocol. Qwen2.5-1.5B appears only as a
+    legacy single-run train-free estimate; larger-scale cells are deferred
+    future work and are not required by this paper's claims.}
 \label{tab:models}
 \begin{tabular}{@{}llll@{}}
 \toprule
-Model & Role & Reproducible & Notes \\
+Model & Role & Status & Notes \\
 \midrule
-Qwen2.5-7B (base, instruct)     & Primary   & yes & Comparable to prior hypothesis runs \\
-Llama-3.1-8B (base, instruct)   & Primary   & yes & Independent training family \\
-Qwen2.5-1.5B                    & Ablation  & yes & Full mask $\times N \times \ell$ grid \\
-Qwen2.5-14B (or 32B)            & Scale     & yes & Scale trend on affordability \\
-YandexGPT-5-Lite-8B             & Appendix  & no  & Third-family confirmation \\
+Qwen2.5-7B-Instruct     & Primary   & measured   & Three-seed transfer study \\
+Llama-3.1-8B-Instruct   & Replication & measured & Matched three-seed study \\
+Qwen2.5-1.5B-Instruct   & Ablation & descriptive    & Single-run train-free estimate \\
+Qwen2.5-14B/32B         & Scale     & deferred       & Future work \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+The measured rows support claims only for their named checkpoints, datasets,
+and frozen manifests. They establish no parity, architecture equivalence or
+invariance, or trend with model scale. Deferred scale cells would extend this
+scope if run; their absence is not a missing paper cell.
 
 All runs use bf16 precision, greedy decoding for quality metrics, and
 seed control committed to provenance. Batch size is 1 for the current
@@ -48,17 +54,17 @@ must not be mixed.
 
 \begin{table}[t]
 \centering
-\caption{Datasets. Every parity-detection dataset has its seed variance
-    measured under \texttt{full} in Phase 1 and is admitted only if the
-    variance is smaller than $\Delta$.}
+\caption{Datasets. Three datasets are used in this preprint. Hotpot\_qa
+    and musique carry the quality and finetuning estimates; synthetic\_qa
+    is a 20-record control.}
 \label{tab:datasets}
 \begin{tabular}{@{}p{0.32\linewidth}p{0.36\linewidth}p{0.24\linewidth}@{}}
 \toprule
 Function & Dataset & Notes \\
 \midrule
-Parity detection & NQ, TriviaQA & Low seed variance, well-known headroom \\
-Controllable $N$ + gold position & LitM-style multi-doc QA~\citep{liu2023lostmiddle} & Synthesized locally \\
-General RAG-native               & Open RAG Bench                       & End-to-end sanity \\
+Parity detection (primary) & hotpot\_qa & 10 real paragraphs, 3702 val records \\
+Parity detection (multi-hop) & musique & 20 paragraphs, multi-hop reasoning \\
+Control / synthetic & synthetic\_qa & 20 val records, planted answers \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -73,39 +79,44 @@ enumerate their cross product.
 \begin{description}
     \item[Axis M --- mask.] \texttt{full}, \texttt{ddi\_qf},
           \texttt{ddi\_strict}, \texttt{blind}. The \texttt{ddi\_qf}
-          variant carries the parity claim; \texttt{ddi\_strict} is
+           variant is the primary quality comparison; \texttt{ddi\_strict} is
           retained as an ablation; \texttt{blind} is a control.
     \item[Axis P --- position layout.] \texttt{sequential} versus
           \texttt{restart}, per Section~\ref{sec:method-positions}. The
-          restart layout unlocks the caching co-headline.
-    \item[Axis N --- document count.] $\{1, 3, 5, 9, 13, 25\}$. $N=1$ is
-          the correctness gate: any DDI variant must be numerically
-          identical to \texttt{full} at $N=1$, and any divergence is a
-          bug.
-    \item[Axis L --- document length.] $\{128, 512, 2048\}$ tokens. Small
-          $\ell$ probes the per-block launch overhead where the varlen
-          kernel is expected to lose to a dense one; long $\ell$ is where
-          DDI's compute win is largest.
-    \item[Axis K --- kernel backend.] Dense SDPA with an explicit $-\infty$
-          mask (reference semantics), FlashAttention-2 varlen, and a
-          Triton block-diagonal implementation. Three implementations of
-          one mathematical object, so they double as each other's
-          correctness tests.
+          restart layout is evaluated with an explicit cached-decode position
+          control.
+    \item[Axis N --- document count.] $\{1, 3, 5, 9, 13, 25\}$. At $N=1$,
+          the isolation-family implementation explicitly returns the full
+          causal mask because there are no cross-document interactions to
+          isolate. It is therefore a mask-convention correctness check, not
+          evidence about multi-document strict behavior.
+    \item[Axis L --- document length.] $\{128, 512, 2048\}$ tokens. The
+          retained SDPA timing table fixes $\ell=512$; it does not estimate a
+          length-dependent timing trend.
+    \item[Axis K --- kernel backend.] \texttt{sdpa} with an explicit
+          $-\infty$ mask (reference semantics, the standard PyTorch
+          path) and \texttt{flex\_attention} (PyTorch 2.13's compiled
+           block-sparse kernel with raw semantic tests). Its full-model parity
+           gate currently fails, so it is not a validated model backend and
+           compiled timing is deferred outside this paper.
+           FlashAttention-2 varlen was scoped but
+          could not be compiled on the test platform (system \texttt{nvcc}
+          12.2 cannot compile torch 2.13 headers; no prebuilt wheel
+          exists for Python 3.13).
 \end{description}
 
 \subsection{Ground rules}
 \label{sec:design-ground-rules}
 
-Four discipline rules apply to every experiment
-(issue~\href{https://github.com/AlexKay28/ddi/issues/1}{\#1}):
+Four discipline rules apply to every experiment:
 (1)~every result row is written to the append-only store with full
 provenance (git SHA, config, seed, dataset hash, model revision);
-(2)~a number that is not in the store cannot appear in the paper --- every
-table and figure in Sections~\ref{sec:results-quality}--\ref{sec:results-caching}
-is rendered from \texttt{results/runs.jsonl} by \texttt{ddi.report};
+(2)~every empirical number must identify its evidence source and claim
+boundary. The checked-in tables are deterministic renderer output from a
+compact evidence manifest that preserves full source hashes; ignored historical
+stores are independently verified whenever present;
 (3)~one mask definition, one implementation, no re-implementations across
 files; (4)~$\Delta$ is fixed from the full baseline before any DDI number
-is interpreted (Section~\ref{sec:method-delta}). Ground rule~(2) is the
-mechanism by which this preprint's numbers are not hand-typed: an empty
-store surfaces as an explicit TODO stub in the compiled PDF, and no other
-path exists to place a numerical claim in the document.
+is interpreted (Section~\ref{sec:method-delta}). An absent checked-in artifact
+surfaces as an explicit TODO stub; this does not substitute for preserving its
+raw source.

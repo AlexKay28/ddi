@@ -1,0 +1,81 @@
+{
+  "ticket": "VIBEQUEUE-46",
+  "gate": "R5c seed-1 retry1 completion",
+  "status": "pass",
+  "verified_utc": "2026-09-03T08:26:19Z",
+  "config": {
+    "path": "experiments/finetune_qwen_r5b_seed1_retry1.yaml",
+    "sha256": "891225387ac54de466b93aa5921ad155a9a67839086f13ed5db768f45fab92a1",
+    "recorded_hash": "891225387ac54de4"
+  },
+  "run": {
+    "source_git_sha": "df7bac32bc9e14e56a688339240fa92dcc5783e7",
+    "dirty_at_run": true,
+    "seed": 1,
+    "model": "Qwen/Qwen2.5-7B-Instruct",
+    "datasets": [
+      "hotpot_qa",
+      "musique",
+      "synthetic_qa"
+    ],
+    "train_records": 19000,
+    "holdout_records": 1000,
+    "optimizer_steps": 4750,
+    "trainable_layers": 8,
+    "decoder_layers": 28,
+    "elapsed_seconds": 10946.2,
+    "peak_gpu_memory_bytes": null,
+    "peak_gpu_memory_note": "Not recorded; no peak claim is made."
+  },
+  "metrics": {
+    "student_ddi_qf_perplexity_pre": 6.219405471747297,
+    "student_ddi_qf_perplexity_post": 2.067568587660682,
+    "teacher_full_perplexity": 3.5151572143407512
+  },
+  "store": {
+    "path": "results/finetune_qwen_r5b_seed1_retry1.jsonl",
+    "sha256": "6d4459608a3af893cc794ff121f9ed49e4bc1cd3b57a1c215ded7fcdf5d9e245",
+    "rows": 195,
+    "all_metric_values_finite": true
+  },
+  "checkpoint": {
+    "path": "results/checkpoints/Qwen__Qwen2.5-7B-Instruct__ddi_qf__r5b_seed1_retry1",
+    "config_sha256": "14428f164ce20feb1ede5e3ecdcb302edf7e7763c44fa3977d319870af6b0710",
+    "tokenizer_sha256": "9c5ae00e602b8860cbd784ba82a8aa14e8feecec692e7076590d014d7b7fdafa",
+    "index_sha256": "998a078123ffc97763690de7f2a677eb89168af5eaf8a5e12e6bc24d18e25bdb",
+    "index_entries": 339,
+    "tensor_count": 339,
+    "element_count": 7615616512,
+    "all_tensors_finite": true,
+    "all_indexed_tensors_present": true,
+    "shards": [
+      {
+        "name": "model-00001-of-00004.safetensors",
+        "bytes": 4877660776,
+        "sha256": "9ff3b270cb6b8ce8a059a43678cebaefb7aa2a3b587aadc5a4e2f6c1e4d13a28"
+      },
+      {
+        "name": "model-00002-of-00004.safetensors",
+        "bytes": 4932751008,
+        "sha256": "854698ca4d7581b9fd40f5da9176b010422194ec26cab3abd907ff21e477d1ca"
+      },
+      {
+        "name": "model-00003-of-00004.safetensors",
+        "bytes": 4330865200,
+        "sha256": "e5a6d8ebbc76f7d8c4d269452d9a4b1438d23bc1963eff3135e8dee3e22e067a"
+      },
+      {
+        "name": "model-00004-of-00004.safetensors",
+        "bytes": 1089994880,
+        "sha256": "06006972c3be88e8a44fe21cfe2b0472b130780c781a741f8f90f1fe5ba3aae2"
+      }
+    ]
+  },
+  "runtime_log": {
+    "path": "logs/finetune_qwen_r5b_seed1_retry1_20260902T203857Z.log",
+    "sha256": "9ad339fd0c2968b34568fb5e583eda87ef3a8d575b5724e04793451a5fedffc1",
+    "completed": true,
+    "passed_cells": 1,
+    "failed_cells": 0
+  }
+}

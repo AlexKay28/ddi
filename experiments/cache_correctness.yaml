@@ -1,12 +1,12 @@
 # C4 — cache correctness gate.
 #
-# Per-document KV cache reuse must produce logits that match a fresh recompute
-# within tolerance. This is a precondition for the throughput and restart-layout
-# experiments; if this fails, the other C4 YAMLs are moot.
+# Quantifies numerical logit drift between per-document KV reuse and fresh recomputation.
+# Behavioral generation equivalence is a separate gate: bf16 paths may emit identical greedy
+# tokens without satisfying a strict max-absolute-logit tolerance.
 #
 # Compares three modes on the same (N, L, query) shape:
-#   - ddi_cache      — reuse per-document KV blocks from the cache.
-#   - ddi_recompute  — same mask, no cache (recompute each request).
+#   - ddi_cache      — reuse per-document KV blocks; diff is versus ddi_recompute.
+#   - ddi_recompute  — restart DDI, no cache; diff is versus full_causal.
 #   - full_causal    — baseline full-causal attention, no cache.
 #
 # Tracking: C4 rollup issue (pending — see experiments/README.md).
@@ -20,9 +20,10 @@ Ns: [3, 9, 25]
 Ls: [512]
 n_queries_per_doc: 5
 
+# The emitted body is `{model: {mode: {L: {N: value}}}}` -- fixed per kind. The `rows:
+# mode` / `cols: N` pair that used to sit here was read by nothing and was also wrong
+# (it omitted the L axis entirely).
 report:
   tables:
     - kind: correctness
-      rows: mode
-      cols: N
       metric: max_abs_logit_diff

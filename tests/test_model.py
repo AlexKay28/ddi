@@ -15,6 +15,7 @@ import pytest
 import torch
 from torch import nn
 
+import ddi.model
 from ddi.masks import build_mask, to_additive
 from ddi.model import forward_with_mask, load_model, patch_model, unpatch_model
 
@@ -153,10 +154,37 @@ def test_unpatch_restores() -> None:
     assert mock.model.called_with is mask4d
 
 
-def test_patch_raises_when_no_method_exists() -> None:
+def test_patch_when_no_method_exists_is_api_dependent() -> None:
+    """A model with no `_update_causal_mask` means two different things per transformers API.
+
+    * <4.53 (`ddi.model._HAS_MASKING_UTILS` False): the per-instance patch is the ONLY hook
+      DDI has, so a model that exposes no `_update_causal_mask` cannot be made DDI-aware —
+      `patch_model` must refuse loudly rather than return a model whose additive mask would
+      be silently overwritten by HF's own causal mask.
+    * >=4.53 (True): `_update_causal_mask` no longer exists on any model; the coverage comes
+      from the module-level `masking_utils.create_causal_mask` hook installed at import.
+      `patch_model` must then be a pure pass-through — return the model unchanged and leave
+      no per-instance state behind.
+
+    Read `ddi.model._HAS_MASKING_UTILS` at call time (not import time) so this tracks the
+    installed transformers rather than a snapshot.
+    """
     bare = _BareModel()
-    with pytest.raises(AttributeError, match="_update_causal_mask"):
-        patch_model(bare)
+
+    if not ddi.model._HAS_MASKING_UTILS:
+        with pytest.raises(AttributeError, match="_update_causal_mask"):
+            patch_model(bare)
+        return
+
+    out = patch_model(bare)
+
+    assert out is bare
+    # Pass-through means *no* per-instance state on either the outer model or the inner one.
+    for obj in (bare, bare.model):
+        assert not hasattr(obj, "_update_causal_mask")
+        assert not hasattr(obj, "__ddi_original_update_causal_mask__")
+    # And the global hook that makes the pass-through correct really is installed.
+    assert ddi.model._ORIGINAL_CREATE_CAUSAL_MASK is not None
 
 
 def test_patch_is_per_instance() -> None:

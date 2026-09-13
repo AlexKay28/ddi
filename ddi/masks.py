@@ -116,10 +116,15 @@ def build_mask(
 
 
 def to_additive(allow: torch.Tensor, dtype: torch.dtype = torch.bfloat16) -> torch.Tensor:
-    """Convert a boolean allow-matrix to an additive mask (0 = keep, -inf = block)."""
+    """Convert a boolean allow-matrix to an additive mask (0 = keep, finfo.min = block).
+
+    Uses ``torch.finfo(dtype).min`` (a large negative finite number) instead of
+    ``float("-inf")`` to avoid NaN in fused attention backward when an entire key
+    tile is masked (e.g. doc_i x doc_j blocks under ``ddi_qf``).  This matches
+    HF's own mask builders (``masking_utils.eager_mask``) and is safe for all
+    backends.  ``exp(finfo.min)`` is still numerically zero in any float type.
+    """
     if allow.dtype != torch.bool:
         raise ValueError(f"expected bool allow-matrix, got {allow.dtype}")
-    # Build additive form as -inf then zero-out the allowed entries. Using masked_fill on a
-    # pre-filled -inf tensor keeps the -inf representable in bf16 (finfo(bf16).min → -inf).
-    out = torch.full(allow.shape, float("-inf"), dtype=dtype, device=allow.device)
+    out = torch.full(allow.shape, torch.finfo(dtype).min, dtype=dtype, device=allow.device)
     return out.masked_fill(allow, 0.0)

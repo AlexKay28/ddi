@@ -18,6 +18,7 @@ from transformers import PreTrainedModel, PreTrainedTokenizerBase
 from ddi.masks import Variant, build_mask, to_additive
 from ddi.model import load_model
 from ddi.positions import Layout, build_positions
+from ddi.prompt import encode_segments
 
 _DTYPES: dict[str, torch.dtype] = {
     "bf16": torch.bfloat16,
@@ -57,6 +58,7 @@ def load(
     dtype: str = "bf16",
     backend: str = "sdpa",
     checkpoint_dir: str | None = None,
+    rope_theta: float | None = None,
 ) -> tuple[PreTrainedModel, PreTrainedTokenizerBase]:
     """Load an HF causal-LM + tokenizer with the chosen attention backend.
 
@@ -69,11 +71,22 @@ def load(
     ``model_id`` hub repo. The `model_id` is still surfaced for provenance so a
     downstream reader knows which base architecture the checkpoint was trained
     from.
+
+    ``rope_theta`` (Sprint D, VIBEQUEUE-28) overrides the RoPE base frequency
+    before weights load — the ABF position scheme. ``None`` keeps the model
+    default.
     """
     torch_dtype = _resolve_dtype(dtype)
     attn_impl = "flash_attention_2" if backend == "fa2" else backend
+    if backend == "flex":
+        attn_impl = "flex"
     load_name = checkpoint_dir if checkpoint_dir is not None else model_id
-    return load_model(load_name, dtype=torch_dtype, attn_implementation=attn_impl)
+    return load_model(
+        load_name,
+        dtype=torch_dtype,
+        attn_implementation=attn_impl,
+        rope_theta=rope_theta,
+    )
 
 
 def encode(
@@ -84,6 +97,13 @@ def encode(
 ) -> BatchEncoding:
     """Encode N docs + a query into a single BatchEncoding with the chosen position layout.
 
+    Tokenisation is delegated to `ddi.prompt.encode_segments` — the one encoder shared with
+    the loss, training and perplexity paths — with no answer text, since this is the
+    generation path and the answer is what we are about to produce. It takes texts rather
+    than a record because callers legitimately generate from a query they built themselves
+    (`ddi/run.py` already has the templated query in hand, and the mask tests drive it with
+    synthetic strings); the record-level wrapper is `ddi.prompt.encode_record`.
+
     Documents are tokenised individually so per-document lengths survive as the mask's
     block structure; the query is concatenated after all docs. `layout` is delegated
     to `ddi.positions.build_positions`.
@@ -91,16 +111,7 @@ def encode(
     if layout not in ("sequential", "restart"):
         raise ValueError(f"unknown layout {layout!r}; expected 'sequential' or 'restart'")
 
-    doc_id_tensors = [
-        tokenizer(doc, return_tensors="pt", add_special_tokens=False).input_ids for doc in docs
-    ]
-    doc_lengths = [int(t.shape[-1]) for t in doc_id_tensors]
-
-    query_ids = tokenizer(query, return_tensors="pt", add_special_tokens=False).input_ids
-    query_len = int(query_ids.shape[-1])
-
-    all_ids = doc_id_tensors + [query_ids] if doc_id_tensors else [query_ids]
-    input_ids = torch.cat(all_ids, dim=-1)
+    input_ids, doc_lengths, query_len, _ = encode_segments(tokenizer, list(docs), query)
 
     positions = build_positions(
         doc_lengths, query_len=query_len, answer_len=0, layout=layout  # type: ignore[arg-type]
@@ -185,21 +196,78 @@ def generate(
 ) -> list[str]:
     """Generate text under the given mask variant. Returns decoded strings.
 
-    Same shape as `phase2_train_free._generate_with_prefill_mask`: the DDI mask is
-    applied only to the prefill; each decode step then uses HF's own KV-cached path
-    (no hand-rolled attention). Returns a length-batch list; batch=1 in Phase 1.
+    The DDI mask covers the prefill *and every decode step*. Restricting it to the
+    prefill — as this function used to, following
+    `phase2_train_free._generate_with_prefill_mask` — silently breaks `blind`:
+    `ddi.masks.build_mask` sets `answer_sees_doc` to all-False for that variant
+    (masks.py:101-102), but a decode step called without an `attention_mask` gets
+    HF's default full-causal mask over the whole KV cache, so every generated token
+    after the first could read the documents anyway. `blind` is the null channel
+    that every parity claim is measured against, so a leaky `blind` collapses the
+    `full - blind` headroom in exactly the generation metrics (`em`, `f1`,
+    `presence`) the research depends on — while `loss`, which goes through a
+    properly masked single forward, kept showing the real separation. That
+    disagreement between the two measurement paths is what exposed the bug
+    (VIBEQUEUE-2 review, issue R2).
+
+    Returns a length-batch list; batch=1 in Phase 1.
     """
     prefill_ids = batch.input_ids.to(model.device)
     positions = batch.position_ids.to(model.device)
-    additive = _build_additive(
+    prefix_len = int(prefill_ids.shape[-1])
+
+    # The mask is indexed by (doc_lengths, query_len); the token stream is indexed by
+    # position. Nothing else in this function ties the two together, so a `BatchEncoding`
+    # whose block structure disagrees with its own ids — hand-built, mutated, or produced
+    # by an encoder that stopped going through `ddi.prompt.encode_segments` — would slide
+    # every block boundary against the tokens and still run to completion, producing
+    # numbers that look like a mask effect. Both mask bugs this layer has had were silent
+    # in exactly that way, so the misalignment gets an error rather than a plot.
+    expected_prefix = sum(batch.doc_lengths) + batch.query_len
+    if prefix_len != expected_prefix:
+        raise ValueError(
+            f"BatchEncoding is inconsistent: input_ids has {prefix_len} tokens but "
+            f"doc_lengths={batch.doc_lengths} + query_len={batch.query_len} = "
+            f"{expected_prefix}; the mask would be misaligned against the token stream"
+        )
+
+    # One allow-matrix covering prefill + the whole decode budget. Rows below
+    # `prefix_len` are independent of `answer_len`, so the top-left block is exactly
+    # the prefill mask we used before; rows at and beyond it are the answer rows we
+    # now need one at a time.
+    allow_full = build_mask(
         batch.doc_lengths,
-        batch.query_len,
-        answer_len=0,
-        mask_variant=mask_variant,
-        mask_kwargs=mask_kwargs,
-        dtype=model.dtype,
-        device=model.device,
+        query_len=batch.query_len,
+        answer_len=max_new_tokens,
+        variant=mask_variant,  # type: ignore[arg-type]
+        **(dict(mask_kwargs) if mask_kwargs else {}),
     )
+    additive_full = to_additive(allow_full, dtype=model.dtype).to(model.device)
+    # `.clone()` is load-bearing, not defensive copying. Slicing `additive_full` yields a
+    # VIEW into the big matrix: the prefill block is non-contiguous (row stride is the full
+    # width, not `prefix_len`), and each decode row is contiguous but carries a storage
+    # offset of `row * width`. Neither owns an allocation whose base pointer is aligned.
+    #
+    # In bf16 a tensor-core GEMM wants its operands 16-byte aligned — 8 elements — so a
+    # mask whose data pointer sits at an arbitrary element offset makes cuBLAS fail with
+    # CUBLAS_STATUS_EXECUTION_FAILED, and every CUDA call after it reports the sticky
+    # `misaligned address`. That is exactly how this presented: on 2026-08-06 all 15 runs
+    # died at the first decode step, on `full` as well as the DDI variants, because the
+    # pre-review code passed NO mask during decode and so never exercised this path.
+    # `.contiguous()` is NOT sufficient for the decode row — it is already contiguous by
+    # stride and returns self, offset and all. Only a fresh allocation fixes the base
+    # pointer.
+    additive = additive_full[:prefix_len, :prefix_len].clone().unsqueeze(0).unsqueeze(0)
+
+    # Cached decode must continue the explicit layout. Letting HF infer positions
+    # from cache length makes restart's answer tail jump past the intended offset.
+    decode_positions = torch.arange(
+        int(positions[0, -1].item()) + 1,
+        int(positions[0, -1].item()) + 1 + max_new_tokens,
+        dtype=torch.long,
+        device=model.device,
+    ).unsqueeze(0)
+
     eos_id = tokenizer.eos_token_id
     generated: list[int] = []
 
@@ -213,12 +281,29 @@ def generate(
         past = out.past_key_values
         next_token = out.logits[0, -1].argmax(dim=-1, keepdim=True).unsqueeze(0)
 
-        for _ in range(max_new_tokens):
+        for i in range(max_new_tokens):
             tok_id = int(next_token.item())
             generated.append(tok_id)
             if eos_id is not None and tok_id == eos_id:
                 break
-            step = model(input_ids=next_token, past_key_values=past, use_cache=True)
+            # This forward processes the token at absolute position prefix_len + i,
+            # attending over the prefix_len + i + 1 entries already in the cache.
+            kv_len = prefix_len + i + 1
+            # `.clone()` before reshape: see the note on `additive` above. The row is
+            # contiguous but offset, and reshape of a contiguous view is a view, so
+            # without this the mask reaches cuBLAS at an unaligned address.
+            step_mask = (
+                additive_full[prefix_len + i, :kv_len]
+                .clone()
+                .reshape(1, 1, 1, kv_len)
+            )
+            step = model(
+                input_ids=next_token,
+                attention_mask=step_mask,
+                position_ids=decode_positions[:, i : i + 1].clone(),
+                past_key_values=past,
+                use_cache=True,
+            )
             past = step.past_key_values
             next_token = step.logits[0, -1].argmax(dim=-1, keepdim=True).unsqueeze(0)
 

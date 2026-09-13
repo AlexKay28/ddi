@@ -1,9 +1,16 @@
 # DDI — research plan toward an arXiv preprint
 
-**Status:** design document, not a paper. This is the pre-registration: what we claim, what we
-must run to earn the claim, and which models / methods / setups go into the comparison grid.
-Everything here is either (a) a measured number with a source, or (b) explicitly marked
-`PENDING`. Nothing in between.
+**Status:** historical design document, not a paper or a statement of current
+evidence. It records the pre-registration: what the project intended to claim,
+what it would need to run, and the planned comparison grid. Current claim
+boundaries are in `AUDIT_NOTES.md`, `preprint.tex`, and `../README.md`; this
+plan contains superseded targets and must not be cited as empirical support.
+In particular, its powered quality-expansion and larger-model cells are retained
+as a reopenable VIBEQUEUE-48 plan, but are deferred optional future work rather
+than prerequisites for the bounded characterization paper.
+Its compiled-Flex timing targets are likewise a reopenable VIBEQUEUE-49 plan,
+not required paper work. Current Flex parity fails; the unchanged exact gates in
+`../EVIDENCE_TO_CLAIM.md` must pass before any future timing begins.
 
 Companion to the repo write-up in [`../README.md`](../README.md) and the operational roadmap in
 [issue #1](https://github.com/AlexKay28/ddi/issues/1) (source of truth for phase structure).

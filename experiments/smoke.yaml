@@ -1,0 +1,71 @@
+# smoke — the CPU-only end-to-end check. Seconds, no GPU, no network, no HF Hub.
+#
+# WHAT IT IS FOR. The unit suite covers every component of the quality path, and two
+# research bugs still shipped through it: a decode loop that ran unmasked after the first
+# step, and a prompt that never mentioned the retrieved documents. Both need a real
+# tokenizer, a real `AutoModelForCausalLM` forward and a real store round-trip to surface —
+# exactly the seam between `ddi.run` -> `ddi.store` -> `ddi.aggregate` that no test drives.
+# This file is the cheapest configuration that drives all of it.
+#
+# WHAT IT IS NOT. It is not a measurement, and under `make smoke` it is not a quality check
+# either. That target runs it against a randomly initialised 2-layer model, so em/f1/presence
+# are ~0 and `loss` sits near ln(vocab) whatever the mask does. Read the exit status and the
+# shape of logs/smoke_summary.json, never the numbers. Nothing here may be cited anywhere.
+#
+# What that catches is everything that CRASHES or plumbs wrong — a mask tensor of the wrong
+# shape, a misaligned decode buffer, a tokenizer with no chat template, a store/aggregate
+# mismatch. To catch a quality regression instead, run the same YAML against a real model
+# (below): that is the version that would have shown `em == 0` in every cell.
+#
+# Run it with `make smoke` (which builds the tiny model for you). By hand against a real
+# model it is also a legitimate 3-minute sanity run:
+#
+#   python -m ddi.run experiments/smoke.yaml --model Qwen/Qwen2.5-7B-Instruct
+#   python -m ddi.aggregate experiments/smoke.yaml \
+#       --out logs/smoke_summary.json --store results/smoke_runs.jsonl
+#
+# Schema: experiments/README.md + issue #81 YAML format section.
+
+kind: quality
+seed: 0
+
+# The ONLY loader that needs neither network nor a primed record cache: `ddi/data/synthetic.py`
+# generates its records from `(split, seed)`. hotpot_qa / musique go through the HF Hub or
+# `make yt-fetch-records`, so neither belongs in a target that must work on a bare host.
+datasets: [synthetic_qa]
+
+# All three masks, because the decode path is what the two bugs above lived in and each
+# variant builds a different allow-matrix. `blind` also proves the control column runs.
+masks: [full, ddi_qf, blind]
+
+# 4 records x 3 masks x 8 new tokens. Small enough to finish in seconds on CPU, large
+# enough that every record still has documents to isolate (synthetic_qa emits 3 per record,
+# so no cell degenerates into the no-docs `full` coercion path).
+max_records: 4
+max_new_tokens: 8
+
+# `loss` is deliberately included: it is the only metric that exercises the *masked
+# forward pass with spliced-in answer tokens* (`ddi.run._quality_cell`'s want_loss branch),
+# which is a different code path from generation.
+metrics: [em, f1, presence, loss]
+
+# A store of its own. Smoke rows come from a random-weights model and must never mix into
+# results/runs.jsonl, which is what `ddi.delta_cli` and every published summary read.
+# NOTE: `ddi.aggregate` does NOT read this key — it takes `--store` on the command line and
+# otherwise defaults to results/runs.jsonl. `make smoke` passes `--store` to match; if you
+# change the path here, change it there (Makefile.exp: SMOKE_STORE).
+output_store: results/smoke_runs.jsonl
+
+# `ddi.run`'s CLI refuses to run on CPU unless a config opts out — a real sweep that
+# silently fell back to CPU would burn hours for meaningless numbers. This one is meant to
+# run on CPU, so it opts out explicitly.
+require_gpu: false
+
+# No `rows:` / `cols:` here — see quality.yaml: nothing reads them. The JSON body shape
+# `{model: {mask: {dataset: value}}}` is fixed per kind, so `metric:` is the only knob.
+report:
+  tables:
+    - kind: quality
+      metric: presence
+    - kind: quality
+      metric: loss

@@ -1,0 +1,1143 @@
+{
+  "bootstrap": {
+    "method": "paired percentile then equal-weight seed bootstrap",
+    "repeats": 10000,
+    "seed": 46
+  },
+  "cells": [
+    {
+      "admissibility_threshold": 0.3994996871087634,
+      "admissible": false,
+      "aggregate": {
+        "blind_change": {
+          "ci95": [
+            0.02,
+            0.04
+          ],
+          "mean": 0.02666666666666667,
+          "seed_values": [
+            0.04,
+            0.02,
+            0.02
+          ]
+        },
+        "headroom": {
+          "ci95": [
+            0.3,
+            0.44
+          ],
+          "mean": 0.3566666666666667,
+          "seed_values": [
+            0.44,
+            0.3,
+            0.33
+          ]
+        },
+        "normalized_closure": {
+          "ci95": [
+            0.7878787878787878,
+            0.9090909090909091
+          ],
+          "mean": 0.8545454545454545,
+          "seed_values": [
+            0.9090909090909091,
+            0.8666666666666667,
+            0.7878787878787878
+          ]
+        },
+        "parity_gap": {
+          "ci95": [
+            0.04,
+            0.07
+          ],
+          "mean": 0.05,
+          "seed_values": [
+            0.04,
+            0.04,
+            0.07
+          ]
+        },
+        "preservation_gap": {
+          "ci95": [
+            -0.01,
+            0.07
+          ],
+          "mean": 0.02666666666666667,
+          "seed_values": [
+            0.07,
+            -0.01,
+            0.02
+          ]
+        }
+      },
+      "blind_stability_pass": false,
+      "dataset": "hotpot_qa",
+      "delta": 0.1331665623695878,
+      "metric": "em",
+      "parity_pass": false,
+      "preservation_pass": false,
+      "seeds": [
+        {
+          "base_full": 0.57,
+          "contrasts": {
+            "blind_change": {
+              "ci95": [
+                0.01,
+                0.08
+              ],
+              "mean": 0.04
+            },
+            "headroom": {
+              "ci95": [
+                0.34,
+                0.54
+              ],
+              "mean": 0.44
+            },
+            "parity_gap": {
+              "ci95": [
+                -0.06,
+                0.14
+              ],
+              "mean": 0.04
+            },
+            "preservation_gap": {
+              "ci95": [
+                0.01,
+                0.13024999999999637
+              ],
+              "mean": 0.07
+            }
+          },
+          "normalized_closure": 0.9090909090909091,
+          "records": 100,
+          "seed": 0
+        },
+        {
+          "base_full": 0.45,
+          "contrasts": {
+            "blind_change": {
+              "ci95": [
+                -0.03,
+                0.07
+              ],
+              "mean": 0.02
+            },
+            "headroom": {
+              "ci95": [
+                0.2,
+                0.4
+              ],
+              "mean": 0.3
+            },
+            "parity_gap": {
+              "ci95": [
+                -0.06,
+                0.14
+              ],
+              "mean": 0.04
+            },
+            "preservation_gap": {
+              "ci95": [
+                -0.09,
+                0.06
+              ],
+              "mean": -0.01
+            }
+          },
+          "normalized_closure": 0.8666666666666667,
+          "records": 100,
+          "seed": 1
+        },
+        {
+          "base_full": 0.46,
+          "contrasts": {
+            "blind_change": {
+              "ci95": [
+                -0.03,
+                0.07
+              ],
+              "mean": 0.02
+            },
+            "headroom": {
+              "ci95": [
+                0.23,
+                0.43
+              ],
+              "mean": 0.33
+            },
+            "parity_gap": {
+              "ci95": [
+                -0.04,
+                0.17
+              ],
+              "mean": 0.07
+            },
+            "preservation_gap": {
+              "ci95": [
+                -0.05,
+                0.09
+              ],
+              "mean": 0.02
+            }
+          },
+          "normalized_closure": 0.7878787878787878,
+          "records": 100,
+          "seed": 2
+        }
+      ],
+      "verdict": "INADMISSIBLE"
+    },
+    {
+      "admissibility_threshold": 0.2465107354781357,
+      "admissible": true,
+      "aggregate": {
+        "blind_change": {
+          "ci95": [
+            0.022024689753270318,
+            0.05232630359836242
+          ],
+          "mean": 0.04126330558235929,
+          "seed_values": [
+            0.05232630359836242,
+            0.04943892339544514,
+            0.022024689753270318
+          ]
+        },
+        "headroom": {
+          "ci95": [
+            0.38165537361189533,
+            0.4470859557109557
+          ],
+          "mean": 0.4109300059843538,
+          "seed_values": [
+            0.4470859557109557,
+            0.38165537361189533,
+            0.4040486886302104
+          ]
+        },
+        "normalized_closure": {
+          "ci95": [
+            0.6923158562722975,
+            0.8593972409267376
+          ],
+          "mean": 0.781115827454259,
+          "seed_values": [
+            0.8593972409267376,
+            0.7916343851637417,
+            0.6923158562722975
+          ]
+        },
+        "parity_gap": {
+          "ci95": [
+            0.06286151891586675,
+            0.12431937478548732
+          ],
+          "mean": 0.08890158342651949,
+          "seed_values": [
+            0.06286151891586675,
+            0.0795238565782044,
+            0.12431937478548732
+          ]
+        },
+        "preservation_gap": {
+          "ci95": [
+            0.0030963203463203453,
+            0.03786976911976912
+          ],
+          "mean": 0.01884557762498939,
+          "seed_values": [
+            0.03786976911976912,
+            0.0030963203463203453,
+            0.0155706434088787
+          ]
+        }
+      },
+      "blind_stability_pass": true,
+      "dataset": "hotpot_qa",
+      "delta": 0.08217024515937857,
+      "metric": "f1",
+      "parity_pass": false,
+      "preservation_pass": true,
+      "seeds": [
+        {
+          "base_full": 0.6995339105339106,
+          "contrasts": {
+            "blind_change": {
+              "ci95": [
+                0.0019005595507433758,
+                0.10632745973389354
+              ],
+              "mean": 0.05232630359836242
+            },
+            "headroom": {
+              "ci95": [
+                0.34547162490287486,
+                0.5469977498196248
+              ],
+              "mean": 0.4470859557109557
+            },
+            "parity_gap": {
+              "ci95": [
+                -0.03052097567287785,
+                0.15689811507936505
+              ],
+              "mean": 0.06286151891586675
+            },
+            "preservation_gap": {
+              "ci95": [
+                -0.014492631673881672,
+                0.09274439935064933
+              ],
+              "mean": 0.03786976911976912
+            }
+          },
+          "normalized_closure": 0.8593972409267376,
+          "records": 100,
+          "seed": 0
+        },
+        {
+          "base_full": 0.6259227994227994,
+          "contrasts": {
+            "blind_change": {
+              "ci95": [
+                -0.0050555555555555545,
+                0.10570281228433398
+              ],
+              "mean": 0.04943892339544514
+            },
+            "headroom": {
+              "ci95": [
+                0.2856389492753623,
+                0.4788390496580714
+              ],
+              "mean": 0.38165537361189533
+            },
+            "parity_gap": {
+              "ci95": [
+                -0.015475258799171837,
+                0.17365250839136706
+              ],
+              "mean": 0.0795238565782044
+            },
+            "preservation_gap": {
+              "ci95": [
+                -0.05622537878787879,
+                0.06259526515151514
+              ],
+              "mean": 0.0030963203463203453
+            }
+          },
+          "normalized_closure": 0.7916343851637417,
+          "records": 100,
+          "seed": 1
+        },
+        {
+          "base_full": 0.6311053391053391,
+          "contrasts": {
+            "blind_change": {
+              "ci95": [
+                -0.03320805949609498,
+                0.07853827452385635
+              ],
+              "mean": 0.022024689753270318
+            },
+            "headroom": {
+              "ci95": [
+                0.3133098713786214,
+                0.495749592074592
+              ],
+              "mean": 0.4040486886302104
+            },
+            "parity_gap": {
+              "ci95": [
+                0.023565993673490482,
+                0.22519731370150167
+              ],
+              "mean": 0.12431937478548732
+            },
+            "preservation_gap": {
+              "ci95": [
+                -0.043398937908496735,
+                0.07268976901366606
+              ],
+              "mean": 0.0155706434088787
+            }
+          },
+          "normalized_closure": 0.6923158562722975,
+          "records": 100,
+          "seed": 2
+        }
+      ],
+      "verdict": "PARITY_NOT_REACHED"
+    },
+    {
+      "admissibility_threshold": 0.2705549851693736,
+      "admissible": false,
+      "aggregate": {
+        "blind_change": {
+          "ci95": [
+            0.0,
+            0.04
+          ],
+          "mean": 0.02,
+          "seed_values": [
+            0.02,
+            0.0,
+            0.04
+          ]
+        },
+        "headroom": {
+          "ci95": [
+            0.17,
+            0.26
+          ],
+          "mean": 0.21000000000000002,
+          "seed_values": [
+            0.26,
+            0.2,
+            0.17
+          ]
+        },
+        "normalized_closure": {
+          "ci95": [
+            0.2941176470588236,
+            0.7
+          ],
+          "mean": 0.5236802413273002,
+          "seed_values": [
+            0.5769230769230769,
+            0.7,
+            0.2941176470588236
+          ]
+        },
+        "parity_gap": {
+          "ci95": [
+            0.06,
+            0.12
+          ],
+          "mean": 0.09666666666666666,
+          "seed_values": [
+            0.11,
+            0.06,
+            0.12
+          ]
+        },
+        "preservation_gap": {
+          "ci95": [
+            -0.02,
+            0.08
+          ],
+          "mean": 0.03333333333333333,
+          "seed_values": [
+            0.04,
+            0.08,
+            -0.02
+          ]
+        }
+      },
+      "blind_stability_pass": false,
+      "dataset": "musique",
+      "delta": 0.09018499505645786,
+      "metric": "em",
+      "parity_pass": false,
+      "preservation_pass": false,
+      "seeds": [
+        {
+          "base_full": 0.29,
+          "contrasts": {
+            "blind_change": {
+              "ci95": [
+                0.0,
+                0.05
+              ],
+              "mean": 0.02
+            },
+            "headroom": {
+              "ci95": [
+                0.17,
+                0.35
+              ],
+              "mean": 0.26
+            },
+            "parity_gap": {
+              "ci95": [
+                0.02,
+                0.2
+              ],
+              "mean": 0.11
+            },
+            "preservation_gap": {
+              "ci95": [
+                -0.02,
+                0.11
+              ],
+              "mean": 0.04
+            }
+          },
+          "normalized_closure": 0.5769230769230769,
+          "records": 100,
+          "seed": 0
+        },
+        {
+          "base_full": 0.25,
+          "contrasts": {
+            "blind_change": {
+              "ci95": [
+                -0.03,
+                0.03
+              ],
+              "mean": 0.0
+            },
+            "headroom": {
+              "ci95": [
+                0.11,
+                0.29
+              ],
+              "mean": 0.2
+            },
+            "parity_gap": {
+              "ci95": [
+                -0.03,
+                0.15
+              ],
+              "mean": 0.06
+            },
+            "preservation_gap": {
+              "ci95": [
+                0.02,
+                0.15
+              ],
+              "mean": 0.08
+            }
+          },
+          "normalized_closure": 0.7,
+          "records": 100,
+          "seed": 1
+        },
+        {
+          "base_full": 0.2,
+          "contrasts": {
+            "blind_change": {
+              "ci95": [
+                0.01,
+                0.08
+              ],
+              "mean": 0.04
+            },
+            "headroom": {
+              "ci95": [
+                0.09,
+                0.25
+              ],
+              "mean": 0.17
+            },
+            "parity_gap": {
+              "ci95": [
+                0.04,
+                0.2
+              ],
+              "mean": 0.12
+            },
+            "preservation_gap": {
+              "ci95": [
+                -0.08,
+                0.04
+              ],
+              "mean": -0.02
+            }
+          },
+          "normalized_closure": 0.2941176470588236,
+          "records": 100,
+          "seed": 2
+        }
+      ],
+      "verdict": "INADMISSIBLE"
+    },
+    {
+      "admissibility_threshold": 0.22372452154319922,
+      "admissible": true,
+      "aggregate": {
+        "blind_change": {
+          "ci95": [
+            -0.0020796451914098972,
+            0.03196825396825397
+          ],
+          "mean": 0.009563398692810459,
+          "seed_values": [
+            -0.0020796451914098972,
+            -0.0011984126984126984,
+            0.03196825396825397
+          ]
+        },
+        "headroom": {
+          "ci95": [
+            0.19891197135484684,
+            0.26817704999752245
+          ],
+          "mean": 0.23995127070572,
+          "seed_values": [
+            0.26817704999752245,
+            0.25276479076479075,
+            0.19891197135484684
+          ]
+        },
+        "normalized_closure": {
+          "ci95": [
+            0.23408907666684498,
+            0.5866287787964939
+          ],
+          "mean": 0.4518440651821461,
+          "seed_values": [
+            0.5348143400830994,
+            0.5866287787964939,
+            0.23408907666684498
+          ]
+        },
+        "parity_gap": {
+          "ci95": [
+            0.10448569023569024,
+            0.15234885164240883
+          ],
+          "mean": 0.12719555328525473,
+          "seed_values": [
+            0.12475211797766515,
+            0.10448569023569024,
+            0.15234885164240883
+          ]
+        },
+        "preservation_gap": {
+          "ci95": [
+            -0.059541759125199434,
+            0.06484704184704185
+          ],
+          "mean": 0.0020976705508156087,
+          "seed_values": [
+            0.0009877289306044123,
+            0.06484704184704185,
+            -0.059541759125199434
+          ]
+        }
+      },
+      "blind_stability_pass": true,
+      "dataset": "musique",
+      "delta": 0.07457484051439973,
+      "metric": "f1",
+      "parity_pass": false,
+      "preservation_pass": true,
+      "seeds": [
+        {
+          "base_full": 0.377394501826739,
+          "contrasts": {
+            "blind_change": {
+              "ci95": [
+                -0.03073674603174603,
+                0.02682306956115777
+              ],
+              "mean": -0.0020796451914098972
+            },
+            "headroom": {
+              "ci95": [
+                0.17980109759624383,
+                0.35803518710799875
+              ],
+              "mean": 0.26817704999752245
+            },
+            "parity_gap": {
+              "ci95": [
+                0.039291840594711615,
+                0.20944649647780186
+              ],
+              "mean": 0.12475211797766515
+            },
+            "preservation_gap": {
+              "ci95": [
+                -0.06229748924232236,
+                0.06516480134649258
+              ],
+              "mean": 0.0009877289306044123
+            }
+          },
+          "normalized_closure": 0.5348143400830994,
+          "records": 100,
+          "seed": 0
+        },
+        {
+          "base_full": 0.3677092352092352,
+          "contrasts": {
+            "blind_change": {
+              "ci95": [
+                -0.029388888888888888,
+                0.02715892857142857
+              ],
+              "mean": -0.0011984126984126984
+            },
+            "headroom": {
+              "ci95": [
+                0.16527239357864357,
+                0.34063014069264064
+              ],
+              "mean": 0.25276479076479075
+            },
+            "parity_gap": {
+              "ci95": [
+                0.01574832852332853,
+                0.19214631734006732
+              ],
+              "mean": 0.10448569023569024
+            },
+            "preservation_gap": {
+              "ci95": [
+                0.005488988095238095,
+                0.1299930555555555
+              ],
+              "mean": 0.06484704184704185
+            }
+          },
+          "normalized_closure": 0.5866287787964939,
+          "records": 100,
+          "seed": 1
+        },
+        {
+          "base_full": 0.30851514595802143,
+          "contrasts": {
+            "blind_change": {
+              "ci95": [
+                -0.008194047619047616,
+                0.07479523809523808
+              ],
+              "mean": 0.03196825396825397
+            },
+            "headroom": {
+              "ci95": [
+                0.12087910319961026,
+                0.27932441006433295
+              ],
+              "mean": 0.19891197135484684
+            },
+            "parity_gap": {
+              "ci95": [
+                0.07550185192277979,
+                0.23128351706395034
+              ],
+              "mean": 0.15234885164240883
+            },
+            "preservation_gap": {
+              "ci95": [
+                -0.12292628645423896,
+                0.005168812313773796
+              ],
+              "mean": -0.059541759125199434
+            }
+          },
+          "normalized_closure": 0.23408907666684498,
+          "records": 100,
+          "seed": 2
+        }
+      ],
+      "verdict": "PARITY_NOT_REACHED"
+    },
+    {
+      "admissibility_threshold": 0.05,
+      "admissible": true,
+      "aggregate": {
+        "blind_change": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "headroom": {
+          "ci95": [
+            1.0,
+            1.0
+          ],
+          "mean": 1.0,
+          "seed_values": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "normalized_closure": {
+          "ci95": [
+            1.0,
+            1.0
+          ],
+          "mean": 1.0,
+          "seed_values": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "parity_gap": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "preservation_gap": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "blind_stability_pass": true,
+      "dataset": "synthetic_qa",
+      "delta": 0.0,
+      "metric": "em",
+      "parity_pass": true,
+      "preservation_pass": true,
+      "seeds": [
+        {
+          "base_full": 1.0,
+          "contrasts": {
+            "blind_change": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0
+            },
+            "headroom": {
+              "ci95": [
+                1.0,
+                1.0
+              ],
+              "mean": 1.0
+            },
+            "parity_gap": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0
+            },
+            "preservation_gap": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0
+            }
+          },
+          "normalized_closure": 1.0,
+          "records": 20,
+          "seed": 0
+        },
+        {
+          "base_full": 1.0,
+          "contrasts": {
+            "blind_change": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0
+            },
+            "headroom": {
+              "ci95": [
+                1.0,
+                1.0
+              ],
+              "mean": 1.0
+            },
+            "parity_gap": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0
+            },
+            "preservation_gap": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0
+            }
+          },
+          "normalized_closure": 1.0,
+          "records": 20,
+          "seed": 1
+        },
+        {
+          "base_full": 1.0,
+          "contrasts": {
+            "blind_change": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0
+            },
+            "headroom": {
+              "ci95": [
+                1.0,
+                1.0
+              ],
+              "mean": 1.0
+            },
+            "parity_gap": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0
+            },
+            "preservation_gap": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0
+            }
+          },
+          "normalized_closure": 1.0,
+          "records": 20,
+          "seed": 2
+        }
+      ],
+      "verdict": "WITHIN_TOLERANCE"
+    },
+    {
+      "admissibility_threshold": 0.05,
+      "admissible": true,
+      "aggregate": {
+        "blind_change": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "headroom": {
+          "ci95": [
+            1.0,
+            1.0
+          ],
+          "mean": 1.0,
+          "seed_values": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "normalized_closure": {
+          "ci95": [
+            1.0,
+            1.0
+          ],
+          "mean": 1.0,
+          "seed_values": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        },
+        "parity_gap": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "preservation_gap": {
+          "ci95": [
+            0.0,
+            0.0
+          ],
+          "mean": 0.0,
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "blind_stability_pass": true,
+      "dataset": "synthetic_qa",
+      "delta": 0.0,
+      "metric": "f1",
+      "parity_pass": true,
+      "preservation_pass": true,
+      "seeds": [
+        {
+          "base_full": 1.0,
+          "contrasts": {
+            "blind_change": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0
+            },
+            "headroom": {
+              "ci95": [
+                1.0,
+                1.0
+              ],
+              "mean": 1.0
+            },
+            "parity_gap": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0
+            },
+            "preservation_gap": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0
+            }
+          },
+          "normalized_closure": 1.0,
+          "records": 20,
+          "seed": 0
+        },
+        {
+          "base_full": 1.0,
+          "contrasts": {
+            "blind_change": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0
+            },
+            "headroom": {
+              "ci95": [
+                1.0,
+                1.0
+              ],
+              "mean": 1.0
+            },
+            "parity_gap": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0
+            },
+            "preservation_gap": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0
+            }
+          },
+          "normalized_closure": 1.0,
+          "records": 20,
+          "seed": 1
+        },
+        {
+          "base_full": 1.0,
+          "contrasts": {
+            "blind_change": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0
+            },
+            "headroom": {
+              "ci95": [
+                1.0,
+                1.0
+              ],
+              "mean": 1.0
+            },
+            "parity_gap": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0
+            },
+            "preservation_gap": {
+              "ci95": [
+                0.0,
+                0.0
+              ],
+              "mean": 0.0
+            }
+          },
+          "normalized_closure": 1.0,
+          "records": 20,
+          "seed": 2
+        }
+      ],
+      "verdict": "WITHIN_TOLERANCE"
+    }
+  ],
+  "inputs": {
+    "base": [
+      {
+        "path": "results/r5b1_qwen25_7b_base_seed0_20260902T1059Z_predictions.jsonl",
+        "seed": 0,
+        "sha256": "de4d3f2c7a5dda0806695342612ee19fe1889d697e687ed28a7d8107113842a2"
+      },
+      {
+        "path": "results/transfer_qwen_base_seed1_20260902T114019Z_predictions.jsonl",
+        "seed": 1,
+        "sha256": "56a62d78bfcbbf2378b4b5cca3edbc9d99526e9585fdf68c432253b509509fae"
+      },
+      {
+        "path": "results/transfer_qwen_base_seed2_20260902T142821Z_predictions.jsonl",
+        "seed": 2,
+        "sha256": "7856c845b22839ab4458ea5984a33cbab0bc91f6a306de900d1806e1dc7ae4e1"
+      }
+    ],
+    "tuned": [
+      {
+        "path": "results/transfer_qwen_tuned_seed0_predictions.jsonl",
+        "seed": 0,
+        "sha256": "977c823e86059336a14df10ea1182e991d3bf9c2ae3e1d9b2b24e90d41e21c0c"
+      },
+      {
+        "path": "results/transfer_qwen_tuned_seed1_predictions.jsonl",
+        "seed": 1,
+        "sha256": "57a7fb9d7a53db0fb3c276db0b3c3f58127eb1157e38a5c53d981cd9acbf4049"
+      },
+      {
+        "path": "results/transfer_qwen_tuned_seed2_predictions.jsonl",
+        "seed": 2,
+        "sha256": "4773a4a27ccb01509072efa19208c255f73595ad9fc954a0a29290f5a9380e7d"
+      }
+    ]
+  }
+}

@@ -3,11 +3,24 @@
 Ground rule 9 (issue #1): before any DDI number can be called parity or non-parity, `Δ`
 must be fixed from the `full` baseline's seed-to-seed variance alone.
 
-`compute_delta` reads phase1_full_baseline rows from the store for a given
-(model, dataset, metric), averages per seed, computes std across seed means, and
+`compute_delta` reads the quality-eval rows the harness actually writes — the
+`phase2_train_free:{model}:{dataset}:{variant}:seed=…` shape produced by
+`ddi.run._quality_cell` — restricted to the `full` variant, for a given
+(model, dataset, metric). It averages per seed, computes std across seed means, and
 returns `Δ = k · std` with `k=2` by default. `record_delta` writes the per-seed means
 and the derived Δ back into the store so downstream reports pull the whole
 computation from the same store per ground rule 3.
+
+**The `full` restriction is the ground rule, not a default worth changing.** Δ is the
+noise floor of the measurement, and mixing `ddi_qf` or `blind` rows into it would fold
+the very effect being tested into the margin used to judge that effect — the margin
+would grow exactly when the mask matters most, which is backwards.
+
+Historical note: this module used to filter on a `phase1_baseline:` prefix that nothing
+in the harness has ever written, so `compute_delta` matched zero rows against a real
+store and raised "requires >= 3 seeds" no matter how many seeds had been run. Its unit
+tests constructed `phase1_baseline:` rows by hand and so agreed with the bug. Δ gates
+every parity claim in VIBEQUEUE-2, which made this the quietest possible blocker.
 """
 
 from __future__ import annotations
@@ -18,10 +31,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ddi.provenance import Provenance
+from ddi.runids import QualityRunId
 from ddi.store import DEFAULT_STORE, append
 
 _MIN_SEEDS = 3
 _BASELINE_METRICS = ("loss", "em", "f1", "presence")
+
+# Ground rule 9: Δ comes from the `full` baseline's seed-to-seed variance alone.
+_BASELINE_VARIANT = "full"
 
 
 @dataclass(frozen=True)
@@ -44,12 +61,19 @@ def compute_delta(
     dataset: str,
     metric: str,
     k: float = 2.0,
+    variant: str = _BASELINE_VARIANT,
 ) -> Delta:
     """Compute `Δ = k · std` across per-seed means from the store.
 
-    Filters to rows whose `run_id` starts with `phase1_baseline:{model}:{dataset}:` and
-    whose `metric` matches. Groups by `provenance.seed`, averages each group, then
-    computes the sample standard deviation (ddof=1) across those per-seed means.
+    Filters to quality-eval rows — run_id shape `ddi.runids.QualityRunId`, the one parser
+    `ddi.parity.read_means` and `ddi.aggregate`'s quality table also use — matching `model`,
+    `dataset`, `metric` and `variant` (`full` by default, per ground rule 9). Groups by
+    `provenance.seed`, averages each group, then computes the sample standard
+    deviation (ddof=1) across those per-seed means.
+
+    The seed is taken from `provenance.seed` rather than from the run_id's `seed=`
+    field, so a row whose provenance disagrees with its id is skipped rather than
+    silently counted under the wrong seed.
 
     Requires `n_seeds >= 3` — with fewer seeds the std is not a meaningful noise floor.
     Raises `ValueError` if the filter yields fewer than 3 seeds or if `k <= 0`.
@@ -61,31 +85,58 @@ def compute_delta(
             f"metric {metric!r} is not a baseline metric; expected one of {_BASELINE_METRICS}"
         )
 
-    prefix = f"phase1_baseline:{model}:{dataset}:"
-
     by_seed: dict[int, list[float]] = {}
+    checkpoint_revisions: dict[int, str | None] = {}
     with open(store, encoding="utf-8") as f:
         for raw in f:
             line = raw.strip()
             if not line:
                 continue
-            row = json.loads(line)
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
             run_id = row.get("run_id")
-            if not isinstance(run_id, str) or not run_id.startswith(prefix):
+            if not isinstance(run_id, str):
+                continue
+            parsed = QualityRunId.parse(run_id)
+            if parsed is None:
+                continue
+            if (parsed.model, parsed.dataset, parsed.variant) != (model, dataset, variant):
                 continue
             if row.get("metric") != metric:
                 continue
             prov = row.get("provenance") or {}
+            row_checkpoint = prov.get("checkpoint_revision")
+            if row_checkpoint is not None and not isinstance(row_checkpoint, str):
+                continue
             seed = prov.get("seed")
             value = row.get("value")
             if seed is None or not isinstance(value, (int, float)) or isinstance(value, bool):
                 continue
-            by_seed.setdefault(int(seed), []).append(float(value))
+            seed = int(seed)
+            previous_checkpoint = checkpoint_revisions.setdefault(seed, row_checkpoint)
+            if previous_checkpoint != row_checkpoint:
+                raise ValueError(
+                    "compute_delta found multiple checkpoint identities for "
+                    f"evaluation_model={model!r} seed={seed}"
+                )
+            # The docstring's promise, enforced. `provenance.seed` is the seed of record,
+            # so a row whose run_id names a different one is not merely mislabelled — its
+            # identity is unresolvable, and counting it under either seed would move a
+            # per-seed mean by an unknown amount. Δ gates every parity claim in the grid,
+            # so an unresolvable row is dropped rather than guessed at. This was documented
+            # here for a long time while the code only ever parsed the seed segment to
+            # satisfy a length check and compared it to nothing.
+            if parsed.seed != seed:
+                continue
+            by_seed.setdefault(seed, []).append(float(value))
 
     if len(by_seed) < _MIN_SEEDS:
         raise ValueError(
             f"compute_delta requires >= {_MIN_SEEDS} seeds; got {len(by_seed)} "
-            f"for model={model!r} dataset={dataset!r} metric={metric!r}"
+            f"for model={model!r} dataset={dataset!r} metric={metric!r} "
+            f"variant={variant!r}"
         )
 
     per_seed_means = {seed: sum(vs) / len(vs) for seed, vs in by_seed.items()}

@@ -1,0 +1,38 @@
+# VIBEQUEUE-46 -- multi-seed, cross-architecture transfer protocol.
+#
+# This is intentionally a non-runnable template: pass --model and, for a tuned arm,
+# --set checkpoint=... plus a unique, seed-independent --set evaluation_model=... . Do not change the
+# fixed manifests after each seed's one-time base-arm bootstrap; commit them before comparisons.
+kind: quality
+seed: 0
+datasets: [hotpot_qa, musique, synthetic_qa]
+masks: [full, ddi_qf, blind]
+max_records: 100
+max_new_tokens: 64
+metrics: [em, f1, presence, loss]
+heldout_manifest: results/transfer_heldout
+heldout_manifest_mode: verify
+predictions_store: results/transfer_predictions.jsonl
+
+# Required execution matrix:
+#   architecture: Qwen/Qwen2.5-7B-Instruct, meta-llama/Llama-3.1-8B-Instruct
+#   condition:    base, ddi_qf_tuned
+#   seed:         0, 1, 2
+#
+# Model labels must be unique per checkpoint condition, for example:
+#   Qwen2.5-7B-Instruct__base
+#   Qwen2.5-7B-Instruct__ddi_qf_tuned
+# A checkpoint without evaluation_model, or with a seed-qualified label, is rejected.
+# For each new seed, bootstrap its base arm with --set heldout_manifest_mode=write exactly once,
+# then commit that seed's manifests. Matched controls and checkpoint arms must verify.
+
+report:
+  tables:
+    - kind: quality
+      metric: em
+    - kind: quality
+      metric: f1
+    - kind: quality
+      metric: presence
+    - kind: quality
+      metric: loss

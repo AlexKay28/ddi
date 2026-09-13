@@ -1,0 +1,19 @@
+# V79: LazyAttention-style deferred positional encoding
+# Eliminates the restart-position quality wall (0.46 -> 0.07 EM) by
+# storing un-rotated keys in cache and applying RoPE at attention time.
+#
+# Source: LazyAttention (ICML 2026, arXiv 2606.04302)
+#
+# Run: MODEL=Qwen/Qwen2.5-7B-Instruct python -m ddi.run experiments/v79_deferred_rope.yaml
+
+kind: quality
+seed: 47
+model: "${MODEL}"
+datasets: [hotpot_qa]
+masks: [ddi_qf]
+layout: deferred
+max_records: 100
+max_new_tokens: 64
+metrics: [em, f1, presence]
+heldout_manifest: results/heldout
+predictions_store: results/v79_predictions.jsonl

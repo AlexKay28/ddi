@@ -12,11 +12,12 @@ from ddi.data.loaders import list_datasets, load, register_loader
 
 # Import loader modules for their register_loader side-effects. Order matters: loaders.py must
 # import first so the registry decorator exists. The ``composition`` and ``ddi_stress`` loaders
-# were dropped from scope in #89 alongside their runners / renderers.
+# were dropped from scope in #89 alongside their runners / renderers; ``kilt_nq`` and ``nq``
+# were deleted in VIBEQUEUE-16 because neither could produce a usable measurement — see the
+# 2026-08-08 CHANGELOG entry for both post-mortems, and
+# ``ddi.aggregate._QUALITY_DROPPED_DATASETS`` for the rows they left behind.
 from ddi.data import hotpot_qa as _hotpot_qa  # noqa: F401, E402
-from ddi.data import kilt_nq as _kilt_nq  # noqa: F401, E402
 from ddi.data import musique as _musique  # noqa: F401, E402
-from ddi.data import nq as _nq  # noqa: F401, E402
 from ddi.data import synthetic as _synthetic  # noqa: F401, E402
 
 __all__ = ["list_datasets", "load", "register_loader"]

@@ -1,60 +1,74 @@
 % =====================================================================
 % Results — caching (co-headline). Phase 4 of RESEARCH_PLAN.md.
 % =====================================================================
+% NOTE: This file is NOT included in preprint.tex. The active paper body is sections/main_story.tex.
+% This file is retained for historical reference only.
 \section{Results: Per-Document Caching}
 \label{sec:results-caching}
 
-Per-document caching is the second half of the paper's contribution.
-Under full causal attention, no document's KV block is reusable across
-requests: $\mathrm{doc}_2$'s keys and values depend on $\mathrm{doc}_1$,
-so changing any earlier document invalidates the prefix. Under a
-block-diagonal mask with the restart position layout
-(Section~\ref{sec:method-positions}), a document's KV block is a function
-of that document alone. Blocks become keyable by document content hash,
-order-independent, and reusable across requests.
-
-A cache hit skips prefill entirely. This is the sense in which the
-caching result is co-headline with the compute result: no kernel
-improvement to full-causal prefill can match ``skip prefill'', so this
-speedup floor survives even if the realization gap of
-Section~\ref{sec:results-efficiency} is structural rather than fixable.
+Per-document caching is a design consequence evaluated in this paper.
+Under full causal attention, an unchanged exact prefix can be reused, but
+$\mathrm{doc}_2$'s keys and values depend on $\mathrm{doc}_1$, so changing a
+document invalidates the suffix after that position. Under a
+block-diagonal mask with the \emph{restart} position layout
+(Section~\ref{sec:method-positions}), a document's KV block can be a function
+of that document alone, subject to the implementation and position assumptions.
+The corrected harness assembles independently computed restart-layout document
+KV blocks in request order, prefills the query against those blocks, and carries
+explicit restart positions and the DDI mask through greedy decoding.
 
 \subsection{Prerequisites}
 \label{sec:results-caching-prereq}
 
-Three conditions must hold before the throughput measurement is trusted.
-\emph{Quality under restart} (Phase~4.1) confirms that restarting RoPE
-positions per document does not itself cost quality relative to a
-sequential layout. \emph{Per-document cache correctness} (Phase~4.2)
-verifies that logits computed from a cache hit are numerically identical
-(within bf16 tolerance) to logits computed from a cold prefill of the
-same input; the round-trip test is the correctness gate that makes any
-throughput number meaningful. \emph{Order invariance} (Phase~4.3)
-verifies that permuting the retrieved document list produces identical
-outputs under \texttt{ddi\_qf + restart}, which the mask family alone
-predicts and prior work does not.
+The historical cache runner populated but never consumed document KV; its
+exact-logit and 1.72$\times$ throughput claims are withdrawn. In the corrected
+Qwen2.5-7B bf16 A100 diagnostic, 16-token greedy outputs match exactly for the
+original request, a document permutation, and a partial-reuse request with two
+hits and one miss. Numerical logit identity is not established: cache versus
+fresh restart DDI has maximum absolute logit difference 0.3125 at
+$N=2,L=32,Q=8$.
+
+\textbf{Quality under restart} (Phase~4.1) is a prerequisite for reusable
+per-document KV blocks. The initial evaluation was invalid because it used
+restart positions for prefill but let cached decoding infer positions from the
+cache length. Propagating the explicit query-tail position on every decode
+step yields a single-run estimate of 0.47 restart versus 0.45 sequential EM
+on 100 hotpot\_qa records (Table~\ref{tab:t4_restart}). This bounded control
+does not provide a parity or comparison-confidence conclusion. The
+earlier RoPE-base sweep used the invalid evaluator and is not interpreted as
+evidence about RoPE sensitivity. Standard dynamic NTK scaling is also a no-op
+on this subset: its maximum prompt position is 4,720, below Qwen's 32,768
+configured context where the implementation preserves the original
+frequencies.
 
 \subsection{Throughput under document reuse}
 \label{sec:results-caching-throughput}
 
-Figure~\ref{fig:f5} reports end-to-end throughput as a function of the
-document reuse rate --- the fraction of retrieved documents in the
-current request that also appeared in a previous request and are
-therefore cache hits. The comparison lines are full-causal recompute
-(the status quo), prefix caching (the practical alternative when exact
-prefix matches happen), and DDI with a per-document cache. At any
-non-trivial reuse rate the per-document line is expected to dominate the
-prefix-caching line, because document-level cache hits do not require
-exact prefix matches; the position layout (\texttt{restart}) removes the
-position dependence that would otherwise break the hit.
+The legacy throughput claim is withdrawn following the workload audit.
+Sampling 500 token IDs and decoding them to text before retokenization does
+not produce an exact 500-token document: the local seed-0 reproduction yields
+513--555 tokens per document. Full causal always executed 16 decode forwards,
+whereas DDI could stop at EOS; output counts were not retained. The small
+behavioral diagnostic above does not validate the timed workload. Thus the
+previous 1.219$\times$ cache/recompute and 1.094$\times$ cache/full estimates
+do not establish an exact-shape, equal-work speedup. Historical raw rows remain
+unchanged in
+\texttt{results/cache\_v51\_throughput.jsonl} for audit only.
 
-\figureifexists{generated/F5.pdf}{%
-    F5 --- throughput versus document reuse rate. One line per mode:
-    full-causal recompute, prefix caching, DDI per-document cache.%
-}{fig:f5}
+The follow-up protocol specifies identical pretokenized inputs, 16 emitted tokens from one prefill
+and 15 decode forwards for every mode, separate natural-EOS checks, isolated
+content-identified caches, and counterbalanced seed-level timing. Local
+revalidation preserves source and diff hashes but is not clean-revision
+evidence; no replacement throughput claim is admitted here. Neither numerical
+identity nor natural-QA preservation follows from synthetic greedy agreement.
 
-We frame this as the co-headline result because it survives failure
-modes elsewhere in the paper. If the realization gap of
-Section~\ref{sec:results-efficiency-gap} does not close, cache hits
-still skip prefill entirely, so the throughput floor at any positive
-reuse rate is independent of the kernel's realization efficiency.
+\begin{figure}[t]
+    \centering
+    \input{generated/F5.tex}
+    \caption{F5 --- withdrawal of the unsupported exact-shape, equal-work
+        throughput comparison. Historical source rows remain available for audit.}
+    \label{fig:f5}
+\end{figure}
+
+No cache speedup is combined with unsupported archival Flex observations, and
+no general serving-throughput claim across shapes or models is established.

@@ -5,14 +5,19 @@ description = "Decoupled Document Inference — block-diagonal attention over re
 requires-python = ">=3.11"
 dependencies = [
     "torch>=2.4",
-    # Upper-bounded: 4.53 dropped the per-model `_update_causal_mask` method (moved to
-    # `masking_utils.create_causal_mask`) that ddi/model.py's patch_model() monkey-patches.
-    # Bump once model.py migrates to the new masking API — tracked in issue #30.
-    "transformers>=4.44,<4.53",
+    # ddi/model.py now carries BOTH masking APIs (issue #30, done):
+    #   <4.53  — per-model `_update_causal_mask`, patched per instance in patch_model().
+    #   >=4.53 — module-level `masking_utils.create_causal_mask`, hooked once at import.
+    # The >=4.53 path is the LIVE one: every published DDI number was produced by GPU jobs
+    # running transformers 5.14.1, which the old `<4.53` ceiling excluded outright — the pin
+    # described a configuration nobody runs, so `uv sync` could not reproduce a published
+    # result. The ceiling is therefore raised to the next major (<6), which is where the
+    # masking API could plausibly move again. The 4.44 floor stays: it is the oldest version
+    # whose `_update_causal_mask` signature the <4.53 patch assumes.
+    "transformers>=4.44,<6",
     "datasets>=2.14",
     "numpy",
     "pyyaml",
-    "bitsandbytes>=0.50.0",
 ]
 
 [project.optional-dependencies]
@@ -21,6 +26,11 @@ dependencies = [
 # `import transformers` itself breaks without it once flash-attn is installed.
 fa2 = ["flash-attn>=2.6", "triton>=3.0"]
 triton = ["triton>=3.0"]
+# bitsandbytes is a 41 MB CUDA-oriented wheel used in exactly one place: the AdamW8bit
+# branch of ddi/finetune.py, which only runs on `device.type == "cuda"`. As a hard
+# dependency it made `import ddi.finetune` — and therefore tests/test_finetune.py —
+# unusable on any CPU-only host. Install it when you actually train: `--extra train`.
+train = ["bitsandbytes>=0.50.0"]
 report = ["pandas", "matplotlib"]
 dev = ["pytest", "pytest-cov", "ruff"]
 

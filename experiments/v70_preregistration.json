@@ -1,0 +1,213 @@
+{
+  "schema_version": "v70_preregistration_v1",
+  "frozen_utc": "2026-09-11T09:11:05+00:00",
+  "status": "frozen_before_20_step_or_full_training",
+  "hypothesis": "Fixed deterministic request markers at k=5 improve persisted-cache C quality relative to k=0 without making C inferior to fresh independent B or full-reference D beyond the frozen margin.",
+  "treatment": {
+    "arms": {"k0": 0, "k5": 5},
+    "kind": "fixed_marker_conditioning",
+    "learned_link_tokens": false,
+    "documents_deleted_or_dropped": false,
+    "document_order": "original_dataset_order_no_shuffle"
+  },
+  "training": {
+    "seed": 47,
+    "trainable_decoder_layers": 8,
+    "optimizer": "bitsandbytes.optim.AdamW8bit_required_no_fallback",
+    "weight_decay": 0.0,
+    "base_learning_rate": 0.00001,
+    "warmup": "linear on one-based optimizer steps 1-20 inclusive; step 20 reaches 1e-5; constant 1e-5 thereafter",
+    "effective_batch_size": 4,
+    "presentations_per_optimizer_step": 4,
+    "loss_scaling": "each presentation loss divided by 4 before backward; one optimizer step after four backwards",
+    "requested_optimizer_steps_per_arm": 1000,
+    "presentations_per_arm": 4000,
+    "epochs_over_800_train_records": 5,
+    "same_steps_both_arms": true,
+    "schedule": "arm-independent SHA-256 over v70, seed, global presentation index, and record ID",
+    "encoding_mix": {"independent_bf16_differentiable_kv": 0.15, "monolithic": 0.85},
+    "teacher_target": "same no-link sequential full-causal target for both arms"
+  },
+  "runtime_gate": {
+    "smoke_optimizer_steps_per_arm": 20,
+    "full_run_only_if_projected_total_seconds_lte": 21600,
+    "projection": "mean measured seconds per optimizer step across both completed 20-step arms multiplied by 2 arms and 1000 requested steps",
+    "adjustment_if_projection_exceeds_cap": "floor(21600 / measured_mean_seconds_per_optimizer_step / 2), rounded down to nearest 50, then minimum 300; use exactly that count for both arms",
+    "amendment": "record measured timings, projection, and adjusted common step count before either full run",
+    "hard_cap": "never knowingly continue training beyond 6 total GPU-hours; if even the minimum adjustment is incompatible, stop"
+  },
+  "pre_full_run_amendment_1": {
+    "created_utc": "2026-09-11T09:24:16Z",
+    "reason": "first budget-smoke attempt failed before step 1 because the new output parent did not exist; runner now creates it and regression test covers a nested absent parent",
+    "treatment_or_analysis_changed": false,
+    "summary": "results/v70_20step_seed47/smoke_summary.json",
+    "k0_20_step_seconds": 59.98120200634003,
+    "k5_20_step_seconds": 62.42517329379916,
+    "combined_mean_step_seconds": 3.0601593825034796,
+    "projected_two_arm_1000_step_seconds": 6120.318765006959,
+    "projected_two_arm_1000_step_hours": 1.7000885458352664,
+    "budget_gate_passed": true,
+    "frozen_optimizer_steps_per_arm": 1000,
+    "all_gradients_finite": true,
+    "presentations_per_arm": 80,
+    "independent_presentations_per_arm": 12,
+    "smoke_checkpoints_disposition": "delete disposable weights; retain loss logs and summary"
+  },
+  "pre_evaluation_amendment_2": {
+    "created_utc": "2026-09-11T11:26:43Z",
+    "timing": "before any full development evaluation",
+    "reason": "one-record persisted evaluation reproduced B/C equality failure solely because fresh B K/V was GPU-resident and reopened persisted C K/V was CPU-resident",
+    "infrastructure_fix": "_kv_equal requires equal shape and dtype, then compares tensors after detach().cpu()",
+    "treatment_gate_selection_or_filtering_changed": false,
+    "one_record_persisted_evaluation": {
+      "k0": {"path": "results/v70_eval_smoke_k0.json", "sha256": "402dbdb5f193558d0c4ea351d8306ca7fbde633fd8fb295c84b1540c744f8413", "b_c_generated_ids_equal": true},
+      "k5": {"path": "results/v70_eval_smoke_k5.json", "sha256": "1e58794bb36d40965273a0749f27ed66aa443e81843e53bc34c11fb911a73fe1", "b_c_generated_ids_equal": true},
+      "c_reopened_hit_only_enforced": true,
+      "role": "infrastructure_reproduction_only_not_quality_selection"
+    },
+    "training": {
+      "summary": "results/v70_arms_valid_seed47/training_summary.json",
+      "summary_sha256": "6790335d153fbe5c7eb5fead81bdf589db8b04a55b51109dbeb6bb4154b46b2f",
+      "optimizer_steps_per_arm": 1000,
+      "effective_batch_size": 4,
+      "presentations_per_arm": 4000,
+      "independent_presentations_per_arm": 595,
+      "record_and_encoding_schedules_identical": true,
+      "finite": true,
+      "k0_first_50_mean_loss": 1.516735762801254,
+      "k0_last_50_mean_loss": 0.2669688443746418,
+      "k5_first_50_mean_loss": 1.6901578945468645,
+      "k5_last_50_mean_loss": 0.27664729200303556,
+      "interpretation": "convergence diagnostics only; not quality or selection evidence"
+    },
+    "sha256": {
+      "scripts/v70_harness.py": "8c3483649b928048cfc45774c95764cc0360ecbfb5d560126b10b294eb696349",
+      "scripts/v70_schedule.py": "bf812a8ffa85113a68b60e573c20eaecfcf9a53cec80b78e0fe3024695e7f04a",
+      "scripts/v70_run.py": "93d52a1f382805d0bdb98de20f374fb9f4bcedfa3c718ba8a982f190b9ee7208",
+      "tests/test_v70_harness.py": "5ba28c4965e1e4e26c7661bbc6480e59a873dd435131bbecc79f20f997ade42f",
+      "checkpoint_k0_aggregate": "f3f1e91ce5beb30ddd8c4200b3365487511ac6c34dc04de125ac660d56c2dc88",
+      "checkpoint_k0_metadata": "315403dacf4ed7a3900a24322605e1a9812f52e54933bc32cc26084f4b9ae1de",
+      "checkpoint_k0_config": "9f68052c645602b88a3452048dd6e59add015a4e37114ba1bf83bd785057fed5",
+      "checkpoint_k0_loss_log": "0915a268f8da61e3fab5592ff18479209c5774ee337020d9b48ea88ca548efb1",
+      "checkpoint_k5_aggregate": "04fe4dcb3c70f0ef75f0cdfbf1f99164a90ab54df0833cb4b14cc56bd723ba87",
+      "checkpoint_k5_metadata": "f2d218b6a6692442bc590bc66c96030426ad8e9aab93ba28d14c3ae51ae276f0",
+      "checkpoint_k5_config": "9f68052c645602b88a3452048dd6e59add015a4e37114ba1bf83bd785057fed5",
+      "checkpoint_k5_loss_log": "ff04ebdf63391ef9ee92b4dd84742a2fed19e9a5b040c2a6893e038a0fdf6661",
+      "eval_smoke_k0": "402dbdb5f193558d0c4ea351d8306ca7fbde633fd8fb295c84b1540c744f8413",
+      "eval_smoke_k5": "1e58794bb36d40965273a0749f27ed66aa443e81843e53bc34c11fb911a73fe1"
+    },
+    "checkpoint_hash_rule": "sha256 of JSON mapping every checkpoint-relative file path to its SHA-256, with sorted keys and default JSON separators"
+  },
+  "pre_confirmation_amendment_3": {
+    "created_utc": "2026-09-11T12:25:48Z",
+    "timing": "after development evaluation and selection, before opening any confirmation data or running confirmation",
+    "confirmation_data_opened": false,
+    "confirmation_run": false,
+    "protocol_changed": false,
+    "unchanged": ["treatment", "data", "filtering", "gates", "bootstrap", "selection_rule", "confirmation_protocol"],
+    "development_validation": {
+      "record_count_per_arm": 100,
+      "same_record_ids_and_order": true,
+      "b_c_generated_ids_identical_every_row": true,
+      "c_reopened_persisted_store": true,
+      "c_hit_only": true,
+      "c_encode_on_miss": "fail_closed",
+      "c_entry_count_and_keys_unchanged": true,
+      "b_c_kv_equal_after_detached_cpu_normalization": true,
+      "all_c_b_and_c_d_gates_pass": true
+    },
+    "selection_rule": "lexicographically maximize persisted C exact match, then persisted C token F1, among k0 and k5, only after C is verified as a true reopened persisted-store hit and C-B persistence sanity passes",
+    "selection_values": {
+      "k0": {"c_em": 0.54, "c_f1": 0.7011170919723552},
+      "k5": {"c_em": 0.54, "c_f1": 0.7053563956368835}
+    },
+    "selected_arm": "k5",
+    "selected_checkpoint": {
+      "path": "results/v70_arms_valid_seed47/checkpoint_k5",
+      "aggregate_sha256": "04fe4dcb3c70f0ef75f0cdfbf1f99164a90ab54df0833cb4b14cc56bd723ba87",
+      "config_sha256": "9f68052c645602b88a3452048dd6e59add015a4e37114ba1bf83bd785057fed5",
+      "metadata_sha256": "f2d218b6a6692442bc590bc66c96030426ad8e9aab93ba28d14c3ae51ae276f0"
+    },
+    "development_artifacts": {
+      "k0": {"path": "results/v70_dev_k0.json", "sha256": "381db1e15cb711b7574e1c4d3b15812c074ea5863b78b0f9a946ee5144824ba5"},
+      "k5": {"path": "results/v70_dev_k5.json", "sha256": "73060dfe0caf62ef6963109e2c8663cf6a025ca195430f0c901faaf18eac6936"}
+    },
+    "selection_artifacts": {
+      "json": {"path": "results/v70_dev_selection.json", "sha256": "0b10dba778ea2413a98da44a80201a9a477903a1caac94aac8c926c5e41d614a"},
+      "markdown": {"path": "results/v70_dev_selection.md", "sha256": "bcbf67833d3b228b959941d2cc8927b8fcf6191094df85a9009c3b8e14a336c1"}
+    }
+  },
+  "data": {
+    "train": {"path": "experiments/v62_split_manifest.json", "split": "train", "count": 800, "sha256": "a3b1f5b6b1fcd9e099969b62d7ee2922c1e2e1e62397d9bbd4c1c6b42630bcbb"},
+    "development": {"path": "experiments/v67_fresh_dev_split.json", "count": 100, "sha256": "9f5975606844e805afbf6449b5b03d020762e3adef0dd5862a032318291544ac"},
+    "confirmation": {"path": "experiments/v70_confirmation300.json", "count": 300, "id_list_sha256": "ba7263ae886d929edb63595bfb693e1579269c1814969dffb934d55cf13051d1"},
+    "original_confirmation_subset": {"positions": "1-100", "count": 100, "id_list_sha256": "529f0109eefbf2ef42ede00be146d95cf19876e35859bc1358fbceb1b1bf04d7"}
+  },
+  "selection_and_analysis": {
+    "development_selection": "lexicographically maximize persisted C exact match, then persisted C token F1, among k0 and k5, only after C is verified as a true reopened persisted-store hit and C-B persistence sanity passes",
+    "confirmation_is_selection_blind": true,
+    "primary_gates": ["C-B", "C-D"],
+    "gate_metrics": ["exact_match", "token_f1"],
+    "noninferiority_margin": -0.02,
+    "pass_rule": "both EM and F1 paired 95% CI lower bounds are >= -0.02 for both C-B and C-D",
+    "bootstrap": {"method": "paired_percentile_mean_delta", "resamples": 10000, "seed": 47},
+    "diagnostic_only": ["A", "B"],
+    "v68_policy": "do not use V68 confirmation labels or predictions for selection; report the divergent population post hoc only"
+  },
+  "connectivity_smoke": {
+    "role": "infrastructure_validation_not_quality_selection",
+    "result": "results/v70_harness_smoke_20260911T085908Z/result.jsonl",
+    "result_sha256": "2f0c564b2c4fa56c21a16ec58f360043f58c56fc9eb4ac337ecddf3afe1d2ea2",
+    "manifest": "results/v70_harness_smoke_20260911T085908Z/manifest.json",
+    "manifest_sha256": "4a01ded0bbd205250b3ac9333d8158b4162aedcceab9718ced6c4658d40b66df",
+    "all_15_assertions_passed": true,
+    "k0_k5_logit_max_abs_delta": 3.5703125,
+    "independent_monolithic_deltas": {"k0": 1.25, "k5": 1.75},
+    "peak_gpu_memory_gib": 49.718,
+    "smoke_source_sha256": {
+      "scripts/v70_harness.py": "bd777f8cd64dd01d2a7f603a533fad9fa3638d488937bdf38577544f842ae55e",
+      "scripts/v70_schedule.py": "bf812a8ffa85113a68b60e573c20eaecfcf9a53cec80b78e0fe3024695e7f04a",
+      "scripts/v70_run.py": "b0687e9cccd6926bb3a2dae6961780a59a724ddd2c450fa73e238878f9bb67ad",
+      "tests/test_v70_harness.py": "35c968fefbb24ec46c6178df8975e27278fbd09bfa19115e8fbe0128b250f710"
+    }
+  },
+  "amendment_3_dev_selection": {
+    "created_utc": "2026-09-11T14:55:00Z",
+    "selected_arm": "k5",
+    "selection_rule": "lexicographically maximize persisted C EM, then C F1",
+    "C_em_k0": 0.54,
+    "C_f1_k0": 0.7011170919723552,
+    "C_em_k5": 0.54,
+    "C_f1_k5": 0.7053563956368835,
+    "cb_exact_rows_both_arms": 100,
+    "selected_checkpoint": {
+      "path": "results/v70_arms_valid_seed47/checkpoint_k5",
+      "aggregate_sha256": "04fe4dcb3c70f0ef75f0cdfbf1f99164a90ab54df0833cb4b14cc56bd723ba87",
+      "config_sha256": "9f68052c645602b88a3452048dd6e59add015a4e37114ba1bf83bd785057fed5"
+    },
+    "artifacts": {
+      "selection": ["results/v70_dev_selection.json", "2481d71a88a6af2d0a7db6858933ab6b653b13b3f61382a6d2189dbc18cf4f85"],
+      "dev_k0": ["results/v70_dev_k0.json", "381db1e15cb711b7574e1c4d3b15812c074ea5863b78b0f9a946ee5144824ba5"],
+      "dev_k5": ["results/v70_dev_k5.json", "73060dfe0caf62ef6963109e2c8663cf6a025ca195430f0c901faaf18eac6936"]
+    },
+    "confirmation_opened": false,
+    "protocol_changes": "none"
+  },
+  "stop_rules": [
+    "20-step projected total exceeds 6h and the predeclared adjustment cannot satisfy the hard cap",
+    "NaN or any nonfinite loss, gradient, or trained weight",
+    "treatment disconnect or k0/k5 record/schedule mismatch",
+    "checkpoint restore metadata or weight mismatch",
+    "C is not a true reopened persisted-store hit",
+    "6h total GPU training cap"
+  ],
+  "commands": {
+    "next_20_step_smoke": "for arm in k0 k5; do CUDA_VISIBLE_DEVICES=0 python scripts/v70_run.py train --arm $arm --steps 20 --checkpoint-dir results/v70_20step_seed47/checkpoint_$arm --seed 47; done",
+    "next_dev_k0": "CUDA_VISIBLE_DEVICES=0 python scripts/v70_run.py evaluate --checkpoint results/v70_arms_valid_seed47/checkpoint_k0 --arm k0 --split dev --output results/v70_dev_k0.json --max-new-tokens 64",
+    "next_dev_k5": "CUDA_VISIBLE_DEVICES=0 python scripts/v70_run.py evaluate --checkpoint results/v70_arms_valid_seed47/checkpoint_k5 --arm k5 --split dev --output results/v70_dev_k5.json --max-new-tokens 64",
+    "tests": "pytest -q tests/test_v70_harness.py",
+    "ruff": "ruff check scripts/v70_run.py scripts/v70_harness.py scripts/v70_schedule.py tests/test_v70_harness.py",
+    "reproduce_confirmation_validation": "python -c \"import hashlib,json; from pathlib import Path; d=json.loads(Path('experiments/v70_confirmation300.json').read_text()); ids=d['confirmation']['record_ids']; assert len(ids)==len(set(ids))==300; assert hashlib.sha256('\\n'.join(sorted(ids)).encode()).hexdigest()==d['confirmation']['sha256']\"",
+    "rollback": "rm experiments/v70_confirmation300.json experiments/v70_preregistration.json experiments/v70_preregistration.md experiments/v70_SHA256SUMS; restore only scripts/v70_run.py and tests/test_v70_harness.py from their pre-V70-cycle copies"
+  }
+}

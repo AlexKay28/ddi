@@ -10,12 +10,38 @@
 # Schema: experiments/README.md + issue #81 YAML format section.
 
 kind: finetune
-model: Qwen/Qwen2.5-7B-Instruct
+# NO `model:` DEFAULT, DELIBERATELY. Every caller passes one -- the graph blocks run
+# `make finetune MODEL=...`, which becomes `--model` and overrides whatever is here. A
+# checked-in default is therefore never used by a real run, and is only ever read by a
+# human trying to learn what this config trains. It used to say
+# `Qwen/Qwen2.5-7B-Instruct`, which by 2026-08-07 was both wrong (the reference model is
+# Qwen3.5-4B) and dangerous (the 7B is the one that diverged to NaN). Omitting it makes a
+# direct `python -m ddi.run experiments/finetune.yaml` fail immediately with
+# "finetune: missing required key: 'model'" instead of silently training the wrong model.
 seed: 0
-datasets: [hotpot_qa, musique, kilt_nq, synthetic_qa]
-output_dir: results/checkpoints/Qwen__Qwen2.5-7B-Instruct__ddi_qf__seed0
+# kilt_nq is NOT in this list, and its absence is load-bearing. Its documents were
+# Wikipedia titles rather than passages (harness review R1), so the loader now raises
+# rather than fabricating them -- including on the cached path, because every existing
+# kilt_nq cache was written by the pre-review loader. Leaving it here therefore does not
+# produce a weak dataset, it aborts the whole run at the third dataset. Restoring it
+# needs the KILT knowledge-source join first.
+datasets: [hotpot_qa, musique, synthetic_qa]
+# Scratch by default, for the same reason. `output_dir` IS the checkpoint identity: the
+# finetune script does `rm -rf "$DEST_CKPT"` before training, so a default naming a real
+# checkpoint means one careless direct run destroys it. This previously defaulted to
+# `...__ddi_qf__seed0`, the legacy reference weights the ticket keeps as a fallback. Every
+# graph passes `--set output_dir=...`; nothing real should ever land on this path.
+output_dir: results/checkpoints/SCRATCH__pass_output_dir_via_SETS
 max_records: null       # null = full train split; set to e.g. 500 for a smoke test
 held_out_frac: 0.05
+# How many holdout records the epoch-0 / epoch-end perplexities actually score.
+# `held_out_frac` alone puts ~5.5k records here on the full mix, and those perplexities
+# run on RANK 0 ONLY, twice (student + teacher), while the other seven ranks sit at a
+# barrier -- 15-40 min of an 8-GPU allocation doing single-GPU work, repaid in full every
+# time YT restarts the job. 500 records is ample for a diagnostic perplexity; the headline
+# quality numbers come from the eval block, not from here. `null` restores the old
+# score-everything behaviour.
+holdout_eval_records: 500
 epochs: 1
 lr: 1.0e-5
 kl_temperature: 1.0

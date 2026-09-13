@@ -1,0 +1,122 @@
+{
+  "schema_version": "v66_boundary_prereg_v1",
+  "prereg_revision": 3,
+  "revision_1_json_sha256": "674578fb7d93a24cc56644e1d027d975be2093f610cee4457660d494c02e0b1a",
+  "amendments": [
+    "Amendment 1 (revision 2, before any timed data): arm-A positions sequential->restart after the preregistered smoke paused on a byte-identity failure; root cause = restart query block starts at max(doc_lengths) so the layouts are numerically different executions.",
+    "Amendment 2 (revision 3, at the L512_N10_H10_D8 identity pause, before further timed data): after diagnosing the divergence as bf16 reduction-order differences between the mathematically-equivalent joint-prefill and assembled-KV executions (identical positions/masks, identical fixed work), the sweep continues in record mode: per-cell identity verdicts recorded and reported, byte-identity claim scoped to cells where it holds. No grid/threshold/repeat/metric change."
+  ],
+  "ticket": "VIBEQUEUE-66",
+  "created_utc": "2026-09-10T00:00:00+00:00",
+  "frozen_before_any_timing": true,
+  "threshold_tuning_after_results_forbidden": true,
+  "motivation": {
+    "v59_unoptimized_crossover": "hit rates 0.616-0.733 at L=512, all-hit ~221 ms (unoptimized reuse)",
+    "v65_optimized_all_hit_ttft_ms": 62.3,
+    "v65_all_hit_over_monolithic_ttft": 0.4885,
+    "unknown": "where optimized reuse wins as a function of hit fraction h, document length L, decode budget"
+  },
+  "arms": {
+    "A_monolithic": {
+      "execution": "fresh encode+decode each request; shared SDPA model (canonical-on-sdpa execution, V64 audit qualifier (c)); mask build untimed (V65 arm-A convention); positions = build_positions(doc_lengths, query_len, 0, 'restart') per Amendment 1 (same-layout baseline; the V65 harness default sequential layout is a numerically different execution that diverges on some content — smoke-documented, no timed data affected)",
+      "ttft": "synchronized prefill model() wall = generate_ids(...)['prefill_ms']",
+      "wall": "synchronized wall around generate_ids(model, tokenizer, batch, 'ddi_qf', d, stop_on_eos=False)",
+      "decode": "fixed-work greedy, no EOS stop"
+    },
+    "B_optimized_reuse": {
+      "execution": "CanonicalCache(model, contract, DocCache store) V65-optimized path (2 GiB LRU, store-time validation markers, staged H2D); LRU-warm steady state",
+      "ttft": "synchronized wall of cache.request(docs, query_ids) with max_new_tokens=None (documents + assembly + query forward; V65 arm-C convention)",
+      "wall": "synchronized wall of cache.request(docs, query_ids, max_new_tokens=d, eos_token_id=None)",
+      "decode": "fixed-work greedy, eos_token_id=None",
+      "pre_state": "hit_count of the N documents pre-stored in the cell DocCache before the timed section; fresh docs re-encode every pass and their write-through entries are pruned untimed after every pass so the pre-state is exact"
+    },
+    "frozen_asymmetries": [
+      "arm-A TTFT excludes mask build, arm-B TTFT includes it (V65 convention behind the 2.05x anchor)",
+      "at fixed budget d the canonical decode loop performs d step forwards vs the monolithic d-1"
+    ]
+  },
+  "grid": {
+    "hit_fraction_nominal": [0.0, 0.25, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+    "hit_count_rule": "hit_count = min(N, max(0, floor(h*N + 0.5))) round-half-up; hit docs = first hit_count docs in request order; duplicate nominal h sharing a hit_count measured once and shared",
+    "doc_lengths": [128, 512],
+    "doc_length_conditional": {"l": 32, "gate": "runs only if elapsed wall < 105 min after both main L blocks complete"},
+    "n_docs": [2, 5, 10],
+    "decode_budgets_new_tokens": [1, 8, 16, 32, 64],
+    "decode_budget_1_label": "TTFT-only (max_new_tokens=1)"
+  },
+  "data": {
+    "role": "development_only",
+    "split_manifest": "experiments/v62_split_manifest.json",
+    "split_manifest_sha256": "5ad3761106ecaed967b28d21c3919fa1869ebf70bf0e178c1e773a14bf8ee098",
+    "dev_ids_source": "splits.development.record_ids (100 ids)",
+    "forbidden": ["confirmation arm (100 ids)", "v60_confirmation_24", "train arm", "every other eval set"],
+    "seed": 47,
+    "packing_rule": "paragraph pool = all info_contexts paragraphs of the 100 dev records in ascending record-id then paragraph order, tokenized add_special_tokens=False; per (L,N) a cursor from pool position 0 accumulates whole consecutive paragraphs token-level until >= L then truncates to exactly L; consumed paragraphs fully consumed (remainder discarded); cursor resets per (L,N) so sets nest across N",
+    "query_rule": "one fixed dev record picked by random.Random(47) over sorted dev ids; query = build_query_text(tokenizer, record), tokenized add_special_tokens=False",
+    "request_fixity": "request (documents + query, in order) fixed per (L,N) and byte-identical across arms; arm-A batch = same token streams with build_positions(doc_lengths, query_len, 0, 'restart') per Amendment 1 (inference.encode(layout='restart') semantics, unit-tested for parity)",
+    "amendment_1": "2026-09-10, before any timed sweep data: arm-A positions sequential->restart after the preregistered smoke cell paused on a byte-identity failure; root cause = restart query block starts at max(doc_lengths) so the layouts are numerically different executions; no grid/threshold/repeat/metric change; revision-1 json sha 674578fb7d93a24cc56644e1d027d975be2093f610cee4457660d494c02e0b1a preserved"
+  },
+  "protocol": {
+    "warmups_per_cell_per_arm": 3,
+    "timed_repeats_per_cell_per_arm": 15,
+    "min_timed_repeats_under_cap_pressure": 10,
+    "order": "interleaved by repeat index: warmups (A,B) x3 then timed A_i,B_i for i=1..15; decode budget order within unit: TTFT/d=1 first, then 8, 16, 32, 64",
+    "fresh_canonical_cache_per_unit": true,
+    "store_hygiene": "store file set verified against expected hit keys before and after every timed section; untimed prune of fresh write-through entries after every B pass",
+    "prereg_shrink_rule": "if measured pace projects the remaining grid past the 3 h cap: timed repeats of remaining units 15->10 (floor 10), then drop L=32; the h grid is never shrunk; every change recorded as a deviation at run time",
+    "cap_enforcement": "runner refuses to start a new (L,N,hit_count) unit after 165 min elapsed; hard cap 180 min",
+    "smoke_allowance": "one mechanics-validation smoke cell (L=128, N=2, hit_count=2, d=8, 2 repeats) may run before the sweep; timings discarded, not reported"
+  },
+  "statistics": {
+    "point": "median of the 15 timed values per arm per cell",
+    "ci": "paired percentile bootstrap 95% CI, 10000 resamples, seed 47, resampling repeat-index pairs",
+    "ratio": "A/B ratio of medians (speedup; >1 means reuse faster); same estimator as scripts/run_v65_benchmark.paired_ratio_bootstrap"
+  },
+  "materiality_rule": {
+    "win": "A/B ratio 95% CI lower bound > 1.05",
+    "lose": "A/B ratio 95% CI upper bound < 1/1.05",
+    "tie": "otherwise",
+    "applies_to": ["wall", "ttft"],
+    "no_post_hoc_tuning": true
+  },
+  "identity_checks": {
+    "rule": "per cell per repeat: arm-A and arm-B generated token id sequences byte-identical (covers documents served from cache)",
+    "on_divergence": "pause the sweep and diagnose (original rule; fired at L512_N10_H10_D8). Amendment 2: after diagnosis the sweep continues in record mode -- per-repeat verdicts recorded per cell, divergent cells flagged identity_divergent, byte-identity claim scoped in the final report; never averaged away",
+    "amendment_2_diagnosis": "bf16 reduction-order divergence between joint monolithic prefill and per-doc encode + assembled-KV query forward; mathematically equivalent, identical fixed work, timing unaffected"
+  },
+  "metrics": {
+    "ttft": "arm A: synchronized prefill model() wall (prefill_ms); arm B: synchronized wall of request(max_new_tokens=None); measured once per (L,N,hit_count), reported for every decode budget",
+    "wall": "synchronized wall around the whole fixed-work greedy arm call (d new tokens; includes mask build / assembly)",
+    "prewarming": "untimed per-(L,N) hit-store encode wall, reported separately from steady-state statistics"
+  },
+  "cost": {
+    "nominal_arm_cells": "8 h x 2-3 L x 3 N x 5 budgets x 2 arms = 480 (720 with L=32)",
+    "measured_units": "16 (L,N,h) units per L x 5 budgets x 2 arms; ~7700 timed+warmup passes",
+    "per_pass_estimates_s": {"monolithic_prefill": "0.03-0.6", "reuse_ttft": "0.02-0.25", "cold_canonical": "0.05-1.2", "decode_step": "0.024-0.026"},
+    "estimated_total_hours": "1.5-2.2",
+    "hard_cap_hours": 3,
+    "sources": ["results/v65_benchmark_20260910T101710Z", "results/v65_combined_20260910T102918Z", "results/v61_timing_20260910T071010Z", "V59 addendum TPOT"]
+  },
+  "infeasible_cell_rule": "mark status=infeasible with exception text in per-cell summary and crossover table; continue; torch.cuda.empty_cache() before next unit",
+  "checkpointing": {
+    "output_dir": "results/v66_boundary_<UTC>",
+    "append_only_log": "progress.jsonl (one line per completed unit-cell)",
+    "raw": "raw_repeats.jsonl (one line per timed pass)",
+    "restart": "skip unit-cells already status=ok in progress.jsonl (unit granularity otherwise)"
+  },
+  "analysis_plan": {
+    "crossover": "per (L, decode budget): smallest nominal h in the frozen grid whose wall verdict is win; same for TTFT per (L) (TTFT is decode-budget-independent and repeated per budget row); 'none in grid' if no cell wins",
+    "figures": "median wall speedup A/B vs h with bootstrap-CI bands and win/tie/lose markers; hlines at 1.0, 1.05, 1/1.05; same for TTFT; PNG+PDF",
+    "deliverables": ["crossover_table.md", "crossover_figure.png", "crossover_figure.pdf", "crossover_figure_ttft.png", "crossover_figure_ttft.pdf", "summary.json", "README.md", "scoping_sentence.md", "t9_followup_fragment.tex", "t9_followup_evidence_fragment.json"]
+  },
+  "pins": {
+    "checkpoint": "results/checkpoints/Qwen__Qwen2.5-7B-Instruct__ddi_qf__8L_restart",
+    "checkpoint_sha256": "00df4c47d67660cab8292da313ea133290b0bb320437290d725cd149c3d31de9",
+    "bootstrap_seed": 47,
+    "bootstrap_iterations": 10000,
+    "ci_level": 0.95,
+    "runner": "scripts/run_v66_boundary.py",
+    "prereg_md_sha256": "recorded in the sweep manifest (this file cannot contain its own digest)",
+    "note": "prereg_md_sha256 of experiments/v66_boundary_preregistration.md and sha256 of this JSON are pinned in the run manifest before the model loads"
+  }
+}

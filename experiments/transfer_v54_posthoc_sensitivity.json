@@ -1,0 +1,5163 @@
+{
+  "analysis": "post_hoc_paired_example_resampling_sensitivity",
+  "architecture_contrasts": [
+    {
+      "dataset": "hotpot_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "normalized_remaining_gap",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": 0.04826990642208029,
+      "metric": "em",
+      "posthoc_paired_ci95": [
+        -0.13050778748265224,
+        0.2320408908371956
+      ],
+      "seed_values": [
+        0.22159090909090917,
+        -0.0820512820512822,
+        0.005270092226613898
+      ]
+    },
+    {
+      "dataset": "hotpot_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "ddi_training_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": 0.13,
+      "metric": "em",
+      "posthoc_paired_ci95": [
+        0.07000000000000003,
+        0.19
+      ],
+      "seed_values": [
+        0.17000000000000004,
+        0.09999999999999998,
+        0.12
+      ]
+    },
+    {
+      "dataset": "hotpot_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "full_path_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": 0.02666666666666669,
+      "metric": "em",
+      "posthoc_paired_ci95": [
+        -0.023333333333333317,
+        0.07333333333333338
+      ],
+      "seed_values": [
+        -0.039999999999999925,
+        0.08000000000000002,
+        0.03999999999999998
+      ]
+    },
+    {
+      "dataset": "hotpot_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "full_ddi_gap_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": -0.10333333333333332,
+      "metric": "em",
+      "posthoc_paired_ci95": [
+        -0.18333333333333338,
+        -0.023333333333333317
+      ],
+      "seed_values": [
+        -0.20999999999999996,
+        -0.019999999999999962,
+        -0.08000000000000002
+      ]
+    },
+    {
+      "dataset": "hotpot_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "blind_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": -0.07666666666666666,
+      "metric": "em",
+      "posthoc_paired_ci95": [
+        -0.12333333333333332,
+        -0.030000000000000006
+      ],
+      "seed_values": [
+        -0.06999999999999999,
+        -0.07999999999999999,
+        -0.08000000000000002
+      ]
+    },
+    {
+      "dataset": "hotpot_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "normalized_remaining_gap",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": 0.054141787148339726,
+      "metric": "f1",
+      "posthoc_paired_ci95": [
+        -0.08106249819442474,
+        0.19169309600131898
+      ],
+      "seed_values": [
+        0.211935586886964,
+        -0.029802021987185734,
+        -0.0197082034547591
+      ]
+    },
+    {
+      "dataset": "hotpot_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "ddi_training_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": 0.13472798585229886,
+      "metric": "f1",
+      "posthoc_paired_ci95": [
+        0.07603350287965568,
+        0.19511260351050783
+      ],
+      "seed_values": [
+        0.1803274506113381,
+        0.11165877295329868,
+        0.1121977339922598
+      ]
+    },
+    {
+      "dataset": "hotpot_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "full_path_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": 0.006577932198520468,
+      "metric": "f1",
+      "posthoc_paired_ci95": [
+        -0.03224503031826558,
+        0.04540959165017986
+      ],
+      "seed_values": [
+        -0.03308061383061378,
+        0.030887651237651248,
+        0.021926759188523937
+      ]
+    },
+    {
+      "dataset": "hotpot_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "full_ddi_gap_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": -0.12815005365377838,
+      "metric": "f1",
+      "posthoc_paired_ci95": [
+        -0.20319077713792896,
+        -0.055159564845070494
+      ],
+      "seed_values": [
+        -0.21340806444195187,
+        -0.08077112171564743,
+        -0.09027097480373586
+      ]
+    },
+    {
+      "dataset": "hotpot_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "blind_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": -0.10375347718809504,
+      "metric": "f1",
+      "posthoc_paired_ci95": [
+        -0.15345846925499562,
+        -0.05432710145713835
+      ],
+      "seed_values": [
+        -0.10427602434134273,
+        -0.10374773333984905,
+        -0.10323667388309332
+      ]
+    },
+    {
+      "dataset": "hotpot_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "normalized_remaining_gap",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": -0.021133628276485423,
+      "metric": "presence",
+      "posthoc_paired_ci95": [
+        -0.20258190409457907,
+        0.15482029845927567
+      ],
+      "seed_values": [
+        0.14141414141414133,
+        -0.18985776128633258,
+        -0.014957264957265015
+      ]
+    },
+    {
+      "dataset": "hotpot_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "ddi_training_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": 0.09999999999999998,
+      "metric": "presence",
+      "posthoc_paired_ci95": [
+        0.04333333333333328,
+        0.16
+      ],
+      "seed_values": [
+        0.13999999999999996,
+        0.04999999999999999,
+        0.10999999999999999
+      ]
+    },
+    {
+      "dataset": "hotpot_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "full_path_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": 0.006666666666666636,
+      "metric": "presence",
+      "posthoc_paired_ci95": [
+        -0.043333333333333335,
+        0.05666666666666659
+      ],
+      "seed_values": [
+        -0.06000000000000005,
+        0.06999999999999995,
+        0.010000000000000009
+      ]
+    },
+    {
+      "dataset": "hotpot_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "full_ddi_gap_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": -0.09333333333333334,
+      "metric": "presence",
+      "posthoc_paired_ci95": [
+        -0.17666666666666667,
+        -0.009999999999999953
+      ],
+      "seed_values": [
+        -0.2,
+        0.019999999999999962,
+        -0.09999999999999998
+      ]
+    },
+    {
+      "dataset": "hotpot_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "blind_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": -0.11666666666666668,
+      "metric": "presence",
+      "posthoc_paired_ci95": [
+        -0.16999999999999998,
+        -0.06333333333333334
+      ],
+      "seed_values": [
+        -0.12000000000000002,
+        -0.14,
+        -0.09
+      ]
+    },
+    {
+      "dataset": "hotpot_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "normalized_remaining_gap",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": 0.016329707606709636,
+      "metric": "loss",
+      "posthoc_paired_ci95": [
+        -0.039070013238823524,
+        0.07419193244444856
+      ],
+      "seed_values": [
+        0.043154615141708375,
+        -0.023189455760161293,
+        0.029023963438581823
+      ]
+    },
+    {
+      "dataset": "hotpot_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "ddi_training_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": 0.9341910004615784,
+      "metric": "loss",
+      "posthoc_paired_ci95": [
+        0.785927578131358,
+        1.087176412800948
+      ],
+      "seed_values": [
+        0.895302267074585,
+        0.9820464897155762,
+        0.925224244594574
+      ]
+    },
+    {
+      "dataset": "hotpot_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "full_path_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": 0.6523468815349042,
+      "metric": "loss",
+      "posthoc_paired_ci95": [
+        0.5242413545339368,
+        0.7869579289198543
+      ],
+      "seed_values": [
+        0.4997131018340587,
+        0.7060779212601482,
+        0.7512496215105057
+      ]
+    },
+    {
+      "dataset": "hotpot_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "full_ddi_gap_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": -0.2818441189266742,
+      "metric": "loss",
+      "posthoc_paired_ci95": [
+        -0.4260283074785644,
+        -0.1359562139961247
+      ],
+      "seed_values": [
+        -0.39558916524052634,
+        -0.27596856845542794,
+        -0.1739746230840683
+      ]
+    },
+    {
+      "dataset": "hotpot_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "blind_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": -0.13919641892115267,
+      "metric": "loss",
+      "posthoc_paired_ci95": [
+        -0.25780143598715455,
+        -0.02209276249011365
+      ],
+      "seed_values": [
+        -0.16745094776153557,
+        -0.09173458099365206,
+        -0.1584037280082704
+      ]
+    },
+    {
+      "dataset": "musique",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "normalized_remaining_gap",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": 0.08332615097320983,
+      "metric": "em",
+      "posthoc_paired_ci95": [
+        -0.2099663698370594,
+        0.35709985225687624
+      ],
+      "seed_values": [
+        0.11025641025641031,
+        0.2384615384615385,
+        -0.09873949579831931
+      ]
+    },
+    {
+      "dataset": "musique",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "ddi_training_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": 0.03333333333333334,
+      "metric": "em",
+      "posthoc_paired_ci95": [
+        -0.009999999999999998,
+        0.0767499999999988
+      ],
+      "seed_values": [
+        0.06000000000000001,
+        0.04000000000000001,
+        0.0
+      ]
+    },
+    {
+      "dataset": "musique",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "full_path_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": -0.053333333333333344,
+      "metric": "em",
+      "posthoc_paired_ci95": [
+        -0.10333333333333333,
+        -0.006666666666666645
+      ],
+      "seed_values": [
+        -0.07,
+        -0.09,
+        -2.7755575615628914e-17
+      ]
+    },
+    {
+      "dataset": "musique",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "full_ddi_gap_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": -0.08666666666666668,
+      "metric": "em",
+      "posthoc_paired_ci95": [
+        -0.15333333333333335,
+        -0.023333333333333314
+      ],
+      "seed_values": [
+        -0.13000000000000003,
+        -0.12999999999999998,
+        -2.7755575615628914e-17
+      ]
+    },
+    {
+      "dataset": "musique",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "blind_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": 0.020000000000000004,
+      "metric": "em",
+      "posthoc_paired_ci95": [
+        0.0,
+        0.04
+      ],
+      "seed_values": [
+        0.020000000000000004,
+        0.0,
+        0.04000000000000001
+      ]
+    },
+    {
+      "dataset": "musique",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "normalized_remaining_gap",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": -0.02802328151439352,
+      "metric": "f1",
+      "posthoc_paired_ci95": [
+        -0.2841039437522951,
+        0.1947091149113058
+      ],
+      "seed_values": [
+        0.009521197314703467,
+        0.08539211208926012,
+        -0.17898315394714415
+      ]
+    },
+    {
+      "dataset": "musique",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "ddi_training_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": 0.04241329931127982,
+      "metric": "f1",
+      "posthoc_paired_ci95": [
+        -0.001406558948097541,
+        0.08766415230537883
+      ],
+      "seed_values": [
+        0.057542277529776226,
+        0.043827219077219065,
+        0.025870401326844178
+      ]
+    },
+    {
+      "dataset": "musique",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "full_path_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": -0.03496274991589495,
+      "metric": "f1",
+      "posthoc_paired_ci95": [
+        -0.0798781752458662,
+        0.009202719115323403
+      ],
+      "seed_values": [
+        -0.040202014644890094,
+        -0.08856132756132751,
+        0.023875092458532754
+      ]
+    },
+    {
+      "dataset": "musique",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "full_ddi_gap_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": -0.07737604922717477,
+      "metric": "f1",
+      "posthoc_paired_ci95": [
+        -0.137875224223548,
+        -0.01854843478383902
+      ],
+      "seed_values": [
+        -0.09774429217466632,
+        -0.13238854663854657,
+        -0.001995308868311424
+      ]
+    },
+    {
+      "dataset": "musique",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "blind_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": 0.007158440218192541,
+      "metric": "f1",
+      "posthoc_paired_ci95": [
+        -0.012819939800481598,
+        0.027565604575163397
+      ],
+      "seed_values": [
+        1.3725490196082532e-05,
+        -0.007874883286647993,
+        0.029336478451029532
+      ]
+    },
+    {
+      "dataset": "musique",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "normalized_remaining_gap",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": -0.01782246427407715,
+      "metric": "presence",
+      "posthoc_paired_ci95": [
+        -0.3023624751803122,
+        0.23269351508088962
+      ],
+      "seed_values": [
+        0.009523809523809712,
+        0.10064516129032242,
+        -0.16363636363636358
+      ]
+    },
+    {
+      "dataset": "musique",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "ddi_training_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": 0.04333333333333333,
+      "metric": "presence",
+      "posthoc_paired_ci95": [
+        -0.003333333333333334,
+        0.09
+      ],
+      "seed_values": [
+        0.08,
+        0.029999999999999985,
+        0.020000000000000004
+      ]
+    },
+    {
+      "dataset": "musique",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "full_path_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": -0.013333333333333345,
+      "metric": "presence",
+      "posthoc_paired_ci95": [
+        -0.06666666666666668,
+        0.04
+      ],
+      "seed_values": [
+        -0.010000000000000064,
+        -0.06,
+        0.030000000000000027
+      ]
+    },
+    {
+      "dataset": "musique",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "full_ddi_gap_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": -0.056666666666666664,
+      "metric": "presence",
+      "posthoc_paired_ci95": [
+        -0.12666666666666668,
+        0.01666666666666665
+      ],
+      "seed_values": [
+        -0.09000000000000005,
+        -0.08999999999999997,
+        0.010000000000000037
+      ]
+    },
+    {
+      "dataset": "musique",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "blind_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": 0.026666666666666665,
+      "metric": "presence",
+      "posthoc_paired_ci95": [
+        0.0066666666666666645,
+        0.05
+      ],
+      "seed_values": [
+        0.03,
+        0.009999999999999995,
+        0.04
+      ]
+    },
+    {
+      "dataset": "musique",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "normalized_remaining_gap",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": -0.003340621528059214,
+      "metric": "loss",
+      "posthoc_paired_ci95": [
+        -0.07995405542108446,
+        0.09171505420902545
+      ],
+      "seed_values": [
+        0.05367574333938674,
+        -0.010367697551637356,
+        -0.053329910371927025
+      ]
+    },
+    {
+      "dataset": "musique",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "ddi_training_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": 1.282640329996745,
+      "metric": "loss",
+      "posthoc_paired_ci95": [
+        1.1064162635803223,
+        1.4661769523620607
+      ],
+      "seed_values": [
+        1.2772171020507814,
+        1.360183868408203,
+        1.2105200195312504
+      ]
+    },
+    {
+      "dataset": "musique",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "full_path_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": 0.8727362887064617,
+      "metric": "loss",
+      "posthoc_paired_ci95": [
+        0.7155252489447596,
+        1.0353550526301063
+      ],
+      "seed_values": [
+        0.9214262413978578,
+        0.9068301725387575,
+        0.7899524521827697
+      ]
+    },
+    {
+      "dataset": "musique",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "full_ddi_gap_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": -0.4099040412902833,
+      "metric": "loss",
+      "posthoc_paired_ci95": [
+        -0.5944424184362095,
+        -0.23257659963766766
+      ],
+      "seed_values": [
+        -0.35579086065292365,
+        -0.4533536958694455,
+        -0.4205675673484808
+      ]
+    },
+    {
+      "dataset": "musique",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "blind_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "mean": -0.11724280039469326,
+      "metric": "loss",
+      "posthoc_paired_ci95": [
+        -0.25642456054687524,
+        0.01649869346618656
+      ],
+      "seed_values": [
+        -0.14115432739257727,
+        -0.031308937072753285,
+        -0.17926513671874922
+      ]
+    },
+    {
+      "dataset": "synthetic_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "normalized_remaining_gap",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "mean": 0.0,
+      "metric": "em",
+      "posthoc_paired_ci95": [
+        0.0,
+        0.0
+      ],
+      "seed_values": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "dataset": "synthetic_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "ddi_training_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "mean": 0.0,
+      "metric": "em",
+      "posthoc_paired_ci95": [
+        0.0,
+        0.0
+      ],
+      "seed_values": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "dataset": "synthetic_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "full_path_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "mean": 0.0,
+      "metric": "em",
+      "posthoc_paired_ci95": [
+        0.0,
+        0.0
+      ],
+      "seed_values": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "dataset": "synthetic_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "full_ddi_gap_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "mean": 0.0,
+      "metric": "em",
+      "posthoc_paired_ci95": [
+        0.0,
+        0.0
+      ],
+      "seed_values": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "dataset": "synthetic_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "blind_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "mean": 0.0,
+      "metric": "em",
+      "posthoc_paired_ci95": [
+        0.0,
+        0.0
+      ],
+      "seed_values": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "dataset": "synthetic_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "normalized_remaining_gap",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "mean": 0.0,
+      "metric": "f1",
+      "posthoc_paired_ci95": [
+        0.0,
+        0.0
+      ],
+      "seed_values": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "dataset": "synthetic_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "ddi_training_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "mean": 0.0,
+      "metric": "f1",
+      "posthoc_paired_ci95": [
+        0.0,
+        0.0
+      ],
+      "seed_values": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "dataset": "synthetic_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "full_path_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "mean": 0.0,
+      "metric": "f1",
+      "posthoc_paired_ci95": [
+        0.0,
+        0.0
+      ],
+      "seed_values": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "dataset": "synthetic_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "full_ddi_gap_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "mean": 0.0,
+      "metric": "f1",
+      "posthoc_paired_ci95": [
+        0.0,
+        0.0
+      ],
+      "seed_values": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "dataset": "synthetic_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "blind_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "mean": 0.0,
+      "metric": "f1",
+      "posthoc_paired_ci95": [
+        0.0,
+        0.0
+      ],
+      "seed_values": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "dataset": "synthetic_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "normalized_remaining_gap",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "mean": 0.0,
+      "metric": "presence",
+      "posthoc_paired_ci95": [
+        0.0,
+        0.0
+      ],
+      "seed_values": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "dataset": "synthetic_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "ddi_training_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "mean": 0.0,
+      "metric": "presence",
+      "posthoc_paired_ci95": [
+        0.0,
+        0.0
+      ],
+      "seed_values": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "dataset": "synthetic_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "full_path_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "mean": 0.0,
+      "metric": "presence",
+      "posthoc_paired_ci95": [
+        0.0,
+        0.0
+      ],
+      "seed_values": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "dataset": "synthetic_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "full_ddi_gap_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "mean": 0.0,
+      "metric": "presence",
+      "posthoc_paired_ci95": [
+        0.0,
+        0.0
+      ],
+      "seed_values": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "dataset": "synthetic_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "blind_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "mean": 0.0,
+      "metric": "presence",
+      "posthoc_paired_ci95": [
+        0.0,
+        0.0
+      ],
+      "seed_values": [
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "dataset": "synthetic_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "normalized_remaining_gap",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "mean": 0.005019411765187794,
+      "metric": "loss",
+      "posthoc_paired_ci95": [
+        0.002406164259880805,
+        0.008160001419160845
+      ],
+      "seed_values": [
+        0.0024636868128231626,
+        0.0060986747166661415,
+        0.006495873766074078
+      ]
+    },
+    {
+      "dataset": "synthetic_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "ddi_training_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "mean": -7.096823149671272e-05,
+      "metric": "loss",
+      "posthoc_paired_ci95": [
+        -0.0013609989529747204,
+        0.0013428021370782519
+      ],
+      "seed_values": [
+        0.0008031009230762706,
+        -0.0002697309479117404,
+        -0.0007462746696546684
+      ]
+    },
+    {
+      "dataset": "synthetic_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "full_path_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "mean": -0.0034727436199318614,
+      "metric": "loss",
+      "posthoc_paired_ci95": [
+        -0.004206904665916226,
+        -0.0028105007827010312
+      ],
+      "seed_values": [
+        -0.004292116092983632,
+        -0.002585182973416522,
+        -0.0035409317933954303
+      ]
+    },
+    {
+      "dataset": "synthetic_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "full_ddi_gap_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "mean": -0.0034017753884351483,
+      "metric": "loss",
+      "posthoc_paired_ci95": [
+        -0.004845485995125879,
+        -0.002037364748151353
+      ],
+      "seed_values": [
+        -0.005095217016059903,
+        -0.0023154520255047805,
+        -0.0027946571237407614
+      ]
+    },
+    {
+      "dataset": "synthetic_qa",
+      "difference_direction": "Qwen2.5-7B - Llama-3.1-8B",
+      "estimand": "blind_change",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "mean": 1.1509114583333333,
+      "metric": "loss",
+      "posthoc_paired_ci95": [
+        1.0749967447916666,
+        1.2289062499999999
+      ],
+      "seed_values": [
+        1.1734374999999997,
+        1.1453125,
+        1.133984375
+      ]
+    }
+  ],
+  "bootstrap": {
+    "repeats": 10000,
+    "seed": 54,
+    "unit": "paired record within fixed seed"
+  },
+  "cells": [
+    {
+      "aggregate": {
+        "blind_change": {
+          "mean": 0.10333333333333333,
+          "posthoc_paired_ci95": [
+            0.07,
+            0.1366666666666667
+          ],
+          "seed_values": [
+            0.11,
+            0.1,
+            0.1
+          ]
+        },
+        "ddi_training_change": {
+          "mean": 0.0,
+          "posthoc_paired_ci95": [
+            -0.046666666666666655,
+            0.04666666666666667
+          ],
+          "seed_values": [
+            -0.020000000000000018,
+            0.010000000000000009,
+            0.010000000000000009
+          ]
+        },
+        "full_ddi_gap_change": {
+          "mean": -0.053333333333333344,
+          "posthoc_paired_ci95": [
+            -0.11333333333333334,
+            0.003333333333333355
+          ],
+          "seed_values": [
+            -0.010000000000000009,
+            -0.08000000000000002,
+            -0.07
+          ]
+        },
+        "full_path_change": {
+          "mean": -0.053333333333333344,
+          "posthoc_paired_ci95": [
+            -0.08666666666666667,
+            -0.023333333333333334
+          ],
+          "seed_values": [
+            -0.030000000000000027,
+            -0.07,
+            -0.06
+          ]
+        },
+        "normalized_remaining_gap": {
+          "mean": 0.8062755481233742,
+          "posthoc_paired_ci95": [
+            0.6771540613100586,
+            0.9506694109267639
+          ],
+          "seed_values": [
+            0.6875,
+            0.9487179487179488,
+            0.782608695652174
+          ]
+        }
+      },
+      "architecture": "Llama-3.1-8B",
+      "dataset": "hotpot_qa",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "metric": "em",
+      "metric_orientation": "higher_is_better",
+      "seed_values": [
+        {
+          "base_blind": 0.02,
+          "base_ddi_qf": 0.34,
+          "base_full": 0.5,
+          "blind_change": 0.11,
+          "ddi_training_change": -0.020000000000000018,
+          "full_ddi_gap_change": -0.010000000000000009,
+          "full_path_change": -0.030000000000000027,
+          "headroom": 0.48,
+          "normalized_remaining_gap": 0.6875,
+          "tuned_blind": 0.13,
+          "tuned_ddi_qf": 0.32,
+          "tuned_full": 0.47
+        },
+        {
+          "base_blind": 0.03,
+          "base_ddi_qf": 0.32,
+          "base_full": 0.42,
+          "blind_change": 0.1,
+          "ddi_training_change": 0.010000000000000009,
+          "full_ddi_gap_change": -0.08000000000000002,
+          "full_path_change": -0.07,
+          "headroom": 0.39,
+          "normalized_remaining_gap": 0.9487179487179488,
+          "tuned_blind": 0.13,
+          "tuned_ddi_qf": 0.33,
+          "tuned_full": 0.35
+        },
+        {
+          "base_blind": 0.03,
+          "base_ddi_qf": 0.32,
+          "base_full": 0.49,
+          "blind_change": 0.1,
+          "ddi_training_change": 0.010000000000000009,
+          "full_ddi_gap_change": -0.07,
+          "full_path_change": -0.06,
+          "headroom": 0.45999999999999996,
+          "normalized_remaining_gap": 0.782608695652174,
+          "tuned_blind": 0.13,
+          "tuned_ddi_qf": 0.33,
+          "tuned_full": 0.43
+        }
+      ]
+    },
+    {
+      "aggregate": {
+        "blind_change": {
+          "mean": 0.026666666666666672,
+          "posthoc_paired_ci95": [
+            0.0,
+            0.053333333333333344
+          ],
+          "seed_values": [
+            0.04000000000000001,
+            0.020000000000000018,
+            0.01999999999999999
+          ]
+        },
+        "ddi_training_change": {
+          "mean": 0.13,
+          "posthoc_paired_ci95": [
+            0.09,
+            0.1733333333333333
+          ],
+          "seed_values": [
+            0.15000000000000002,
+            0.10999999999999999,
+            0.13
+          ]
+        },
+        "full_ddi_gap_change": {
+          "mean": -0.15666666666666665,
+          "posthoc_paired_ci95": [
+            -0.21000000000000002,
+            -0.10333333333333335
+          ],
+          "seed_values": [
+            -0.21999999999999997,
+            -0.09999999999999998,
+            -0.15000000000000002
+          ]
+        },
+        "full_path_change": {
+          "mean": -0.026666666666666655,
+          "posthoc_paired_ci95": [
+            -0.06666666666666667,
+            0.013333333333333327
+          ],
+          "seed_values": [
+            -0.06999999999999995,
+            0.010000000000000009,
+            -0.020000000000000018
+          ]
+        },
+        "normalized_remaining_gap": {
+          "mean": 0.8545454545454545,
+          "posthoc_paired_ci95": [
+            0.6876684650391546,
+            1.0343348639943066
+          ],
+          "seed_values": [
+            0.9090909090909092,
+            0.8666666666666666,
+            0.7878787878787878
+          ]
+        }
+      },
+      "architecture": "Qwen2.5-7B",
+      "dataset": "hotpot_qa",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "metric": "em",
+      "metric_orientation": "higher_is_better",
+      "seed_values": [
+        {
+          "base_blind": 0.13,
+          "base_ddi_qf": 0.31,
+          "base_full": 0.57,
+          "blind_change": 0.04000000000000001,
+          "ddi_training_change": 0.15000000000000002,
+          "full_ddi_gap_change": -0.21999999999999997,
+          "full_path_change": -0.06999999999999995,
+          "headroom": 0.43999999999999995,
+          "normalized_remaining_gap": 0.9090909090909092,
+          "tuned_blind": 0.17,
+          "tuned_ddi_qf": 0.46,
+          "tuned_full": 0.5
+        },
+        {
+          "base_blind": 0.15,
+          "base_ddi_qf": 0.31,
+          "base_full": 0.45,
+          "blind_change": 0.020000000000000018,
+          "ddi_training_change": 0.10999999999999999,
+          "full_ddi_gap_change": -0.09999999999999998,
+          "full_path_change": 0.010000000000000009,
+          "headroom": 0.30000000000000004,
+          "normalized_remaining_gap": 0.8666666666666666,
+          "tuned_blind": 0.17,
+          "tuned_ddi_qf": 0.42,
+          "tuned_full": 0.46
+        },
+        {
+          "base_blind": 0.13,
+          "base_ddi_qf": 0.24,
+          "base_full": 0.46,
+          "blind_change": 0.01999999999999999,
+          "ddi_training_change": 0.13,
+          "full_ddi_gap_change": -0.15000000000000002,
+          "full_path_change": -0.020000000000000018,
+          "headroom": 0.33,
+          "normalized_remaining_gap": 0.7878787878787878,
+          "tuned_blind": 0.15,
+          "tuned_ddi_qf": 0.37,
+          "tuned_full": 0.44
+        }
+      ]
+    },
+    {
+      "aggregate": {
+        "blind_change": {
+          "mean": 0.1450167827704543,
+          "posthoc_paired_ci95": [
+            0.10932380661072705,
+            0.18230929991327016
+          ],
+          "seed_values": [
+            0.1566023279397051,
+            0.15318665673529416,
+            0.12526136363636364
+          ]
+        },
+        "ddi_training_change": {
+          "mean": 1.2025012025000207e-05,
+          "posthoc_paired_ci95": [
+            -0.04279906204906205,
+            0.04290107022607022
+          ],
+          "seed_values": [
+            -0.00731529581529583,
+            0.00439105339105339,
+            0.002960317460317441
+          ]
+        },
+        "full_ddi_gap_change": {
+          "mean": -0.025435534835534863,
+          "posthoc_paired_ci95": [
+            -0.07789584942834944,
+            0.026166994116994104
+          ],
+          "seed_values": [
+            0.0025261405261404746,
+            -0.038375024975024985,
+            -0.04045772005772008
+          ]
+        },
+        "full_path_change": {
+          "mean": -0.025423509823509865,
+          "posthoc_paired_ci95": [
+            -0.051108767251267256,
+            -0.0009863883338883258
+          ],
+          "seed_values": [
+            -0.004789155289155356,
+            -0.033983971583971595,
+            -0.03749740259740264
+          ]
+        },
+        "normalized_remaining_gap": {
+          "mean": 0.7269740403059194,
+          "posthoc_paired_ci95": [
+            0.6351463109634284,
+            0.8210205175161265
+          ],
+          "seed_values": [
+            0.6474616540397736,
+            0.8214364071509276,
+            0.7120240597270568
+          ]
+        }
+      },
+      "architecture": "Llama-3.1-8B",
+      "dataset": "hotpot_qa",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "metric": "f1",
+      "metric_orientation": "higher_is_better",
+      "seed_values": [
+        {
+          "base_blind": 0.024714932126696832,
+          "base_ddi_qf": 0.44633333333333336,
+          "base_full": 0.672,
+          "blind_change": 0.1566023279397051,
+          "ddi_training_change": -0.00731529581529583,
+          "full_ddi_gap_change": 0.0025261405261404746,
+          "full_path_change": -0.004789155289155356,
+          "headroom": 0.6472850678733032,
+          "normalized_remaining_gap": 0.6474616540397736,
+          "tuned_blind": 0.18131726006640195,
+          "tuned_ddi_qf": 0.43901803751803753,
+          "tuned_full": 0.6672108447108447
+        },
+        {
+          "base_blind": 0.03353846153846154,
+          "base_ddi_qf": 0.4415021645021645,
+          "base_full": 0.5769021645021645,
+          "blind_change": 0.15318665673529416,
+          "ddi_training_change": 0.00439105339105339,
+          "full_ddi_gap_change": -0.038375024975024985,
+          "full_path_change": -0.033983971583971595,
+          "headroom": 0.543363702963703,
+          "normalized_remaining_gap": 0.8214364071509276,
+          "tuned_blind": 0.1867251182737557,
+          "tuned_ddi_qf": 0.4458932178932179,
+          "tuned_full": 0.5429181929181929
+        },
+        {
+          "base_blind": 0.03,
+          "base_ddi_qf": 0.4392005772005772,
+          "base_full": 0.6615212121212122,
+          "blind_change": 0.12526136363636364,
+          "ddi_training_change": 0.002960317460317441,
+          "full_ddi_gap_change": -0.04045772005772008,
+          "full_path_change": -0.03749740259740264,
+          "headroom": 0.6315212121212121,
+          "normalized_remaining_gap": 0.7120240597270568,
+          "tuned_blind": 0.15526136363636364,
+          "tuned_ddi_qf": 0.44216089466089464,
+          "tuned_full": 0.6240238095238095
+        }
+      ]
+    },
+    {
+      "aggregate": {
+        "blind_change": {
+          "mean": 0.04126330558235927,
+          "posthoc_paired_ci95": [
+            0.009899784438115662,
+            0.07244870969941301
+          ],
+          "seed_values": [
+            0.05232630359836238,
+            0.04943892339544512,
+            0.02202468975327032
+          ]
+        },
+        "ddi_training_change": {
+          "mean": 0.13474001086432386,
+          "posthoc_paired_ci95": [
+            0.09496968531962818,
+            0.17640030157967185
+          ],
+          "seed_values": [
+            0.17301215479604226,
+            0.11604982634435207,
+            0.11515805145257724
+          ]
+        },
+        "full_ddi_gap_change": {
+          "mean": -0.15358558848931325,
+          "posthoc_paired_ci95": [
+            -0.20472269734335768,
+            -0.10366558193870151
+          ],
+          "seed_values": [
+            -0.2108819239158114,
+            -0.11914614669067242,
+            -0.13072869486145594
+          ]
+        },
+        "full_path_change": {
+          "mean": -0.018845577624989396,
+          "posthoc_paired_ci95": [
+            -0.05249159151034146,
+            0.014816855883767667
+          ],
+          "seed_values": [
+            -0.03786976911976914,
+            -0.003096320346320347,
+            -0.015570643408878704
+          ]
+        },
+        "normalized_remaining_gap": {
+          "mean": 0.7811158274542591,
+          "posthoc_paired_ci95": [
+            0.6491709087454051,
+            0.9179379428815803
+          ],
+          "seed_values": [
+            0.8593972409267376,
+            0.7916343851637418,
+            0.6923158562722977
+          ]
+        }
+      },
+      "architecture": "Qwen2.5-7B",
+      "dataset": "hotpot_qa",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "metric": "f1",
+      "metric_orientation": "higher_is_better",
+      "seed_values": [
+        {
+          "base_blind": 0.25244795482295485,
+          "base_ddi_qf": 0.4257904677022324,
+          "base_full": 0.6995339105339106,
+          "blind_change": 0.05232630359836238,
+          "ddi_training_change": 0.17301215479604226,
+          "full_ddi_gap_change": -0.2108819239158114,
+          "full_path_change": -0.03786976911976914,
+          "headroom": 0.4470859557109557,
+          "normalized_remaining_gap": 0.8593972409267376,
+          "tuned_blind": 0.3047742584213172,
+          "tuned_ddi_qf": 0.5988026224982747,
+          "tuned_full": 0.6616641414141414
+        },
+        {
+          "base_blind": 0.24426742581090408,
+          "base_ddi_qf": 0.4272527961539226,
+          "base_full": 0.6259227994227994,
+          "blind_change": 0.04943892339544512,
+          "ddi_training_change": 0.11604982634435207,
+          "full_ddi_gap_change": -0.11914614669067242,
+          "full_path_change": -0.003096320346320347,
+          "headroom": 0.3816553736118953,
+          "normalized_remaining_gap": 0.7916343851637418,
+          "tuned_blind": 0.2937063492063492,
+          "tuned_ddi_qf": 0.5433026224982747,
+          "tuned_full": 0.622826479076479
+        },
+        {
+          "base_blind": 0.22705665047512874,
+          "base_ddi_qf": 0.37605726945839585,
+          "base_full": 0.6311053391053391,
+          "blind_change": 0.02202468975327032,
+          "ddi_training_change": 0.11515805145257724,
+          "full_ddi_gap_change": -0.13072869486145594,
+          "full_path_change": -0.015570643408878704,
+          "headroom": 0.4040486886302103,
+          "normalized_remaining_gap": 0.6923158562722977,
+          "tuned_blind": 0.24908134022839906,
+          "tuned_ddi_qf": 0.4912153209109731,
+          "tuned_full": 0.6155346956964604
+        }
+      ]
+    },
+    {
+      "aggregate": {
+        "blind_change": {
+          "mean": 0.15,
+          "posthoc_paired_ci95": [
+            0.11,
+            0.19
+          ],
+          "seed_values": [
+            0.17,
+            0.16,
+            0.12
+          ]
+        },
+        "ddi_training_change": {
+          "mean": 0.03666666666666666,
+          "posthoc_paired_ci95": [
+            -0.006666666666666672,
+            0.08
+          ],
+          "seed_values": [
+            0.010000000000000009,
+            0.06,
+            0.03999999999999998
+          ]
+        },
+        "full_ddi_gap_change": {
+          "mean": -0.03666666666666666,
+          "posthoc_paired_ci95": [
+            -0.09666666666666666,
+            0.023333333333333327
+          ],
+          "seed_values": [
+            0.010000000000000009,
+            -0.08000000000000002,
+            -0.03999999999999998
+          ]
+        },
+        "full_path_change": {
+          "mean": 0.0,
+          "posthoc_paired_ci95": [
+            -0.033333333333333326,
+            0.033333333333333326
+          ],
+          "seed_values": [
+            0.020000000000000018,
+            -0.020000000000000018,
+            0.0
+          ]
+        },
+        "normalized_remaining_gap": {
+          "mean": 0.6953760525189097,
+          "posthoc_paired_ci95": [
+            0.5796149425287357,
+            0.8175951742644288
+          ],
+          "seed_values": [
+            0.6363636363636365,
+            0.7959183673469388,
+            0.6538461538461537
+          ]
+        }
+      },
+      "architecture": "Llama-3.1-8B",
+      "dataset": "hotpot_qa",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "metric": "presence",
+      "metric_orientation": "higher_is_better",
+      "seed_values": [
+        {
+          "base_blind": 0.02,
+          "base_ddi_qf": 0.38,
+          "base_full": 0.57,
+          "blind_change": 0.17,
+          "ddi_training_change": 0.010000000000000009,
+          "full_ddi_gap_change": 0.010000000000000009,
+          "full_path_change": 0.020000000000000018,
+          "headroom": 0.5499999999999999,
+          "normalized_remaining_gap": 0.6363636363636365,
+          "tuned_blind": 0.19,
+          "tuned_ddi_qf": 0.39,
+          "tuned_full": 0.59
+        },
+        {
+          "base_blind": 0.03,
+          "base_ddi_qf": 0.34,
+          "base_full": 0.52,
+          "blind_change": 0.16,
+          "ddi_training_change": 0.06,
+          "full_ddi_gap_change": -0.08000000000000002,
+          "full_path_change": -0.020000000000000018,
+          "headroom": 0.49,
+          "normalized_remaining_gap": 0.7959183673469388,
+          "tuned_blind": 0.19,
+          "tuned_ddi_qf": 0.4,
+          "tuned_full": 0.5
+        },
+        {
+          "base_blind": 0.03,
+          "base_ddi_qf": 0.33,
+          "base_full": 0.55,
+          "blind_change": 0.12,
+          "ddi_training_change": 0.03999999999999998,
+          "full_ddi_gap_change": -0.03999999999999998,
+          "full_path_change": 0.0,
+          "headroom": 0.52,
+          "normalized_remaining_gap": 0.6538461538461537,
+          "tuned_blind": 0.15,
+          "tuned_ddi_qf": 0.37,
+          "tuned_full": 0.55
+        }
+      ]
+    },
+    {
+      "aggregate": {
+        "blind_change": {
+          "mean": 0.033333333333333326,
+          "posthoc_paired_ci95": [
+            0.0033333333333333175,
+            0.06666666666666667
+          ],
+          "seed_values": [
+            0.04999999999999999,
+            0.01999999999999999,
+            0.03
+          ]
+        },
+        "ddi_training_change": {
+          "mean": 0.13666666666666663,
+          "posthoc_paired_ci95": [
+            0.09333333333333334,
+            0.18333333333333332
+          ],
+          "seed_values": [
+            0.14999999999999997,
+            0.10999999999999999,
+            0.14999999999999997
+          ]
+        },
+        "full_ddi_gap_change": {
+          "mean": -0.13,
+          "posthoc_paired_ci95": [
+            -0.18999999999999997,
+            -0.0733333333333333
+          ],
+          "seed_values": [
+            -0.19,
+            -0.06000000000000005,
+            -0.13999999999999996
+          ]
+        },
+        "full_path_change": {
+          "mean": 0.006666666666666636,
+          "posthoc_paired_ci95": [
+            -0.033333333333333326,
+            0.04666666666666667
+          ],
+          "seed_values": [
+            -0.040000000000000036,
+            0.04999999999999993,
+            0.010000000000000009
+          ]
+        },
+        "normalized_remaining_gap": {
+          "mean": 0.6742424242424242,
+          "posthoc_paired_ci95": [
+            0.5036293927907097,
+            0.8423161764705881
+          ],
+          "seed_values": [
+            0.7777777777777778,
+            0.6060606060606062,
+            0.6388888888888887
+          ]
+        }
+      },
+      "architecture": "Qwen2.5-7B",
+      "dataset": "hotpot_qa",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "metric": "presence",
+      "metric_orientation": "higher_is_better",
+      "seed_values": [
+        {
+          "base_blind": 0.16,
+          "base_ddi_qf": 0.32,
+          "base_full": 0.61,
+          "blind_change": 0.04999999999999999,
+          "ddi_training_change": 0.14999999999999997,
+          "full_ddi_gap_change": -0.19,
+          "full_path_change": -0.040000000000000036,
+          "headroom": 0.44999999999999996,
+          "normalized_remaining_gap": 0.7777777777777778,
+          "tuned_blind": 0.21,
+          "tuned_ddi_qf": 0.47,
+          "tuned_full": 0.57
+        },
+        {
+          "base_blind": 0.19,
+          "base_ddi_qf": 0.33,
+          "base_full": 0.52,
+          "blind_change": 0.01999999999999999,
+          "ddi_training_change": 0.10999999999999999,
+          "full_ddi_gap_change": -0.06000000000000005,
+          "full_path_change": 0.04999999999999993,
+          "headroom": 0.33,
+          "normalized_remaining_gap": 0.6060606060606062,
+          "tuned_blind": 0.21,
+          "tuned_ddi_qf": 0.44,
+          "tuned_full": 0.57
+        },
+        {
+          "base_blind": 0.17,
+          "base_ddi_qf": 0.26,
+          "base_full": 0.53,
+          "blind_change": 0.03,
+          "ddi_training_change": 0.14999999999999997,
+          "full_ddi_gap_change": -0.13999999999999996,
+          "full_path_change": 0.010000000000000009,
+          "headroom": 0.36,
+          "normalized_remaining_gap": 0.6388888888888887,
+          "tuned_blind": 0.2,
+          "tuned_ddi_qf": 0.41,
+          "tuned_full": 0.54
+        }
+      ]
+    },
+    {
+      "aggregate": {
+        "blind_change": {
+          "mean": 0.6128434244791667,
+          "posthoc_paired_ci95": [
+            0.5333558146158854,
+            0.6938265482584636
+          ],
+          "seed_values": [
+            0.57916015625,
+            0.6336718750000001,
+            0.6256982421875001
+          ]
+        },
+        "ddi_training_change": {
+          "mean": 0.22466308593749998,
+          "posthoc_paired_ci95": [
+            0.18319582621256514,
+            0.2676666107177735
+          ],
+          "seed_values": [
+            0.21393615722656245,
+            0.21062561035156258,
+            0.24942749023437494
+          ]
+        },
+        "full_ddi_gap_change": {
+          "mean": -0.18704833666483558,
+          "posthoc_paired_ci95": [
+            -0.22508089129130046,
+            -0.151510420401891
+          ],
+          "seed_values": [
+            -0.1557684040069579,
+            -0.19640623092651377,
+            -0.2089703750610351
+          ]
+        },
+        "full_path_change": {
+          "mean": 0.037614749272664394,
+          "posthoc_paired_ci95": [
+            0.009654510021209727,
+            0.06610731355349218
+          ],
+          "seed_values": [
+            0.058167753219604545,
+            0.014219379425048806,
+            0.04045711517333983
+          ]
+        },
+        "normalized_remaining_gap": {
+          "mean": 0.8978442395231154,
+          "posthoc_paired_ci95": [
+            0.8645885269265371,
+            0.9316863580829411
+          ],
+          "seed_values": [
+            0.8790074445869436,
+            0.9103483756901509,
+            0.9041768982922518
+          ]
+        }
+      },
+      "architecture": "Llama-3.1-8B",
+      "dataset": "hotpot_qa",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "metric": "loss",
+      "metric_orientation": "lower_is_better",
+      "seed_values": [
+        {
+          "base_blind": -3.337694091796875,
+          "base_ddi_qf": -1.0443310546875,
+          "base_full": -0.5514475631713868,
+          "blind_change": 0.57916015625,
+          "ddi_training_change": 0.21393615722656245,
+          "full_ddi_gap_change": -0.1557684040069579,
+          "full_path_change": 0.058167753219604545,
+          "headroom": 2.786246528625488,
+          "normalized_remaining_gap": 0.8790074445869436,
+          "tuned_blind": -2.758533935546875,
+          "tuned_ddi_qf": -0.8303948974609375,
+          "tuned_full": -0.4932798099517822
+        },
+        {
+          "base_blind": -3.45416015625,
+          "base_ddi_qf": -1.1508074951171876,
+          "base_full": -0.7082235908508301,
+          "blind_change": 0.6336718750000001,
+          "ddi_training_change": 0.21062561035156258,
+          "full_ddi_gap_change": -0.19640623092651377,
+          "full_path_change": 0.014219379425048806,
+          "headroom": 2.7459365653991696,
+          "normalized_remaining_gap": 0.9103483756901509,
+          "tuned_blind": -2.82048828125,
+          "tuned_ddi_qf": -0.940181884765625,
+          "tuned_full": -0.6940042114257813
+        },
+        {
+          "base_blind": -3.68783203125,
+          "base_ddi_qf": -1.2325830078125,
+          "base_full": -0.7412632751464844,
+          "blind_change": 0.6256982421875001,
+          "ddi_training_change": 0.24942749023437494,
+          "full_ddi_gap_change": -0.2089703750610351,
+          "full_path_change": 0.04045711517333983,
+          "headroom": 2.946568756103516,
+          "normalized_remaining_gap": 0.9041768982922518,
+          "tuned_blind": -3.0621337890625,
+          "tuned_ddi_qf": -0.983155517578125,
+          "tuned_full": -0.7008061599731445
+        }
+      ]
+    },
+    {
+      "aggregate": {
+        "blind_change": {
+          "mean": 0.47364700555801403,
+          "posthoc_paired_ci95": [
+            0.3907074714899063,
+            0.5595920482873916
+          ],
+          "seed_values": [
+            0.4117092084884644,
+            0.541937294006348,
+            0.46729451417922974
+          ]
+        },
+        "ddi_training_change": {
+          "mean": 1.1588540863990784,
+          "posthoc_paired_ci95": [
+            0.9975903212428092,
+            1.3261043161153792
+          ],
+          "seed_values": [
+            1.1092384243011475,
+            1.1926721000671388,
+            1.174651734828949
+          ]
+        },
+        "full_ddi_gap_change": {
+          "mean": -0.46889245559150977,
+          "posthoc_paired_ci95": [
+            -0.6115973504000966,
+            -0.3244532537649697
+          ],
+          "seed_values": [
+            -0.5513575692474842,
+            -0.4723747993819417,
+            -0.3829449981451034
+          ]
+        },
+        "full_path_change": {
+          "mean": 0.6899616308075686,
+          "posthoc_paired_ci95": [
+            0.5578360371020001,
+            0.8283760207245746
+          ],
+          "seed_values": [
+            0.5578808550536632,
+            0.720297300685197,
+            0.7917067366838455
+          ]
+        },
+        "normalized_remaining_gap": {
+          "mean": 0.914173947129825,
+          "posthoc_paired_ci95": [
+            0.8667673609527663,
+            0.9673681326463602
+          ],
+          "seed_values": [
+            0.922162059728652,
+            0.8871589199299896,
+            0.9332008617308336
+          ]
+        }
+      },
+      "architecture": "Qwen2.5-7B",
+      "dataset": "hotpot_qa",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "metric": "loss",
+      "metric_orientation": "lower_is_better",
+      "seed_values": [
+        {
+          "base_blind": -2.6349948835372925,
+          "base_ddi_qf": -1.84725905418396,
+          "base_full": -1.1828711657226085,
+          "blind_change": 0.4117092084884644,
+          "ddi_training_change": 1.1092384243011475,
+          "full_ddi_gap_change": -0.5513575692474842,
+          "full_path_change": 0.5578808550536632,
+          "headroom": 1.452123717814684,
+          "normalized_remaining_gap": 0.922162059728652,
+          "tuned_blind": -2.223285675048828,
+          "tuned_ddi_qf": -0.7380206298828125,
+          "tuned_full": -0.6249903106689453
+        },
+        {
+          "base_blind": -3.0553876876831056,
+          "base_ddi_qf": -2.064729290008545,
+          "base_full": -1.4062657951004802,
+          "blind_change": 0.541937294006348,
+          "ddi_training_change": 1.1926721000671388,
+          "full_ddi_gap_change": -0.4723747993819417,
+          "full_path_change": 0.720297300685197,
+          "headroom": 1.6491218925826254,
+          "normalized_remaining_gap": 0.8871589199299896,
+          "tuned_blind": -2.5134503936767576,
+          "tuned_ddi_qf": -0.8720571899414062,
+          "tuned_full": -0.6859684944152832
+        },
+        {
+          "base_blind": -3.1260677075386045,
+          "base_ddi_qf": -2.05967889547348,
+          "base_full": -1.5729896193742752,
+          "blind_change": 0.46729451417922974,
+          "ddi_training_change": 1.174651734828949,
+          "full_ddi_gap_change": -0.3829449981451034,
+          "full_path_change": 0.7917067366838455,
+          "headroom": 1.5530780881643294,
+          "normalized_remaining_gap": 0.9332008617308336,
+          "tuned_blind": -2.658773193359375,
+          "tuned_ddi_qf": -0.8850271606445312,
+          "tuned_full": -0.7812828826904297
+        }
+      ]
+    },
+    {
+      "aggregate": {
+        "blind_change": {
+          "mean": 0.0,
+          "posthoc_paired_ci95": [
+            -0.01,
+            0.01
+          ],
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "ddi_training_change": {
+          "mean": 0.03333333333333333,
+          "posthoc_paired_ci95": [
+            0.01,
+            0.05666666666666667
+          ],
+          "seed_values": [
+            0.03,
+            0.03,
+            0.04000000000000001
+          ]
+        },
+        "full_ddi_gap_change": {
+          "mean": -0.013333333333333317,
+          "posthoc_paired_ci95": [
+            -0.05666666666666665,
+            0.026666666666666682
+          ],
+          "seed_values": [
+            2.7755575615628914e-17,
+            -0.01999999999999999,
+            -0.01999999999999999
+          ]
+        },
+        "full_path_change": {
+          "mean": 0.020000000000000018,
+          "posthoc_paired_ci95": [
+            -0.010000000000000009,
+            0.05333333333333332
+          ],
+          "seed_values": [
+            0.030000000000000027,
+            0.010000000000000009,
+            0.020000000000000018
+          ]
+        },
+        "normalized_remaining_gap": {
+          "mean": 0.44035409035409034,
+          "posthoc_paired_ci95": [
+            0.2538974169721297,
+            0.6276946989429457
+          ],
+          "seed_values": [
+            0.4666666666666667,
+            0.46153846153846145,
+            0.3928571428571429
+          ]
+        }
+      },
+      "architecture": "Llama-3.1-8B",
+      "dataset": "musique",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "metric": "em",
+      "metric_orientation": "higher_is_better",
+      "seed_values": [
+        {
+          "base_blind": 0.0,
+          "base_ddi_qf": 0.14,
+          "base_full": 0.3,
+          "blind_change": 0.0,
+          "ddi_training_change": 0.03,
+          "full_ddi_gap_change": 2.7755575615628914e-17,
+          "full_path_change": 0.030000000000000027,
+          "headroom": 0.3,
+          "normalized_remaining_gap": 0.4666666666666667,
+          "tuned_blind": 0.0,
+          "tuned_ddi_qf": 0.17,
+          "tuned_full": 0.33
+        },
+        {
+          "base_blind": 0.0,
+          "base_ddi_qf": 0.1,
+          "base_full": 0.26,
+          "blind_change": 0.0,
+          "ddi_training_change": 0.03,
+          "full_ddi_gap_change": -0.01999999999999999,
+          "full_path_change": 0.010000000000000009,
+          "headroom": 0.26,
+          "normalized_remaining_gap": 0.46153846153846145,
+          "tuned_blind": 0.0,
+          "tuned_ddi_qf": 0.13,
+          "tuned_full": 0.27
+        },
+        {
+          "base_blind": 0.01,
+          "base_ddi_qf": 0.1,
+          "base_full": 0.29,
+          "blind_change": 0.0,
+          "ddi_training_change": 0.04000000000000001,
+          "full_ddi_gap_change": -0.01999999999999999,
+          "full_path_change": 0.020000000000000018,
+          "headroom": 0.27999999999999997,
+          "normalized_remaining_gap": 0.3928571428571429,
+          "tuned_blind": 0.01,
+          "tuned_ddi_qf": 0.14,
+          "tuned_full": 0.31
+        }
+      ]
+    },
+    {
+      "aggregate": {
+        "blind_change": {
+          "mean": 0.020000000000000004,
+          "posthoc_paired_ci95": [
+            0.0033333333333333327,
+            0.04
+          ],
+          "seed_values": [
+            0.020000000000000004,
+            0.0,
+            0.04000000000000001
+          ]
+        },
+        "ddi_training_change": {
+          "mean": 0.06666666666666668,
+          "posthoc_paired_ci95": [
+            0.03,
+            0.10666666666666667
+          ],
+          "seed_values": [
+            0.09000000000000001,
+            0.07,
+            0.04000000000000001
+          ]
+        },
+        "full_ddi_gap_change": {
+          "mean": -0.09999999999999999,
+          "posthoc_paired_ci95": [
+            -0.15333333333333332,
+            -0.05000000000000001
+          ],
+          "seed_values": [
+            -0.13,
+            -0.14999999999999997,
+            -0.020000000000000018
+          ]
+        },
+        "full_path_change": {
+          "mean": -0.033333333333333326,
+          "posthoc_paired_ci95": [
+            -0.07000000000000002,
+            0.0033333333333333457
+          ],
+          "seed_values": [
+            -0.03999999999999998,
+            -0.07999999999999999,
+            0.01999999999999999
+          ]
+        },
+        "normalized_remaining_gap": {
+          "mean": 0.5236802413273002,
+          "posthoc_paired_ci95": [
+            0.25778218520609825,
+            0.768522494530559
+          ],
+          "seed_values": [
+            0.576923076923077,
+            0.7,
+            0.2941176470588236
+          ]
+        }
+      },
+      "architecture": "Qwen2.5-7B",
+      "dataset": "musique",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "metric": "em",
+      "metric_orientation": "higher_is_better",
+      "seed_values": [
+        {
+          "base_blind": 0.03,
+          "base_ddi_qf": 0.05,
+          "base_full": 0.29,
+          "blind_change": 0.020000000000000004,
+          "ddi_training_change": 0.09000000000000001,
+          "full_ddi_gap_change": -0.13,
+          "full_path_change": -0.03999999999999998,
+          "headroom": 0.26,
+          "normalized_remaining_gap": 0.576923076923077,
+          "tuned_blind": 0.05,
+          "tuned_ddi_qf": 0.14,
+          "tuned_full": 0.25
+        },
+        {
+          "base_blind": 0.05,
+          "base_ddi_qf": 0.04,
+          "base_full": 0.25,
+          "blind_change": 0.0,
+          "ddi_training_change": 0.07,
+          "full_ddi_gap_change": -0.14999999999999997,
+          "full_path_change": -0.07999999999999999,
+          "headroom": 0.2,
+          "normalized_remaining_gap": 0.7,
+          "tuned_blind": 0.05,
+          "tuned_ddi_qf": 0.11,
+          "tuned_full": 0.17
+        },
+        {
+          "base_blind": 0.03,
+          "base_ddi_qf": 0.06,
+          "base_full": 0.2,
+          "blind_change": 0.04000000000000001,
+          "ddi_training_change": 0.04000000000000001,
+          "full_ddi_gap_change": -0.020000000000000018,
+          "full_path_change": 0.01999999999999999,
+          "headroom": 0.17,
+          "normalized_remaining_gap": 0.2941176470588236,
+          "tuned_blind": 0.07,
+          "tuned_ddi_qf": 0.1,
+          "tuned_full": 0.22
+        }
+      ]
+    },
+    {
+      "aggregate": {
+        "blind_change": {
+          "mean": 0.002404958474617917,
+          "posthoc_paired_ci95": [
+            -0.008685647124346817,
+            0.013987262887611183
+          ],
+          "seed_values": [
+            -0.0020933706816059754,
+            0.006676470588235294,
+            0.002631775517224433
+          ]
+        },
+        "ddi_training_change": {
+          "mean": 0.03837830687830689,
+          "posthoc_paired_ci95": [
+            0.011119907407407401,
+            0.06811977513227511
+          ],
+          "seed_values": [
+            0.04563888888888892,
+            0.024444444444444463,
+            0.04505158730158729
+          ]
+        },
+        "full_ddi_gap_change": {
+          "mean": -0.005513227513227535,
+          "posthoc_paired_ci95": [
+            -0.04493085317460319,
+            0.03406471560846558
+          ],
+          "seed_values": [
+            -0.006424603174603222,
+            -0.0007301587301587753,
+            -0.009384920634920607
+          ]
+        },
+        "full_path_change": {
+          "mean": 0.032865079365079354,
+          "posthoc_paired_ci95": [
+            0.005165674603174627,
+            0.0615
+          ],
+          "seed_values": [
+            0.0392142857142857,
+            0.023714285714285688,
+            0.03566666666666668
+          ]
+        },
+        "normalized_remaining_gap": {
+          "mean": 0.4798673466965396,
+          "posthoc_paired_ci95": [
+            0.3462981865679786,
+            0.6149151995504017
+          ],
+          "seed_values": [
+            0.5252931427683958,
+            0.5012366667072338,
+            0.41307223061398923
+          ]
+        }
+      },
+      "architecture": "Llama-3.1-8B",
+      "dataset": "musique",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "metric": "f1",
+      "metric_orientation": "higher_is_better",
+      "seed_values": [
+        {
+          "base_blind": 0.010549707602339182,
+          "base_ddi_qf": 0.21887301587301586,
+          "base_full": 0.4193650793650794,
+          "blind_change": -0.0020933706816059754,
+          "ddi_training_change": 0.04563888888888892,
+          "full_ddi_gap_change": -0.006424603174603222,
+          "full_path_change": 0.0392142857142857,
+          "headroom": 0.4088153717627402,
+          "normalized_remaining_gap": 0.5252931427683958,
+          "tuned_blind": 0.008456336920733207,
+          "tuned_ddi_qf": 0.2645119047619048,
+          "tuned_full": 0.4585793650793651
+        },
+        {
+          "base_blind": 0.004870813397129187,
+          "base_ddi_qf": 0.1816984126984127,
+          "base_full": 0.3591101774042951,
+          "blind_change": 0.006676470588235294,
+          "ddi_training_change": 0.024444444444444463,
+          "full_ddi_gap_change": -0.0007301587301587753,
+          "full_path_change": 0.023714285714285688,
+          "headroom": 0.3542393640071659,
+          "normalized_remaining_gap": 0.5012366667072338,
+          "tuned_blind": 0.011547283985364481,
+          "tuned_ddi_qf": 0.20614285714285716,
+          "tuned_full": 0.38282446311858076
+        },
+        {
+          "base_blind": 0.020367889420521,
+          "base_ddi_qf": 0.15831746031746033,
+          "base_full": 0.377047619047619,
+          "blind_change": 0.002631775517224433,
+          "ddi_training_change": 0.04505158730158729,
+          "full_ddi_gap_change": -0.009384920634920607,
+          "full_path_change": 0.03566666666666668,
+          "headroom": 0.35667972962709804,
+          "normalized_remaining_gap": 0.41307223061398923,
+          "tuned_blind": 0.022999664937745433,
+          "tuned_ddi_qf": 0.20336904761904762,
+          "tuned_full": 0.4127142857142857
+        }
+      ]
+    },
+    {
+      "aggregate": {
+        "blind_change": {
+          "mean": 0.009563398692810457,
+          "posthoc_paired_ci95": [
+            -0.009378441487706194,
+            0.029290066137566125
+          ],
+          "seed_values": [
+            -0.002079645191409893,
+            -0.0011984126984126986,
+            0.031968253968253965
+          ]
+        },
+        "ddi_training_change": {
+          "mean": 0.08079160618958671,
+          "posthoc_paired_ci95": [
+            0.0419421125084667,
+            0.1202287111726292
+          ],
+          "seed_values": [
+            0.10318116641866515,
+            0.06827166352166353,
+            0.07092198862843146
+          ]
+        },
+        "full_ddi_gap_change": {
+          "mean": -0.0828892767404023,
+          "posthoc_paired_ci95": [
+            -0.13114113906182562,
+            -0.035249579499475416
+          ],
+          "seed_values": [
+            -0.10416889534926954,
+            -0.13311870536870535,
+            -0.011380229503232031
+          ]
+        },
+        "full_path_change": {
+          "mean": -0.0020976705508155926,
+          "posthoc_paired_ci95": [
+            -0.03839063884725792,
+            0.03432397408105846
+          ],
+          "seed_values": [
+            -0.0009877289306043924,
+            -0.06484704184704182,
+            0.059541759125199434
+          ]
+        },
+        "normalized_remaining_gap": {
+          "mean": 0.4518440651821461,
+          "posthoc_paired_ci95": [
+            0.22611776119984753,
+            0.6413930905948375
+          ],
+          "seed_values": [
+            0.5348143400830992,
+            0.5866287787964939,
+            0.2340890766668451
+          ]
+        }
+      },
+      "architecture": "Qwen2.5-7B",
+      "dataset": "musique",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "metric": "f1",
+      "metric_orientation": "higher_is_better",
+      "seed_values": [
+        {
+          "base_blind": 0.10921745182921654,
+          "base_ddi_qf": 0.1484734884998043,
+          "base_full": 0.377394501826739,
+          "blind_change": -0.002079645191409893,
+          "ddi_training_change": 0.10318116641866515,
+          "full_ddi_gap_change": -0.10416889534926954,
+          "full_path_change": -0.0009877289306043924,
+          "headroom": 0.26817704999752245,
+          "normalized_remaining_gap": 0.5348143400830992,
+          "tuned_blind": 0.10713780663780664,
+          "tuned_ddi_qf": 0.25165465491846944,
+          "tuned_full": 0.3764067728961346
+        },
+        {
+          "base_blind": 0.11494444444444445,
+          "base_ddi_qf": 0.1301048396048396,
+          "base_full": 0.3677092352092352,
+          "blind_change": -0.0011984126984126986,
+          "ddi_training_change": 0.06827166352166353,
+          "full_ddi_gap_change": -0.13311870536870535,
+          "full_path_change": -0.06484704184704182,
+          "headroom": 0.25276479076479075,
+          "normalized_remaining_gap": 0.5866287787964939,
+          "tuned_blind": 0.11374603174603175,
+          "tuned_ddi_qf": 0.19837650312650312,
+          "tuned_full": 0.3028621933621934
+        },
+        {
+          "base_blind": 0.1096031746031746,
+          "base_ddi_qf": 0.1447860648123806,
+          "base_full": 0.30851514595802143,
+          "blind_change": 0.031968253968253965,
+          "ddi_training_change": 0.07092198862843146,
+          "full_ddi_gap_change": -0.011380229503232031,
+          "full_path_change": 0.059541759125199434,
+          "headroom": 0.19891197135484684,
+          "normalized_remaining_gap": 0.2340890766668451,
+          "tuned_blind": 0.14157142857142857,
+          "tuned_ddi_qf": 0.21570805344081206,
+          "tuned_full": 0.36805690508322086
+        }
+      ]
+    },
+    {
+      "aggregate": {
+        "blind_change": {
+          "mean": -0.006666666666666667,
+          "posthoc_paired_ci95": [
+            -0.02,
+            0.006666666666666665
+          ],
+          "seed_values": [
+            -0.01,
+            0.0,
+            -0.01
+          ]
+        },
+        "ddi_training_change": {
+          "mean": 0.03000000000000001,
+          "posthoc_paired_ci95": [
+            0.003333333333333332,
+            0.05666666666666667
+          ],
+          "seed_values": [
+            0.03,
+            0.030000000000000013,
+            0.030000000000000013
+          ]
+        },
+        "full_ddi_gap_change": {
+          "mean": -0.010000000000000018,
+          "posthoc_paired_ci95": [
+            -0.05666666666666669,
+            0.036666666666666674
+          ],
+          "seed_values": [
+            -0.009999999999999981,
+            -0.020000000000000018,
+            -5.551115123125783e-17
+          ]
+        },
+        "full_path_change": {
+          "mean": 0.02,
+          "posthoc_paired_ci95": [
+            -0.013333333333333345,
+            0.053333333333333344
+          ],
+          "seed_values": [
+            0.020000000000000018,
+            0.010000000000000009,
+            0.02999999999999997
+          ]
+        },
+        "normalized_remaining_gap": {
+          "mean": 0.39216589861751155,
+          "posthoc_paired_ci95": [
+            0.21960082810005715,
+            0.5615002970885322
+          ],
+          "seed_values": [
+            0.4571428571428571,
+            0.4193548387096775,
+            0.30000000000000004
+          ]
+        }
+      },
+      "architecture": "Llama-3.1-8B",
+      "dataset": "musique",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "metric": "presence",
+      "metric_orientation": "higher_is_better",
+      "seed_values": [
+        {
+          "base_blind": 0.01,
+          "base_ddi_qf": 0.16,
+          "base_full": 0.36,
+          "blind_change": -0.01,
+          "ddi_training_change": 0.03,
+          "full_ddi_gap_change": -0.009999999999999981,
+          "full_path_change": 0.020000000000000018,
+          "headroom": 0.35,
+          "normalized_remaining_gap": 0.4571428571428571,
+          "tuned_blind": 0.0,
+          "tuned_ddi_qf": 0.19,
+          "tuned_full": 0.38
+        },
+        {
+          "base_blind": 0.0,
+          "base_ddi_qf": 0.11,
+          "base_full": 0.31,
+          "blind_change": 0.0,
+          "ddi_training_change": 0.030000000000000013,
+          "full_ddi_gap_change": -0.020000000000000018,
+          "full_path_change": 0.010000000000000009,
+          "headroom": 0.31,
+          "normalized_remaining_gap": 0.4193548387096775,
+          "tuned_blind": 0.0,
+          "tuned_ddi_qf": 0.14,
+          "tuned_full": 0.32
+        },
+        {
+          "base_blind": 0.02,
+          "base_ddi_qf": 0.11,
+          "base_full": 0.32,
+          "blind_change": -0.01,
+          "ddi_training_change": 0.030000000000000013,
+          "full_ddi_gap_change": -5.551115123125783e-17,
+          "full_path_change": 0.02999999999999997,
+          "headroom": 0.3,
+          "normalized_remaining_gap": 0.30000000000000004,
+          "tuned_blind": 0.01,
+          "tuned_ddi_qf": 0.14,
+          "tuned_full": 0.35
+        }
+      ]
+    },
+    {
+      "aggregate": {
+        "blind_change": {
+          "mean": 0.019999999999999997,
+          "posthoc_paired_ci95": [
+            0.0,
+            0.04333333333333333
+          ],
+          "seed_values": [
+            0.019999999999999997,
+            0.009999999999999995,
+            0.03
+          ]
+        },
+        "ddi_training_change": {
+          "mean": 0.07333333333333333,
+          "posthoc_paired_ci95": [
+            0.03333333333333333,
+            0.11333333333333334
+          ],
+          "seed_values": [
+            0.11,
+            0.06,
+            0.05000000000000002
+          ]
+        },
+        "full_ddi_gap_change": {
+          "mean": -0.06666666666666668,
+          "posthoc_paired_ci95": [
+            -0.11666666666666671,
+            -0.013333333333333355
+          ],
+          "seed_values": [
+            -0.10000000000000003,
+            -0.10999999999999999,
+            0.009999999999999981
+          ]
+        },
+        "full_path_change": {
+          "mean": 0.006666666666666654,
+          "posthoc_paired_ci95": [
+            -0.03333333333333335,
+            0.04666666666666667
+          ],
+          "seed_values": [
+            0.009999999999999953,
+            -0.04999999999999999,
+            0.06
+          ]
+        },
+        "normalized_remaining_gap": {
+          "mean": 0.37434343434343437,
+          "posthoc_paired_ci95": [
+            0.13206232492997208,
+            0.5766691919191919
+          ],
+          "seed_values": [
+            0.4666666666666668,
+            0.5199999999999999,
+            0.13636363636363646
+          ]
+        }
+      },
+      "architecture": "Qwen2.5-7B",
+      "dataset": "musique",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "metric": "presence",
+      "metric_orientation": "higher_is_better",
+      "seed_values": [
+        {
+          "base_blind": 0.04,
+          "base_ddi_qf": 0.08,
+          "base_full": 0.34,
+          "blind_change": 0.019999999999999997,
+          "ddi_training_change": 0.11,
+          "full_ddi_gap_change": -0.10000000000000003,
+          "full_path_change": 0.009999999999999953,
+          "headroom": 0.30000000000000004,
+          "normalized_remaining_gap": 0.4666666666666668,
+          "tuned_blind": 0.06,
+          "tuned_ddi_qf": 0.19,
+          "tuned_full": 0.35
+        },
+        {
+          "base_blind": 0.07,
+          "base_ddi_qf": 0.09,
+          "base_full": 0.32,
+          "blind_change": 0.009999999999999995,
+          "ddi_training_change": 0.06,
+          "full_ddi_gap_change": -0.10999999999999999,
+          "full_path_change": -0.04999999999999999,
+          "headroom": 0.25,
+          "normalized_remaining_gap": 0.5199999999999999,
+          "tuned_blind": 0.08,
+          "tuned_ddi_qf": 0.15,
+          "tuned_full": 0.27
+        },
+        {
+          "base_blind": 0.05,
+          "base_ddi_qf": 0.09,
+          "base_full": 0.27,
+          "blind_change": 0.03,
+          "ddi_training_change": 0.05000000000000002,
+          "full_ddi_gap_change": 0.009999999999999981,
+          "full_path_change": 0.06,
+          "headroom": 0.22000000000000003,
+          "normalized_remaining_gap": 0.13636363636363646,
+          "tuned_blind": 0.08,
+          "tuned_ddi_qf": 0.14,
+          "tuned_full": 0.33
+        }
+      ]
+    },
+    {
+      "aggregate": {
+        "blind_change": {
+          "mean": 0.7647330729166661,
+          "posthoc_paired_ci95": [
+            0.6622522786458332,
+            0.8762120768229165
+          ],
+          "seed_values": [
+            0.7879687499999992,
+            0.7210546874999997,
+            0.7851757812499995
+          ]
+        },
+        "ddi_training_change": {
+          "mean": 0.2898307291666666,
+          "posthoc_paired_ci95": [
+            0.2334309895833333,
+            0.34768277994791663
+          ],
+          "seed_values": [
+            0.2764746093749999,
+            0.2571777343749999,
+            0.33583984374999987
+          ]
+        },
+        "full_ddi_gap_change": {
+          "mean": -0.1645254516601562,
+          "posthoc_paired_ci95": [
+            -0.22297544097900404,
+            -0.10633807373046876
+          ],
+          "seed_values": [
+            -0.1827275085449218,
+            -0.14988861083984384,
+            -0.16096023559570294
+          ]
+        },
+        "full_path_change": {
+          "mean": 0.12530527750651035,
+          "posthoc_paired_ci95": [
+            0.08024122111002606,
+            0.17050752258300783
+          ],
+          "seed_values": [
+            0.09374710083007809,
+            0.10728912353515607,
+            0.17487960815429693
+          ]
+        },
+        "normalized_remaining_gap": {
+          "mean": 0.9266363585051476,
+          "posthoc_paired_ci95": [
+            0.8927289846113433,
+            0.9614197667446968
+          ],
+          "seed_values": [
+            0.9246246154868403,
+            0.9441964508305364,
+            0.9110880091980662
+          ]
+        }
+      },
+      "architecture": "Llama-3.1-8B",
+      "dataset": "musique",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "metric": "loss",
+      "metric_orientation": "lower_is_better",
+      "seed_values": [
+        {
+          "base_blind": -5.600078125,
+          "base_ddi_qf": -1.895009765625,
+          "base_full": -1.3953491973876953,
+          "blind_change": 0.7879687499999992,
+          "ddi_training_change": 0.2764746093749999,
+          "full_ddi_gap_change": -0.1827275085449218,
+          "full_path_change": 0.09374710083007809,
+          "headroom": 4.2047289276123045,
+          "normalized_remaining_gap": 0.9246246154868403,
+          "tuned_blind": -4.812109375,
+          "tuned_ddi_qf": -1.61853515625,
+          "tuned_full": -1.3016020965576172
+        },
+        {
+          "base_blind": -5.53046875,
+          "base_ddi_qf": -1.94564453125,
+          "base_full": -1.5750283050537108,
+          "blind_change": 0.7210546874999997,
+          "ddi_training_change": 0.2571777343749999,
+          "full_ddi_gap_change": -0.14988861083984384,
+          "full_path_change": 0.10728912353515607,
+          "headroom": 3.955440444946289,
+          "normalized_remaining_gap": 0.9441964508305364,
+          "tuned_blind": -4.8094140625,
+          "tuned_ddi_qf": -1.688466796875,
+          "tuned_full": -1.4677391815185548
+        },
+        {
+          "base_blind": -5.380234375,
+          "base_ddi_qf": -2.0162109375,
+          "base_full": -1.5112517547607422,
+          "blind_change": 0.7851757812499995,
+          "ddi_training_change": 0.33583984374999987,
+          "full_ddi_gap_change": -0.16096023559570294,
+          "full_path_change": 0.17487960815429693,
+          "headroom": 3.868982620239257,
+          "normalized_remaining_gap": 0.9110880091980662,
+          "tuned_blind": -4.59505859375,
+          "tuned_ddi_qf": -1.68037109375,
+          "tuned_full": -1.3363721466064453
+        }
+      ]
+    },
+    {
+      "aggregate": {
+        "blind_change": {
+          "mean": 0.6474902725219729,
+          "posthoc_paired_ci95": [
+            0.561019377708435,
+            0.7383398771286008
+          ],
+          "seed_values": [
+            0.646814422607422,
+            0.6897457504272464,
+            0.6059106445312503
+          ]
+        },
+        "ddi_training_change": {
+          "mean": 1.5724710591634115,
+          "posthoc_paired_ci95": [
+            1.381543315887451,
+            1.774704964955648
+          ],
+          "seed_values": [
+            1.5536917114257813,
+            1.617361602783203,
+            1.5463598632812503
+          ]
+        },
+        "full_ddi_gap_change": {
+          "mean": -0.5744294929504395,
+          "posthoc_paired_ci95": [
+            -0.7774630335569385,
+            -0.3821787270903587
+          ],
+          "seed_values": [
+            -0.5385183691978455,
+            -0.6032423067092894,
+            -0.5815278029441837
+          ]
+        },
+        "full_path_change": {
+          "mean": 0.998041566212972,
+          "posthoc_paired_ci95": [
+            0.8392641519308089,
+            1.1608500769933063
+          ],
+          "seed_values": [
+            1.0151733422279359,
+            1.0141192960739136,
+            0.9648320603370666
+          ]
+        },
+        "normalized_remaining_gap": {
+          "mean": 0.9232957369770884,
+          "posthoc_paired_ci95": [
+            0.8401576222991437,
+            1.024506800875435
+          ],
+          "seed_values": [
+            0.978300358826227,
+            0.933828753278899,
+            0.8577580988261392
+          ]
+        }
+      },
+      "architecture": "Qwen2.5-7B",
+      "dataset": "musique",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "1": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        },
+        "2": {
+          "Llama-3.1-8B": 100,
+          "Qwen2.5-7B": 100,
+          "common": 100
+        }
+      },
+      "metric": "loss",
+      "metric_orientation": "lower_is_better",
+      "seed_values": [
+        {
+          "base_blind": -3.623792877197266,
+          "base_ddi_qf": -2.7275466918945312,
+          "base_full": -2.1572038674354554,
+          "blind_change": 0.646814422607422,
+          "ddi_training_change": 1.5536917114257813,
+          "full_ddi_gap_change": -0.5385183691978455,
+          "full_path_change": 1.0151733422279359,
+          "headroom": 1.4665890097618104,
+          "normalized_remaining_gap": 0.978300358826227,
+          "tuned_blind": -2.976978454589844,
+          "tuned_ddi_qf": -1.17385498046875,
+          "tuned_full": -1.1420305252075196
+        },
+        {
+          "base_blind": -3.747161521911621,
+          "base_ddi_qf": -2.958924102783203,
+          "base_full": -2.257081332206726,
+          "blind_change": 0.6897457504272464,
+          "ddi_training_change": 1.617361602783203,
+          "full_ddi_gap_change": -0.6032423067092894,
+          "full_path_change": 1.0141192960739136,
+          "headroom": 1.4900801897048952,
+          "normalized_remaining_gap": 0.933828753278899,
+          "tuned_blind": -3.057415771484375,
+          "tuned_ddi_qf": -1.3415625,
+          "tuned_full": -1.2429620361328124
+        },
+        {
+          "base_blind": -3.4053846740722657,
+          "base_ddi_qf": -2.82599853515625,
+          "base_full": -2.0519565415382384,
+          "blind_change": 0.6059106445312503,
+          "ddi_training_change": 1.5463598632812503,
+          "full_ddi_gap_change": -0.5815278029441837,
+          "full_path_change": 0.9648320603370666,
+          "headroom": 1.3534281325340274,
+          "normalized_remaining_gap": 0.8577580988261392,
+          "tuned_blind": -2.7994740295410154,
+          "tuned_ddi_qf": -1.279638671875,
+          "tuned_full": -1.0871244812011718
+        }
+      ]
+    },
+    {
+      "aggregate": {
+        "blind_change": {
+          "mean": 0.0,
+          "posthoc_paired_ci95": [
+            0.0,
+            0.0
+          ],
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "ddi_training_change": {
+          "mean": 0.0,
+          "posthoc_paired_ci95": [
+            0.0,
+            0.0
+          ],
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "full_ddi_gap_change": {
+          "mean": 0.0,
+          "posthoc_paired_ci95": [
+            0.0,
+            0.0
+          ],
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "full_path_change": {
+          "mean": 0.0,
+          "posthoc_paired_ci95": [
+            0.0,
+            0.0
+          ],
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "normalized_remaining_gap": {
+          "mean": 1.0,
+          "posthoc_paired_ci95": [
+            1.0,
+            1.0
+          ],
+          "seed_values": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "architecture": "Llama-3.1-8B",
+      "dataset": "synthetic_qa",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "metric": "em",
+      "metric_orientation": "higher_is_better",
+      "seed_values": [
+        {
+          "base_blind": 0.0,
+          "base_ddi_qf": 1.0,
+          "base_full": 1.0,
+          "blind_change": 0.0,
+          "ddi_training_change": 0.0,
+          "full_ddi_gap_change": 0.0,
+          "full_path_change": 0.0,
+          "headroom": 1.0,
+          "normalized_remaining_gap": 1.0,
+          "tuned_blind": 0.0,
+          "tuned_ddi_qf": 1.0,
+          "tuned_full": 1.0
+        },
+        {
+          "base_blind": 0.0,
+          "base_ddi_qf": 1.0,
+          "base_full": 1.0,
+          "blind_change": 0.0,
+          "ddi_training_change": 0.0,
+          "full_ddi_gap_change": 0.0,
+          "full_path_change": 0.0,
+          "headroom": 1.0,
+          "normalized_remaining_gap": 1.0,
+          "tuned_blind": 0.0,
+          "tuned_ddi_qf": 1.0,
+          "tuned_full": 1.0
+        },
+        {
+          "base_blind": 0.0,
+          "base_ddi_qf": 1.0,
+          "base_full": 1.0,
+          "blind_change": 0.0,
+          "ddi_training_change": 0.0,
+          "full_ddi_gap_change": 0.0,
+          "full_path_change": 0.0,
+          "headroom": 1.0,
+          "normalized_remaining_gap": 1.0,
+          "tuned_blind": 0.0,
+          "tuned_ddi_qf": 1.0,
+          "tuned_full": 1.0
+        }
+      ]
+    },
+    {
+      "aggregate": {
+        "blind_change": {
+          "mean": 0.0,
+          "posthoc_paired_ci95": [
+            0.0,
+            0.0
+          ],
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "ddi_training_change": {
+          "mean": 0.0,
+          "posthoc_paired_ci95": [
+            0.0,
+            0.0
+          ],
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "full_ddi_gap_change": {
+          "mean": 0.0,
+          "posthoc_paired_ci95": [
+            0.0,
+            0.0
+          ],
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "full_path_change": {
+          "mean": 0.0,
+          "posthoc_paired_ci95": [
+            0.0,
+            0.0
+          ],
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "normalized_remaining_gap": {
+          "mean": 1.0,
+          "posthoc_paired_ci95": [
+            1.0,
+            1.0
+          ],
+          "seed_values": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "architecture": "Qwen2.5-7B",
+      "dataset": "synthetic_qa",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "metric": "em",
+      "metric_orientation": "higher_is_better",
+      "seed_values": [
+        {
+          "base_blind": 0.0,
+          "base_ddi_qf": 1.0,
+          "base_full": 1.0,
+          "blind_change": 0.0,
+          "ddi_training_change": 0.0,
+          "full_ddi_gap_change": 0.0,
+          "full_path_change": 0.0,
+          "headroom": 1.0,
+          "normalized_remaining_gap": 1.0,
+          "tuned_blind": 0.0,
+          "tuned_ddi_qf": 1.0,
+          "tuned_full": 1.0
+        },
+        {
+          "base_blind": 0.0,
+          "base_ddi_qf": 1.0,
+          "base_full": 1.0,
+          "blind_change": 0.0,
+          "ddi_training_change": 0.0,
+          "full_ddi_gap_change": 0.0,
+          "full_path_change": 0.0,
+          "headroom": 1.0,
+          "normalized_remaining_gap": 1.0,
+          "tuned_blind": 0.0,
+          "tuned_ddi_qf": 1.0,
+          "tuned_full": 1.0
+        },
+        {
+          "base_blind": 0.0,
+          "base_ddi_qf": 1.0,
+          "base_full": 1.0,
+          "blind_change": 0.0,
+          "ddi_training_change": 0.0,
+          "full_ddi_gap_change": 0.0,
+          "full_path_change": 0.0,
+          "headroom": 1.0,
+          "normalized_remaining_gap": 1.0,
+          "tuned_blind": 0.0,
+          "tuned_ddi_qf": 1.0,
+          "tuned_full": 1.0
+        }
+      ]
+    },
+    {
+      "aggregate": {
+        "blind_change": {
+          "mean": 0.0,
+          "posthoc_paired_ci95": [
+            0.0,
+            0.0
+          ],
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "ddi_training_change": {
+          "mean": 0.0,
+          "posthoc_paired_ci95": [
+            0.0,
+            0.0
+          ],
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "full_ddi_gap_change": {
+          "mean": 0.0,
+          "posthoc_paired_ci95": [
+            0.0,
+            0.0
+          ],
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "full_path_change": {
+          "mean": 0.0,
+          "posthoc_paired_ci95": [
+            0.0,
+            0.0
+          ],
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "normalized_remaining_gap": {
+          "mean": 1.0,
+          "posthoc_paired_ci95": [
+            1.0,
+            1.0
+          ],
+          "seed_values": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "architecture": "Llama-3.1-8B",
+      "dataset": "synthetic_qa",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "metric": "f1",
+      "metric_orientation": "higher_is_better",
+      "seed_values": [
+        {
+          "base_blind": 0.0,
+          "base_ddi_qf": 1.0,
+          "base_full": 1.0,
+          "blind_change": 0.0,
+          "ddi_training_change": 0.0,
+          "full_ddi_gap_change": 0.0,
+          "full_path_change": 0.0,
+          "headroom": 1.0,
+          "normalized_remaining_gap": 1.0,
+          "tuned_blind": 0.0,
+          "tuned_ddi_qf": 1.0,
+          "tuned_full": 1.0
+        },
+        {
+          "base_blind": 0.0,
+          "base_ddi_qf": 1.0,
+          "base_full": 1.0,
+          "blind_change": 0.0,
+          "ddi_training_change": 0.0,
+          "full_ddi_gap_change": 0.0,
+          "full_path_change": 0.0,
+          "headroom": 1.0,
+          "normalized_remaining_gap": 1.0,
+          "tuned_blind": 0.0,
+          "tuned_ddi_qf": 1.0,
+          "tuned_full": 1.0
+        },
+        {
+          "base_blind": 0.0,
+          "base_ddi_qf": 1.0,
+          "base_full": 1.0,
+          "blind_change": 0.0,
+          "ddi_training_change": 0.0,
+          "full_ddi_gap_change": 0.0,
+          "full_path_change": 0.0,
+          "headroom": 1.0,
+          "normalized_remaining_gap": 1.0,
+          "tuned_blind": 0.0,
+          "tuned_ddi_qf": 1.0,
+          "tuned_full": 1.0
+        }
+      ]
+    },
+    {
+      "aggregate": {
+        "blind_change": {
+          "mean": 0.0,
+          "posthoc_paired_ci95": [
+            0.0,
+            0.0
+          ],
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "ddi_training_change": {
+          "mean": 0.0,
+          "posthoc_paired_ci95": [
+            0.0,
+            0.0
+          ],
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "full_ddi_gap_change": {
+          "mean": 0.0,
+          "posthoc_paired_ci95": [
+            0.0,
+            0.0
+          ],
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "full_path_change": {
+          "mean": 0.0,
+          "posthoc_paired_ci95": [
+            0.0,
+            0.0
+          ],
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "normalized_remaining_gap": {
+          "mean": 1.0,
+          "posthoc_paired_ci95": [
+            1.0,
+            1.0
+          ],
+          "seed_values": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "architecture": "Qwen2.5-7B",
+      "dataset": "synthetic_qa",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "metric": "f1",
+      "metric_orientation": "higher_is_better",
+      "seed_values": [
+        {
+          "base_blind": 0.0,
+          "base_ddi_qf": 1.0,
+          "base_full": 1.0,
+          "blind_change": 0.0,
+          "ddi_training_change": 0.0,
+          "full_ddi_gap_change": 0.0,
+          "full_path_change": 0.0,
+          "headroom": 1.0,
+          "normalized_remaining_gap": 1.0,
+          "tuned_blind": 0.0,
+          "tuned_ddi_qf": 1.0,
+          "tuned_full": 1.0
+        },
+        {
+          "base_blind": 0.0,
+          "base_ddi_qf": 1.0,
+          "base_full": 1.0,
+          "blind_change": 0.0,
+          "ddi_training_change": 0.0,
+          "full_ddi_gap_change": 0.0,
+          "full_path_change": 0.0,
+          "headroom": 1.0,
+          "normalized_remaining_gap": 1.0,
+          "tuned_blind": 0.0,
+          "tuned_ddi_qf": 1.0,
+          "tuned_full": 1.0
+        },
+        {
+          "base_blind": 0.0,
+          "base_ddi_qf": 1.0,
+          "base_full": 1.0,
+          "blind_change": 0.0,
+          "ddi_training_change": 0.0,
+          "full_ddi_gap_change": 0.0,
+          "full_path_change": 0.0,
+          "headroom": 1.0,
+          "normalized_remaining_gap": 1.0,
+          "tuned_blind": 0.0,
+          "tuned_ddi_qf": 1.0,
+          "tuned_full": 1.0
+        }
+      ]
+    },
+    {
+      "aggregate": {
+        "blind_change": {
+          "mean": 0.0,
+          "posthoc_paired_ci95": [
+            0.0,
+            0.0
+          ],
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "ddi_training_change": {
+          "mean": 0.0,
+          "posthoc_paired_ci95": [
+            0.0,
+            0.0
+          ],
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "full_ddi_gap_change": {
+          "mean": 0.0,
+          "posthoc_paired_ci95": [
+            0.0,
+            0.0
+          ],
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "full_path_change": {
+          "mean": 0.0,
+          "posthoc_paired_ci95": [
+            0.0,
+            0.0
+          ],
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "normalized_remaining_gap": {
+          "mean": 1.0,
+          "posthoc_paired_ci95": [
+            1.0,
+            1.0
+          ],
+          "seed_values": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "architecture": "Llama-3.1-8B",
+      "dataset": "synthetic_qa",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "metric": "presence",
+      "metric_orientation": "higher_is_better",
+      "seed_values": [
+        {
+          "base_blind": 0.0,
+          "base_ddi_qf": 1.0,
+          "base_full": 1.0,
+          "blind_change": 0.0,
+          "ddi_training_change": 0.0,
+          "full_ddi_gap_change": 0.0,
+          "full_path_change": 0.0,
+          "headroom": 1.0,
+          "normalized_remaining_gap": 1.0,
+          "tuned_blind": 0.0,
+          "tuned_ddi_qf": 1.0,
+          "tuned_full": 1.0
+        },
+        {
+          "base_blind": 0.0,
+          "base_ddi_qf": 1.0,
+          "base_full": 1.0,
+          "blind_change": 0.0,
+          "ddi_training_change": 0.0,
+          "full_ddi_gap_change": 0.0,
+          "full_path_change": 0.0,
+          "headroom": 1.0,
+          "normalized_remaining_gap": 1.0,
+          "tuned_blind": 0.0,
+          "tuned_ddi_qf": 1.0,
+          "tuned_full": 1.0
+        },
+        {
+          "base_blind": 0.0,
+          "base_ddi_qf": 1.0,
+          "base_full": 1.0,
+          "blind_change": 0.0,
+          "ddi_training_change": 0.0,
+          "full_ddi_gap_change": 0.0,
+          "full_path_change": 0.0,
+          "headroom": 1.0,
+          "normalized_remaining_gap": 1.0,
+          "tuned_blind": 0.0,
+          "tuned_ddi_qf": 1.0,
+          "tuned_full": 1.0
+        }
+      ]
+    },
+    {
+      "aggregate": {
+        "blind_change": {
+          "mean": 0.0,
+          "posthoc_paired_ci95": [
+            0.0,
+            0.0
+          ],
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "ddi_training_change": {
+          "mean": 0.0,
+          "posthoc_paired_ci95": [
+            0.0,
+            0.0
+          ],
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "full_ddi_gap_change": {
+          "mean": 0.0,
+          "posthoc_paired_ci95": [
+            0.0,
+            0.0
+          ],
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "full_path_change": {
+          "mean": 0.0,
+          "posthoc_paired_ci95": [
+            0.0,
+            0.0
+          ],
+          "seed_values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "normalized_remaining_gap": {
+          "mean": 1.0,
+          "posthoc_paired_ci95": [
+            1.0,
+            1.0
+          ],
+          "seed_values": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "architecture": "Qwen2.5-7B",
+      "dataset": "synthetic_qa",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "metric": "presence",
+      "metric_orientation": "higher_is_better",
+      "seed_values": [
+        {
+          "base_blind": 0.0,
+          "base_ddi_qf": 1.0,
+          "base_full": 1.0,
+          "blind_change": 0.0,
+          "ddi_training_change": 0.0,
+          "full_ddi_gap_change": 0.0,
+          "full_path_change": 0.0,
+          "headroom": 1.0,
+          "normalized_remaining_gap": 1.0,
+          "tuned_blind": 0.0,
+          "tuned_ddi_qf": 1.0,
+          "tuned_full": 1.0
+        },
+        {
+          "base_blind": 0.0,
+          "base_ddi_qf": 1.0,
+          "base_full": 1.0,
+          "blind_change": 0.0,
+          "ddi_training_change": 0.0,
+          "full_ddi_gap_change": 0.0,
+          "full_path_change": 0.0,
+          "headroom": 1.0,
+          "normalized_remaining_gap": 1.0,
+          "tuned_blind": 0.0,
+          "tuned_ddi_qf": 1.0,
+          "tuned_full": 1.0
+        },
+        {
+          "base_blind": 0.0,
+          "base_ddi_qf": 1.0,
+          "base_full": 1.0,
+          "blind_change": 0.0,
+          "ddi_training_change": 0.0,
+          "full_ddi_gap_change": 0.0,
+          "full_path_change": 0.0,
+          "headroom": 1.0,
+          "normalized_remaining_gap": 1.0,
+          "tuned_blind": 0.0,
+          "tuned_ddi_qf": 1.0,
+          "tuned_full": 1.0
+        }
+      ]
+    },
+    {
+      "aggregate": {
+        "blind_change": {
+          "mean": -0.27539062499999994,
+          "posthoc_paired_ci95": [
+            -0.31914062499999996,
+            -0.23424479166666665
+          ],
+          "seed_values": [
+            -0.2710937499999999,
+            -0.28749999999999987,
+            -0.267578125
+          ]
+        },
+        "ddi_training_change": {
+          "mean": -9.314219156900926e-05,
+          "posthoc_paired_ci95": [
+            -0.0015108998616536456,
+            0.0012037340799967442
+          ],
+          "seed_values": [
+            -0.0009199142456054674,
+            8.850097656250104e-05,
+            0.0005519866943359385
+          ]
+        },
+        "full_ddi_gap_change": {
+          "mean": 0.003539721171061196,
+          "posthoc_paired_ci95": [
+            0.002165023485819499,
+            0.004997890790303549
+          ],
+          "seed_values": [
+            0.005189323425292967,
+            0.002467536926269529,
+            0.0029623031616210927
+          ]
+        },
+        "full_path_change": {
+          "mean": 0.0034465789794921875,
+          "posthoc_paired_ci95": [
+            0.0027803405125935866,
+            0.004180034001668294
+          ],
+          "seed_values": [
+            0.004269409179687499,
+            0.002556037902832031,
+            0.0035142898559570317
+          ]
+        },
+        "normalized_remaining_gap": {
+          "mean": 0.9949233105904167,
+          "posthoc_paired_ci95": [
+            0.9917813243502401,
+            0.9975383362527848
+          ],
+          "seed_values": [
+            0.9974988111356456,
+            0.9938374269094579,
+            0.9934336937261465
+          ]
+        }
+      },
+      "architecture": "Llama-3.1-8B",
+      "dataset": "synthetic_qa",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "metric": "loss",
+      "metric_orientation": "lower_is_better",
+      "seed_values": [
+        {
+          "base_blind": -1.58515625,
+          "base_ddi_qf": -0.009640884399414063,
+          "base_full": -0.010892677307128906,
+          "blind_change": -0.2710937499999999,
+          "ddi_training_change": -0.0009199142456054674,
+          "full_ddi_gap_change": 0.005189323425292967,
+          "full_path_change": 0.004269409179687499,
+          "headroom": 1.574263572692871,
+          "normalized_remaining_gap": 0.9974988111356456,
+          "tuned_blind": -1.85625,
+          "tuned_ddi_qf": -0.01056079864501953,
+          "tuned_full": -0.006623268127441406
+        },
+        {
+          "base_blind": -1.566796875,
+          "base_ddi_qf": -0.015174102783203126,
+          "base_full": -0.008035659790039062,
+          "blind_change": -0.28749999999999987,
+          "ddi_training_change": 8.850097656250104e-05,
+          "full_ddi_gap_change": 0.002467536926269529,
+          "full_path_change": 0.002556037902832031,
+          "headroom": 1.558761215209961,
+          "normalized_remaining_gap": 0.9938374269094579,
+          "tuned_blind": -1.854296875,
+          "tuned_ddi_qf": -0.015085601806640625,
+          "tuned_full": -0.005479621887207031
+        },
+        {
+          "base_blind": -1.614453125,
+          "base_ddi_qf": -0.01452789306640625,
+          "base_full": -0.006934738159179688,
+          "blind_change": -0.267578125,
+          "ddi_training_change": 0.0005519866943359385,
+          "full_ddi_gap_change": 0.0029623031616210927,
+          "full_path_change": 0.0035142898559570317,
+          "headroom": 1.6075183868408203,
+          "normalized_remaining_gap": 0.9934336937261465,
+          "tuned_blind": -1.88203125,
+          "tuned_ddi_qf": -0.013975906372070312,
+          "tuned_full": -0.003420448303222656
+        }
+      ]
+    },
+    {
+      "aggregate": {
+        "blind_change": {
+          "mean": 0.8755208333333333,
+          "posthoc_paired_ci95": [
+            0.8226529947916666,
+            0.9273437499999999
+          ],
+          "seed_values": [
+            0.9023437499999998,
+            0.8578125000000001,
+            0.86640625
+          ]
+        },
+        "ddi_training_change": {
+          "mean": -0.000164110423065722,
+          "posthoc_paired_ci95": [
+            -0.00020475822374767935,
+            -0.0001297507871640846
+          ],
+          "seed_values": [
+            -0.00011681332252919674,
+            -0.00018122997134923936,
+            -0.00019428797531872988
+          ]
+        },
+        "full_ddi_gap_change": {
+          "mean": 0.00013794578262604773,
+          "posthoc_paired_ci95": [
+            0.00010366645326333432,
+            0.00017808578656210248
+          ],
+          "seed_values": [
+            9.410640923306346e-05,
+            0.00015208490076474844,
+            0.00016764603788033128
+          ]
+        },
+        "full_path_change": {
+          "mean": -2.6164640439674257e-05,
+          "posthoc_paired_ci95": [
+            -3.556461185022878e-05,
+            -1.78991863989116e-05
+          ],
+          "seed_values": [
+            -2.270691329613328e-05,
+            -2.9145070584490895e-05,
+            -2.66419374383986e-05
+          ]
+        },
+        "normalized_remaining_gap": {
+          "mean": 0.9999427223556044,
+          "posthoc_paired_ci95": [
+            0.9999254353310217,
+            0.9999573400405368
+          ],
+          "seed_values": [
+            0.9999624979484688,
+            0.999936101626124,
+            0.9999295674922206
+          ]
+        }
+      },
+      "architecture": "Qwen2.5-7B",
+      "dataset": "synthetic_qa",
+      "manifest_overlap": {
+        "0": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "1": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        },
+        "2": {
+          "Llama-3.1-8B": 20,
+          "Qwen2.5-7B": 20,
+          "common": 20
+        }
+      },
+      "metric": "loss",
+      "metric_orientation": "lower_is_better",
+      "seed_values": [
+        {
+          "base_blind": -2.5265625,
+          "base_ddi_qf": -8.700881153345108e-07,
+          "base_full": -2.252287231385708e-07,
+          "blind_change": 0.9023437499999998,
+          "ddi_training_change": -0.00011681332252919674,
+          "full_ddi_gap_change": 9.410640923306346e-05,
+          "full_path_change": -2.270691329613328e-05,
+          "headroom": 2.5265622747712766,
+          "normalized_remaining_gap": 0.9999624979484688,
+          "tuned_blind": -1.62421875,
+          "tuned_ddi_qf": -0.00011768341064453126,
+          "tuned_full": -2.293214201927185e-05
+        },
+        {
+          "base_blind": -2.38515625,
+          "base_ddi_qf": -6.237998604774475e-07,
+          "base_full": -3.0111405067145827e-07,
+          "blind_change": 0.8578125000000001,
+          "ddi_training_change": -0.00018122997134923936,
+          "full_ddi_gap_change": 0.00015208490076474844,
+          "full_path_change": -2.9145070584490895e-05,
+          "headroom": 2.3851559488859495,
+          "normalized_remaining_gap": 0.999936101626124,
+          "tuned_blind": -1.52734375,
+          "tuned_ddi_qf": -0.0001818537712097168,
+          "tuned_full": -2.9446184635162352e-05
+        },
+        {
+          "base_blind": -2.39453125,
+          "base_ddi_qf": -1.1258525773882866e-06,
+          "base_full": -1.1905794963240624e-07,
+          "blind_change": 0.86640625,
+          "ddi_training_change": -0.00019428797531872988,
+          "full_ddi_gap_change": 0.00016764603788033128,
+          "full_path_change": -2.66419374383986e-05,
+          "headroom": 2.3945311309420503,
+          "normalized_remaining_gap": 0.9999295674922206,
+          "tuned_blind": -1.528125,
+          "tuned_ddi_qf": -0.00019541382789611816,
+          "tuned_full": -2.6760995388031007e-05
+        }
+      ]
+    }
+  ],
+  "inputs": {
+    "Llama-3.1-8B": {
+      "base": [
+        {
+          "path": "results/transfer_llama_base_seed0_predictions.jsonl",
+          "seed": 0,
+          "sha256": "615e5556b71fbb621db73d76210919f69afa55c00cfe773ce2c56a63799e2296"
+        },
+        {
+          "path": "results/transfer_llama_base_seed1_predictions.jsonl",
+          "seed": 1,
+          "sha256": "7854572589ff424a5e155c0599bf7954f3647a7899daf844350ddc61bb6821a6"
+        },
+        {
+          "path": "results/transfer_llama_base_seed2_predictions.jsonl",
+          "seed": 2,
+          "sha256": "e854ae77240cad1c13b4ed1898836bfa60174a62b5f47dd888f4eaafae2391ae"
+        }
+      ],
+      "tuned": [
+        {
+          "path": "results/transfer_llama_tuned_seed0_predictions.jsonl",
+          "seed": 0,
+          "sha256": "6b6fe7bc13a7d519d592742ef65ff5435beaadb1a92fb9c085b1e473ff07a34f"
+        },
+        {
+          "path": "results/transfer_llama_tuned_seed1_predictions.jsonl",
+          "seed": 1,
+          "sha256": "aef9ff10c790e530e6b68d39f2d433c8fb0418995b80d9b84cde7095098fa14e"
+        },
+        {
+          "path": "results/transfer_llama_tuned_seed2_predictions.jsonl",
+          "seed": 2,
+          "sha256": "eae9d1ea23b15dd705b4421a033e6b6da907ae1b1b5a86a0a99c6846aafff138"
+        }
+      ]
+    },
+    "Qwen2.5-7B": {
+      "base": [
+        {
+          "path": "results/r5b1_qwen25_7b_base_seed0_20260902T1059Z_predictions.jsonl",
+          "seed": 0,
+          "sha256": "de4d3f2c7a5dda0806695342612ee19fe1889d697e687ed28a7d8107113842a2"
+        },
+        {
+          "path": "results/transfer_qwen_base_seed1_20260902T114019Z_predictions.jsonl",
+          "seed": 1,
+          "sha256": "56a62d78bfcbbf2378b4b5cca3edbc9d99526e9585fdf68c432253b509509fae"
+        },
+        {
+          "path": "results/transfer_qwen_base_seed2_20260902T142821Z_predictions.jsonl",
+          "seed": 2,
+          "sha256": "7856c845b22839ab4458ea5984a33cbab0bc91f6a306de900d1806e1dc7ae4e1"
+        }
+      ],
+      "tuned": [
+        {
+          "path": "results/transfer_qwen_tuned_seed0_predictions.jsonl",
+          "seed": 0,
+          "sha256": "977c823e86059336a14df10ea1182e991d3bf9c2ae3e1d9b2b24e90d41e21c0c"
+        },
+        {
+          "path": "results/transfer_qwen_tuned_seed1_predictions.jsonl",
+          "seed": 1,
+          "sha256": "57a7fb9d7a53db0fb3c276db0b3c3f58127eb1157e38a5c53d981cd9acbf4049"
+        },
+        {
+          "path": "results/transfer_qwen_tuned_seed2_predictions.jsonl",
+          "seed": 2,
+          "sha256": "4773a4a27ccb01509072efa19208c255f73595ad9fc954a0a29290f5a9380e7d"
+        }
+      ]
+    }
+  },
+  "interpretation": "conditional on these fixed checkpoints and retained manifests; not a population confidence interval"
+}

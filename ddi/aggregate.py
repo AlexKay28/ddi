@@ -10,7 +10,9 @@ Dispatch on ``kind``:
 - ``timing``        → phase3_timing rows, ``{model: {L: {backend: {mask: {N: value}}}}}``.
                       ``realized`` and ``realization`` are DERIVED by pairing variant
                       rows with matching ``full`` rows at ``(model, N, L, backend, seed)``.
-- ``throughput``    → phase4_throughput rows, ``{model: {mode: {N: value}}}``.
+- ``throughput``    → phase4_throughput rows, ``{model: {mode: {arm: value}}}`` where
+                      ``arm`` is ``{layout}/reuse={reuse}``; current reuse values also carry
+                      request shape so unlike benchmark cells cannot be merged.
 - ``restart_quality``→ phase4_restart rows, ``{model: {layout: {dataset: value}}}``.
 - ``correctness``   → phase4_cache rows, ``{model: {mode: {L: {N: value}}}}``
                       (worst-case max across queries).
@@ -18,7 +20,15 @@ Dispatch on ``kind``:
 Design notes / why:
 
 - **Delegates row access** to ``iter_rows`` / ``filter_rows`` so the store format
-  stays owned by one module.
+  stays owned by one module, and the ``run_id`` grammar to ``ddi.runids`` so the shape
+  of a row's identity is owned by one module too. No prefix string or segment index
+  appears here.
+- **One driver, five kinds.** ``quality`` / ``restart_quality`` / ``throughput`` /
+  ``correctness`` / ``timing`` are the same parse → bucket → reduce → nest pipeline;
+  ``_collect`` runs it and each kind supplies only what differs (see ``_Axis``).
+- **The store is read once per YAML**, in ``aggregate()``, and the row list is passed to
+  every collector. Each collector used to call ``load_rows`` itself and ``timing`` called
+  it twice, so ``performance.yaml``'s six tables parsed the whole JSONL seven times.
 - **JSON output** — colorization, delta annotations, and the provenance-footer
   blockquote are gone. Consumers who need Δ vs a baseline compute it from the raw
   values.
@@ -26,10 +36,17 @@ Design notes / why:
   detectable by the consumer.
 - **Insertion order is meaningful** — the ordered mask/N/L axes are baked into
   dict insertion order (Python 3.7+). ``json.dumps(..., sort_keys=False)``.
-- **Provenance envelope** reuses ``ddi.reports._provenance`` helpers for the git
-  SHA and store hash so the format stays identical to the pre-refactor footer.
+- **Every axis is derived from the rows present**, ordered by a per-axis
+  "preferred" tuple with anything unexpected appended (see ``_ordered_axis``). A
+  hardcoded axis whitelist silently empties the table the moment a config names a
+  value outside it, and the "no rows in store" guards only check the run_id prefix.
+- **Provenance envelope** does NOT import ``ddi.reports._provenance``; it carries
+  stdlib-only replicas of those helpers (see ``_git_sha`` / ``_store_sha256_8``)
+  so this module has no markdown-formatting dependency at all. ``ddi/reports/``
+  is not a package and is not shipped in ``pyproject.toml``.
 - **Open/closed for new kinds**: dispatcher ``_COLLECTORS`` is a plain dict —
-  a new kind adds one entry and one ``_collect_<kind>`` function.
+  a new kind adds one entry and one ``_collect_<kind>`` function, plus its allowed
+  ``report.tables[]`` keys in ``_TABLE_KEYS``.
 
 CLI:
 
@@ -52,6 +69,15 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+from ddi.runids import (
+    CorrectnessRunId,
+    FinetuneRunId,
+    QualityRunId,
+    RestartRunId,
+    ThroughputRunId,
+    TimingRunId,
+)
 
 # ---- Store readers (inlined from the deleted ddi.report in #89) ----------------------------
 #
@@ -123,71 +149,256 @@ def load_rows(store: Path, model_filter: str | None = None) -> list[dict]:
     return [r for r in rows if _row_model(r) == model_filter]
 
 
+# ---- Axis ordering --------------------------------------------------------------------------
+
+
+def _ordered_axis(values: Iterable[Any], preferred: tuple[Any, ...]) -> list[Any]:
+    """Order an axis: ``preferred`` entries first in their declared order, then the rest.
+
+    The axis itself is always DERIVED from ``values`` — the rows actually present — so a
+    value nobody anticipated still gets a column instead of vanishing. ``preferred`` only
+    fixes the reading order of the values it names; extras are appended sorted so the
+    output stays deterministic.
+
+    This shape used to be written out five times (masks, layouts, timing masks, throughput
+    modes, correctness modes) and twice more as a hardcoded tuple that was *filtered
+    against* rather than merely sorted by — ``_TIMING_N_COLUMNS`` and the old
+    ``_QUALITY_DATASET_COLUMNS``. Those two dropped every row whose N / dataset was not in
+    the tuple, so changing ``Ns:`` in performance.yaml emptied the timing table with no
+    error anywhere (the "no rows in store" guard only checks the run_id prefix, which was
+    still matching). One helper, one behaviour, one place to fix it.
+    """
+    uniq = list(dict.fromkeys(values))
+    ordered = [v for v in preferred if v in uniq]
+    extras = sorted(v for v in uniq if v not in preferred)
+    return ordered + extras
+
+
+# ---- The collector driver -------------------------------------------------------------------
+#
+# `quality`, `restart_quality`, `throughput` and `correctness` were four copies of the same
+# body: guard that the store holds rows of this prefix → parse each row's run_id into a cell
+# key → bucket values into a defaultdict → reduce each bucket → nest into ordered axes,
+# pruning empties → wrap in the shared envelope. `timing` was the same with a derived-metric
+# pass spliced between bucketing and reducing. Five copies of a five-phase pipeline is five
+# places for the axis-ordering and missing-cell rules to drift apart, and two of them already
+# had (see `_ordered_axis`'s docstring for the hardcoded-axis incident).
+#
+# What varies between kinds is exactly: which rows are mine (`prefix`), how a row becomes a
+# cell key (`bucket`), how a bucket becomes a number (`reduce` — `max` for correctness, mean
+# for the rest), and how the key's components are ordered and nested (`axes` / `nest_order`).
+# Everything else is shared.
+
+
+# One level of a collected table, expressed as its ordering rule: given every value seen at
+# that level *under the parent cell being expanded* — never a hardcoded whitelist — return
+# them in reading order. Cell values become JSON object keys via `str`, which is what turns
+# the int N / L axes into `"13"` / `"8"`.
+_Axis = Callable[[Iterable[Any]], list[Any]]
+
+
+def _sorted_axis(values: Iterable[Any]) -> list[Any]:
+    """Ascending, deduplicated. The default for axes with no preferred reading order."""
+    return sorted(set(values))
+
+
+def _preferred_axis(preferred: tuple[Any, ...]) -> _Axis:
+    """An axis ordered by ``preferred`` first, then anything else sorted (`_ordered_axis`)."""
+    return lambda values: _ordered_axis(values, preferred)
+
+
+def _mean(values: list[float]) -> float:
+    return sum(values) / len(values)
+
+
+def _bucket_by_metric(
+    rows: Iterable[dict],
+    metric: str,
+    key_of: Callable[[str], tuple | None],
+) -> tuple[dict[tuple, list[float]], list[dict]]:
+    """Group ``metric`` rows into ``{cell key: [values]}`` plus the rows that backed them.
+
+    A row is dropped — silently, so one bad line in an append-only store never breaks a
+    whole collection — when its run_id does not parse into a cell key, or when its value is
+    not a number.
+    """
+    per_cell: dict[tuple, list[float]] = defaultdict(list)
+    backing_rows: list[dict] = []
+    for row in filter_rows(rows, metric=metric):
+        key = key_of(str(row.get("run_id", "")))
+        if key is None:
+            continue
+        try:
+            value = float(row["value"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        per_cell[key].append(value)
+        backing_rows.append(row)
+    return per_cell, backing_rows
+
+
+def _nest(
+    per_cell: dict[tuple, list[float]],
+    reduce: Callable[[list[float]], float],
+    axes: tuple[_Axis, ...],
+    nest_order: tuple[int, ...] | None = None,
+) -> dict:
+    """Reduce each cell and nest it under its ordered axes.
+
+    ``axes`` is in *traversal* order and each axis's values are collected per parent cell, so
+    a value nobody anticipated still gets a key instead of vanishing. ``nest_order`` permutes
+    the key components on the way into the output when the reading order and the nesting
+    order differ (only ``correctness`` needs this: it orders modes within each L but nests L
+    inside mode).
+
+    Only cells that exist are walked, so a missing cell omits its key entirely and no empty
+    container is ever created — "absence is detectable by the consumer" without any pruning
+    pass.
+    """
+    order = tuple(range(len(axes))) if nest_order is None else nest_order
+
+    # scope[(v0, ..., v(d-1))] = the values seen at depth d under that parent, in row order.
+    scope: dict[tuple, list[Any]] = defaultdict(list)
+    for key in per_cell:
+        for depth in range(len(axes)):
+            scope[key[:depth]].append(key[depth])
+
+    ordered_keys: list[tuple] = []
+
+    def walk(parent: tuple, depth: int) -> None:
+        if depth == len(axes):
+            ordered_keys.append(parent)
+            return
+        for value in axes[depth](scope[parent]):
+            walk((*parent, value), depth + 1)
+
+    walk((), 0)
+
+    data: dict = {}
+    for key in ordered_keys:
+        node = data
+        for i in order[:-1]:
+            node = node.setdefault(str(key[i]), {})
+        node[str(key[order[-1]])] = reduce(per_cell[key])
+    return data
+
+
+def _table(kind: str, metric: str | None, backing_rows: list[dict], data: dict) -> dict:
+    """The envelope every collected table shares.
+
+    ``seeds`` comes from ``provenance.seed`` rather than the run_id's ``seed=`` field: the
+    provenance is the seed of record (see the cross-check in `ddi.delta.compute_delta`).
+    """
+    body = {"kind": kind}
+    if metric is not None:
+        body["metric"] = metric
+    body.update(
+        backing_rows=len(backing_rows),
+        distinct_run_ids=len({r.get("run_id") for r in backing_rows}),
+        seeds=sorted({int((r.get("provenance") or {}).get("seed", 0)) for r in backing_rows}),
+        models=sorted(data),
+        data=data,
+    )
+    return body
+
+
+def _collect(
+    *,
+    kind: str,
+    metric: str,
+    rows: list[dict],
+    store: Path,
+    prefix: str,
+    no_rows_hint: str,
+    bucket: Callable[[list[dict]], tuple[dict[tuple, list[float]], list[dict]]],
+    reduce: Callable[[list[float]], float],
+    axes: tuple[_Axis, ...],
+    nest_order: tuple[int, ...] | None = None,
+    require_cells: bool = True,
+) -> dict:
+    """Run the five-phase collection for one ``report.tables[]`` entry.
+
+    The two failure modes are deliberately distinct. "No rows of this prefix at all" means
+    the sweep was never run and names the task to run (``no_rows_hint``). "Rows exist but
+    none carried this metric" means the sweep ran and the metric selector is wrong. Both
+    raise rather than emitting an empty table, because an empty table renders identically to
+    a real result of zero. ``require_cells=False`` opts out of the second one for the single
+    kind (``timing``) whose metrics can legitimately be absent from every cell.
+    """
+    if not any(str(r.get("run_id", "")).startswith(prefix) for r in rows):
+        raise ValueError(
+            f"{kind}[{metric}]: no {prefix.rstrip(':')} rows in store {store}. {no_rows_hint}"
+        )
+    per_cell, backing_rows = bucket(rows)
+    if require_cells and not per_cell:
+        raise ValueError(
+            f"{kind}[{metric}]: no {prefix.rstrip(':')} rows carried metric={metric!r}."
+        )
+    return _table(kind, metric, backing_rows, _nest(per_cell, reduce, axes, nest_order))
+
+
 # ---- Quality kind ---------------------------------------------------------------------------
 #
-# Dataset whitelist is lifted from the pre-JSON renderer; historical rows for pruned
-# datasets (`nq`, `composition`, `ddi_stress__*`) are silently dropped rather than surfacing
-# as extra keys in the JSON.
+# The dataset axis is derived from the rows present and ordered by
+# `_QUALITY_PREFERRED_DATASETS`. Historical rows for pruned datasets (`nq`, `kilt_nq`,
+# `composition`, `ddi_stress__*`) are silently dropped rather than surfacing as extra
+# keys in the JSON.
 
-_QUALITY_PREFIX = "phase2_train_free:"
 _QUALITY_METRICS: frozenset[str] = frozenset({"em", "f1", "presence", "loss"})
 
-_QUALITY_DATASET_COLUMNS: tuple[str, ...] = (
+# Reading order only — NOT a filter. The datasets `experiments/quality.yaml` runs, first.
+_QUALITY_PREFERRED_DATASETS: tuple[str, ...] = (
     "synthetic_qa",
     "hotpot_qa",
     "musique",
-    "kilt_nq",
 )
 
-# ``nq`` is degenerate (no docs); older EXP-01 rows still exist in the store — drop them
-# explicitly. ``composition`` / ``ddi_stress__*`` also stay in the drop list: their loaders /
-# runners were deleted in #89, but historical rows may still live in results/runs.jsonl and
-# must be silently skipped rather than surfacing as noise keys in the JSON.
-_QUALITY_DROPPED_DATASETS: frozenset[str] = frozenset({"nq"})
+# Datasets whose rows must never reach a table, however many of them a store holds.
+#
+# ``nq`` is degenerate (no docs), so every DDI mask variant coerces to `full` and the cell
+# measures nothing; its loader was deleted in VIBEQUEUE-16 but older EXP-01 rows still
+# exist in the store. ``kilt_nq`` is worse than degenerate: its "documents" were bare
+# Wikipedia titles rather than passage bodies (VIBEQUEUE-2 review, issue R1), so `full`
+# and `blind` saw the same information and the whole column is void — and a store carrying
+# those rows has already been reported once (see `nirvana/common/constant.py` on rows
+# 22/23, which averaged 41,304 stale rows into a published table). ``composition`` /
+# ``ddi_stress__*`` are here because their loaders / runners were deleted in #89.
+#
+# This list is load-bearing, not belt-and-braces: the dataset axis is derived from the
+# rows present, so anything not dropped HERE becomes a column. Restoring `kilt_nq` means
+# doing the KILT knowledge-source join first, then removing it from this set.
+_QUALITY_DROPPED_DATASETS: frozenset[str] = frozenset({"nq", "kilt_nq"})
 
 _QUALITY_PREFERRED_MASKS: tuple[str, ...] = ("full", "ddi_qf", "blind")
 
 
-def _quality_parse_run_id(run_id: str) -> tuple[str, str, str, int] | None:
-    """Return ``(model, dataset, variant, seed)`` from a phase2_train_free run_id.
-
-    Shape: ``phase2_train_free:{model}:{dataset}:{variant}:seed={seed}:{sha}:{record_id}``.
-    Returns None if the shape does not match — a malformed row is silently skipped so a
-    single bad line in the store never breaks a collection.
-    """
-    parts = run_id.split(":")
-    if len(parts) < 7 or (parts[0] + ":") != _QUALITY_PREFIX:
-        return None
-    model = parts[1]
-    dataset = parts[2]
-    variant = parts[3]
-    seed_field = parts[4]
-    if not seed_field.startswith("seed="):
-        return None
-    try:
-        seed = int(seed_field[len("seed="):])
-    except ValueError:
-        return None
-    return model, dataset, variant, seed
-
-
 def _quality_dataset_to_column(dataset: str) -> str | None:
-    """Map a store dataset name to a column label, or None to drop the row."""
+    """Map a store dataset name to a column label, or None to drop the row.
+
+    Anything not explicitly dropped becomes a column: the axis is derived from the rows,
+    so a dataset added to `quality.yaml` shows up without editing this module. The
+    corollary is that `_QUALITY_DROPPED_DATASETS` (and the two prefix checks below) are
+    the only thing standing between a stale store and a void column in a report.
+    """
     if dataset in _QUALITY_DROPPED_DATASETS:
         return None
     if dataset == "ddi_stress" or dataset.startswith("ddi_stress__") or dataset == "composition":
         return None
-    return dataset if dataset in _QUALITY_DATASET_COLUMNS else None
+    return dataset or None
 
 
-def _quality_mask_order(masks: Iterable[str]) -> list[str]:
-    uniq = list(dict.fromkeys(masks))
-    ordered = [m for m in _QUALITY_PREFERRED_MASKS if m in uniq]
-    extras = sorted(m for m in uniq if m not in _QUALITY_PREFERRED_MASKS)
-    return ordered + extras
+def _quality_cell_key(run_id: str) -> tuple[str, str, str] | None:
+    """``(model, mask, column)`` for a phase2_train_free row, or None to drop it."""
+    parsed = QualityRunId.parse(run_id)
+    if parsed is None:
+        return None
+    col = _quality_dataset_to_column(parsed.dataset)
+    if col is None:
+        return None
+    return parsed.model, parsed.variant, col
 
 
-def _collect_quality(spec: dict, store: Path, model_filter: str | None = None) -> dict:
+def _collect_quality(spec: dict, store: Path, rows: list[dict]) -> dict:
     """Return the JSON body for one report.tables[] entry (kind: quality)."""
     metric = spec.get("metric")
     if metric not in _QUALITY_METRICS:
@@ -195,65 +406,21 @@ def _collect_quality(spec: dict, store: Path, model_filter: str | None = None) -
             f"quality: unknown metric {metric!r}; expected one of "
             f"{sorted(_QUALITY_METRICS)}"
         )
-
-    all_rows = load_rows(store, model_filter)
-    if not any(str(r.get("run_id", "")).startswith(_QUALITY_PREFIX) for r in all_rows):
-        raise ValueError(
-            f"quality[{metric}]: no phase2_train_free rows in store {store}. "
-            "Run the phase2 sweep first."
-        )
-
-    # (model, mask, column) -> [per-record values across seeds]
-    per_cell: dict[tuple[str, str, str], list[float]] = defaultdict(list)
-    backing_rows: list[dict] = []
-    for row in filter_rows(all_rows, metric=metric):
-        parsed = _quality_parse_run_id(str(row.get("run_id", "")))
-        if parsed is None:
-            continue
-        model, dataset, variant, _seed = parsed
-        col = _quality_dataset_to_column(dataset)
-        if col is None:
-            continue
-        try:
-            per_cell[(model, variant, col)].append(float(row["value"]))
-        except (TypeError, ValueError, KeyError):
-            continue
-        backing_rows.append(row)
-
-    if not per_cell:
-        raise ValueError(
-            f"quality[{metric}]: no phase2_train_free rows carried metric={metric!r}."
-        )
-
-    models = sorted({m for (m, _v, _c) in per_cell})
-    masks_seen: dict[str, list[str]] = defaultdict(list)
-    for (model, mask, _col) in per_cell:
-        masks_seen[model].append(mask)
-
-    data: dict[str, dict[str, dict[str, float]]] = {}
-    for model in models:
-        model_body: dict[str, dict[str, float]] = {}
-        for mask in _quality_mask_order(masks_seen[model]):
-            mask_body: dict[str, float] = {}
-            for col in _QUALITY_DATASET_COLUMNS:
-                values = per_cell.get((model, mask, col))
-                if not values:
-                    continue  # missing cell → key omitted entirely
-                mask_body[col] = sum(values) / len(values)
-            if mask_body:
-                model_body[mask] = mask_body
-        if model_body:
-            data[model] = model_body
-
-    return {
-        "kind": "quality",
-        "metric": metric,
-        "backing_rows": len(backing_rows),
-        "distinct_run_ids": len({r.get("run_id") for r in backing_rows}),
-        "seeds": sorted({int((r.get("provenance") or {}).get("seed", 0)) for r in backing_rows}),
-        "models": models,
-        "data": data,
-    }
+    return _collect(
+        kind="quality",
+        metric=metric,
+        rows=rows,
+        store=store,
+        prefix=QualityRunId.PREFIX,
+        no_rows_hint="Run the phase2 sweep first.",
+        bucket=lambda rs: _bucket_by_metric(rs, metric, _quality_cell_key),
+        reduce=_mean,
+        axes=(
+            _sorted_axis,                                   # model
+            _preferred_axis(_QUALITY_PREFERRED_MASKS),      # mask
+            _preferred_axis(_QUALITY_PREFERRED_DATASETS),   # dataset column
+        ),
+    )
 
 
 # ---- Restart-quality kind (C4 restart-position layout parity) ------------------------------
@@ -261,38 +428,26 @@ def _collect_quality(spec: dict, store: Path, model_filter: str | None = None) -
 # `sequential` is the baseline layout; `restart` is the variant. The JSON body uses the
 # same dataset whitelist as ``quality``; deltas vs `sequential` are a consumer concern.
 
-_RESTART_PREFIX = "phase4_restart:"
 _RESTART_METRICS: frozenset[str] = frozenset({"em", "f1", "presence", "loss"})
 _RESTART_PREFERRED_LAYOUTS: tuple[str, ...] = ("sequential", "restart")
 
 
-def _restart_parse_run_id(run_id: str) -> tuple[str, str, str, str, int] | None:
-    """Return ``(model, dataset, tag, layout, seed)`` from a phase4_restart run_id.
+def _restart_cell_key(run_id: str) -> tuple[str, str, str] | None:
+    """``(model, layout, column)`` for a phase4_restart row, or None to drop it.
 
-    Shape: ``phase4_restart:{model}:{dataset}:{tag}:{layout}:seed={seed}:{sha}:{record_id}``.
-    Returns None if the shape does not match — a malformed row is silently skipped.
+    The mask `tag` is deliberately not part of the key: this table's axis is the layout, and
+    a restart sweep runs one mask variant.
     """
-    parts = run_id.split(":")
-    if len(parts) < 8 or (parts[0] + ":") != _RESTART_PREFIX:
+    parsed = RestartRunId.parse(run_id)
+    if parsed is None:
         return None
-    model, dataset, tag, layout, seed_field = parts[1], parts[2], parts[3], parts[4], parts[5]
-    if not seed_field.startswith("seed="):
+    col = _quality_dataset_to_column(parsed.dataset)
+    if col is None:
         return None
-    try:
-        seed = int(seed_field[len("seed="):])
-    except ValueError:
-        return None
-    return model, dataset, tag, layout, seed
+    return parsed.model, parsed.layout, col
 
 
-def _restart_layout_order(layouts: Iterable[str]) -> list[str]:
-    uniq = list(dict.fromkeys(layouts))
-    ordered = [lay for lay in _RESTART_PREFERRED_LAYOUTS if lay in uniq]
-    extras = sorted(lay for lay in uniq if lay not in _RESTART_PREFERRED_LAYOUTS)
-    return ordered + extras
-
-
-def _collect_restart_quality(spec: dict, store: Path, model_filter: str | None = None) -> dict:
+def _collect_restart_quality(spec: dict, store: Path, rows: list[dict]) -> dict:
     """Return the JSON body for one report.tables[] entry (kind: restart_quality)."""
     metric = spec.get("metric")
     if metric not in _RESTART_METRICS:
@@ -300,129 +455,55 @@ def _collect_restart_quality(spec: dict, store: Path, model_filter: str | None =
             f"restart_quality: unknown metric {metric!r}; expected one of "
             f"{sorted(_RESTART_METRICS)}"
         )
-
-    all_rows = load_rows(store, model_filter)
-    if not any(str(r.get("run_id", "")).startswith(_RESTART_PREFIX) for r in all_rows):
-        raise ValueError(
-            f"restart_quality[{metric}]: no phase4_restart rows in store {store}. "
-            "Run the cache/restart_quality task first."
-        )
-
-    per_cell: dict[tuple[str, str, str], list[float]] = defaultdict(list)
-    backing_rows: list[dict] = []
-    for row in filter_rows(all_rows, metric=metric):
-        parsed = _restart_parse_run_id(str(row.get("run_id", "")))
-        if parsed is None:
-            continue
-        model, dataset, _tag, layout, _seed = parsed
-        col = _quality_dataset_to_column(dataset)
-        if col is None:
-            continue
-        try:
-            per_cell[(model, layout, col)].append(float(row["value"]))
-        except (TypeError, ValueError, KeyError):
-            continue
-        backing_rows.append(row)
-
-    if not per_cell:
-        raise ValueError(
-            f"restart_quality[{metric}]: no phase4_restart rows carried metric={metric!r}."
-        )
-
-    models = sorted({m for (m, _lay, _c) in per_cell})
-    layouts_seen: dict[str, list[str]] = defaultdict(list)
-    for (model, layout, _col) in per_cell:
-        layouts_seen[model].append(layout)
-
-    data: dict[str, dict[str, dict[str, float]]] = {}
-    for model in models:
-        model_body: dict[str, dict[str, float]] = {}
-        for layout in _restart_layout_order(layouts_seen[model]):
-            layout_body: dict[str, float] = {}
-            for col in _QUALITY_DATASET_COLUMNS:
-                values = per_cell.get((model, layout, col))
-                if not values:
-                    continue
-                layout_body[col] = sum(values) / len(values)
-            if layout_body:
-                model_body[layout] = layout_body
-        if model_body:
-            data[model] = model_body
-
-    return {
-        "kind": "restart_quality",
-        "metric": metric,
-        "backing_rows": len(backing_rows),
-        "distinct_run_ids": len({r.get("run_id") for r in backing_rows}),
-        "seeds": sorted({int((r.get("provenance") or {}).get("seed", 0)) for r in backing_rows}),
-        "models": models,
-        "data": data,
-    }
+    return _collect(
+        kind="restart_quality",
+        metric=metric,
+        rows=rows,
+        store=store,
+        prefix=RestartRunId.PREFIX,
+        no_rows_hint="Run the cache/restart_quality task first.",
+        bucket=lambda rs: _bucket_by_metric(rs, metric, _restart_cell_key),
+        reduce=_mean,
+        axes=(
+            _sorted_axis,                                   # model
+            _preferred_axis(_RESTART_PREFERRED_LAYOUTS),    # layout
+            _preferred_axis(_QUALITY_PREFERRED_DATASETS),   # dataset column
+        ),
+    )
 
 
 # ---- Timing kind ---------------------------------------------------------------------------
 
-_TIMING_PREFIX = "phase3_timing:"
 _TIMING_FULL_VARIANT = "full"
 
-_TIMING_N_COLUMNS: tuple[int, ...] = (1, 3, 5, 9, 13, 25)
+# Reading order for the N axis — NOT a filter. These are the Ns `performance.yaml` sweeps;
+# any other N present in the store is appended after them rather than dropped.
+_TIMING_PREFERRED_NS: tuple[int, ...] = (1, 3, 5, 9, 13, 25)
 _TIMING_PREFERRED_MASKS: tuple[str, ...] = ("full", "ddi_qf", "blind")
 
-_TIMING_METRICS: frozenset[str] = frozenset(
-    {"ttft", "tpot", "sparsity", "analytical", "realized", "realization"}
-)
-
-# Map short metric name from YAML → store metric name it aggregates. `realized` and
-# `realization` are DERIVED so they need TTFT rows on both the variant and `full` arms.
-_TIMING_METRIC_ALIAS: dict[str, str] = {
-    "ttft": "ftt_median_ms",
-    "tpot": "tpot_median_ms",
-    "sparsity": "mask_sparsity",
-    "analytical": "analytical_speedup",
-    "realized": "ftt_median_ms",  # derived from full vs variant TTFT
-    "realization": "ftt_median_ms",  # derived from realized / analytical
+# Store metric name → the short name `report.tables[].metric` uses. Single source of
+# truth: this mapping used to exist twice — once here in the short→store direction as an
+# unreferenced `_TIMING_METRIC_ALIAS`, and once as an if/elif chain inside
+# `_timing_collect` — so nothing would have caught the two drifting apart.
+_TIMING_RAW_METRICS: dict[str, str] = {
+    "ftt_median_ms": "ttft",
+    "tpot_median_ms": "tpot",
+    "mask_sparsity": "sparsity",
+    "analytical_speedup": "analytical",
 }
 
+# These two have no store rows of their own. `_timing_apply_derived` computes them from
+# TTFT on BOTH the variant and the `full` arm at the same (model, N, L, backend, seed) —
+# `realized` = full_ttft / variant_ttft, `realization` = realized / analytical_speedup.
+_TIMING_DERIVED_METRICS: frozenset[str] = frozenset({"realized", "realization"})
 
-def _timing_parse_run_id(run_id: str) -> dict[str, Any] | None:
-    """Parse a phase3_timing run_id into a dict of shape parameters.
-
-    Shape: ``phase3_timing:{model}:N={N}:L={L}:Q={Q}:{variant}:{backend}:seed={seed}:{sha}``.
-    """
-    if not run_id.startswith(_TIMING_PREFIX):
-        return None
-    parts = run_id.split(":")
-    if len(parts) < 9:
-        return None
-    n_seg, l_seg, q_seg = parts[2], parts[3], parts[4]
-    if not (n_seg.startswith("N=") and l_seg.startswith("L=") and q_seg.startswith("Q=")):
-        return None
-    try:
-        n = int(n_seg[2:])
-        l_ = int(l_seg[2:])
-        q = int(q_seg[2:])
-    except ValueError:
-        return None
-    return {
-        "model": parts[1],
-        "N": n,
-        "L": l_,
-        "Q": q,
-        "variant": parts[5],
-        "backend": parts[6],
-    }
-
-
-def _timing_mask_order(masks: Iterable[str]) -> list[str]:
-    uniq = list(dict.fromkeys(masks))
-    ordered = [m for m in _TIMING_PREFERRED_MASKS if m in uniq]
-    extras = sorted(m for m in uniq if m not in _TIMING_PREFERRED_MASKS)
-    return ordered + extras
+_TIMING_METRICS: frozenset[str] = (
+    frozenset(_TIMING_RAW_METRICS.values()) | _TIMING_DERIVED_METRICS
+)
 
 
 def _timing_collect(
-    store: Path,
-    model_filter: str | None = None,
+    rows: Iterable[dict],
 ) -> tuple[
     dict[tuple[str, str, int, int, str, int], dict[str, float]],
     list[dict],
@@ -431,37 +512,26 @@ def _timing_collect(
 
     Returns ``(per_cell, backing_rows)``. ``per_cell[key][short]`` is the raw metric value;
     the derived ``realized`` / ``realization`` are filled by ``_timing_apply_derived``.
+
+    The seed here is ``provenance.seed``, not the run_id's — the derived metrics pair a
+    variant with the `full` arm measured on the same hardware pass, and the provenance is
+    what records that.
     """
     per_cell: dict[tuple[str, str, int, int, str, int], dict[str, float]] = {}
     backing_rows: list[dict] = []
-    for row in load_rows(store, model_filter):
-        parsed = _timing_parse_run_id(str(row.get("run_id", "")))
+    for row in rows:
+        parsed = TimingRunId.parse(str(row.get("run_id", "")))
         if parsed is None:
             continue
-        metric = row.get("metric")
-        if metric == "ftt_median_ms":
-            short = "ttft"
-        elif metric == "tpot_median_ms":
-            short = "tpot"
-        elif metric == "mask_sparsity":
-            short = "sparsity"
-        elif metric == "analytical_speedup":
-            short = "analytical"
-        else:
+        short = _TIMING_RAW_METRICS.get(str(row.get("metric")))
+        if short is None:
             continue
         try:
             value = float(row["value"])
         except (KeyError, TypeError, ValueError):
             continue
         seed = int((row.get("provenance") or {}).get("seed", 0))
-        key = (
-            str(parsed["model"]),
-            str(parsed["variant"]),
-            int(parsed["N"]),
-            int(parsed["L"]),
-            str(parsed["backend"]),
-            seed,
-        )
+        key = (parsed.model, parsed.variant, parsed.N, parsed.L, parsed.backend, seed)
         per_cell.setdefault(key, {})[short] = value
         backing_rows.append(row)
     return per_cell, backing_rows
@@ -497,180 +567,134 @@ def _timing_apply_derived(
                 metrics["realization"] = realized / analytical
 
 
-def _collect_timing(spec: dict, store: Path, model_filter: str | None = None) -> dict:
-    """Return the JSON body for one report.tables[] entry (kind: timing)."""
+def _timing_bucket(
+    rows: Iterable[dict], metric: str
+) -> tuple[dict[tuple, list[float]], list[dict]]:
+    """Bucket timing cells by (model, L, backend, mask, N) for one metric.
+
+    This is the one collector that cannot use `_bucket_by_metric`: a timing cell is assembled
+    from SEVERAL store rows (one per raw metric) before the derived `realized` / `realization`
+    can be computed from them, so the metric selector applies after grouping rather than as a
+    row filter. That also makes `backing_rows` here count every row that fed a cell, not only
+    the rows carrying the selected metric — which is what the seeds list needs, since a seed
+    is present in the sweep whether or not this particular metric landed.
+    """
+    per_seed_cell, backing_rows = _timing_collect(rows)
+    _timing_apply_derived(per_seed_cell)
+
+    per_cell: dict[tuple, list[float]] = defaultdict(list)
+    for (model, variant, n, l_, backend, _seed), metrics in per_seed_cell.items():
+        value = metrics.get(metric)
+        if value is None:
+            continue  # missing cell → key omitted entirely
+        per_cell[(model, l_, backend, variant, n)].append(value)
+    return per_cell, backing_rows
+
+
+def _collect_timing(spec: dict, store: Path, rows: list[dict]) -> dict:
+    """Return the JSON body for one report.tables[] entry (kind: timing).
+
+    Emits ``{model: {L: {backend: {mask: {N: value}}}}}``, meaned across seeds. Masks and Ns
+    are both derived from the rows present in each (model, L, backend) block and ordered by
+    their preferred tuples.
+
+    The N axis used to be the fixed `_TIMING_N_COLUMNS` tuple, ENFORCED as a filter
+    (`if n not in _TIMING_N_COLUMNS: continue`). It happened to match
+    `experiments/performance.yaml`, so no published timing table was wrong — but any edit to
+    `Ns:` would have emptied the table with no error, because the "no phase3_timing rows in
+    store" guard only checks the run_id prefix, which keeps matching perfectly well at an
+    unlisted N.
+
+    Unlike the other kinds this one does NOT raise when no cell carries the metric: a timing
+    sweep legitimately produces raw metrics for arms whose derived `realized` /
+    `realization` could not be paired, and an empty body is the honest answer there.
+    """
     metric = spec.get("metric")
     if metric not in _TIMING_METRICS:
         raise ValueError(
             f"timing: unknown metric {metric!r}; expected one of "
             f"{sorted(_TIMING_METRICS)}"
         )
-
-    if not any(
-        str(r.get("run_id", "")).startswith(_TIMING_PREFIX)
-        for r in load_rows(store, model_filter)
-    ):
-        raise ValueError(
-            f"timing[{metric}]: no phase3_timing rows in store {store}. "
-            "Run the phase3 sweep first."
-        )
-
-    per_cell, backing_rows = _timing_collect(store, model_filter)
-    _timing_apply_derived(per_cell)
-
-    # Aggregate values per (model, L, backend, mask, N) by mean across seeds. Track masks
-    # separately so a variant with only derived metrics missing still shows up (with an
-    # empty-inner dict pruned rather than surfaced as null).
-    agg: dict[tuple[str, int, str, str, int], list[float]] = defaultdict(list)
-    all_masks: dict[tuple[str, int, str], set[str]] = defaultdict(set)
-    for (model, variant, n, l_, backend, _seed), metrics in per_cell.items():
-        if n not in _TIMING_N_COLUMNS:
-            continue
-        all_masks[(model, l_, backend)].add(variant)
-        val = metrics.get(metric)
-        if val is None:
-            continue
-        agg[(model, l_, backend, variant, n)].append(val)
-
-    # Build the nested dict: {model: {L: {backend: {mask: {N: value}}}}}.
-    # Outer axes sorted ascendingly; masks follow _timing_mask_order; N follows the
-    # fixed column order.
-    triples = sorted(all_masks)
-    data: dict[str, dict[str, dict[str, dict[str, dict[str, float]]]]] = {}
-    for (model, l_, backend) in triples:
-        model_body = data.setdefault(model, {})
-        l_body = model_body.setdefault(str(l_), {})
-        backend_body = l_body.setdefault(backend, {})
-        for mask in _timing_mask_order(all_masks[(model, l_, backend)]):
-            mask_body: dict[str, float] = {}
-            for n in _TIMING_N_COLUMNS:
-                vals = agg.get((model, l_, backend, mask, n))
-                if not vals:
-                    continue
-                mask_body[str(n)] = sum(vals) / len(vals)
-            if mask_body:
-                backend_body[mask] = mask_body
-        if not backend_body:
-            l_body.pop(backend, None)
-        if not l_body:
-            model_body.pop(str(l_), None)
-    # Drop any model that ended up empty after pruning.
-    data = {m: body for m, body in data.items() if body}
-
-    return {
-        "kind": "timing",
-        "metric": metric,
-        "backing_rows": len(backing_rows),
-        "distinct_run_ids": len({r.get("run_id") for r in backing_rows}),
-        "seeds": sorted({int((r.get("provenance") or {}).get("seed", 0)) for r in backing_rows}),
-        "models": sorted(data),
-        "data": data,
-    }
+    return _collect(
+        kind="timing",
+        metric=metric,
+        rows=rows,
+        store=store,
+        prefix=TimingRunId.PREFIX,
+        no_rows_hint="Run the phase3 sweep first.",
+        bucket=lambda rs: _timing_bucket(rs, metric),
+        reduce=_mean,
+        axes=(
+            _sorted_axis,                                   # model
+            _sorted_axis,                                   # L  (int, labelled str)
+            _sorted_axis,                                   # backend
+            _preferred_axis(_TIMING_PREFERRED_MASKS),       # mask
+            _preferred_axis(_TIMING_PREFERRED_NS),          # N  (int, labelled str)
+        ),
+        require_cells=False,
+    )
 
 
 # ---- Throughput kind ------------------------------------------------------------------------
 
-_THROUGHPUT_PREFIX = "phase4_throughput:"
 _THROUGHPUT_PREFERRED_MODES: tuple[str, ...] = ("ddi_cache", "ddi_recompute", "full_causal")
 
+# Used when a run_id carries neither a layout nor a reuse segment. Such a row still gets a
+# cell rather than being dropped, but it is not silently merged with the shaped ones.
+# The grammar itself lives in `ddi.runids.ThroughputRunId`; aliased here because the arm axis
+# has to sort this value last.
+_THROUGHPUT_UNKNOWN_ARM = ThroughputRunId.UNKNOWN_ARM
 
-def _throughput_parse_run_id(run_id: str) -> tuple[str, str, str] | None:
-    """Return ``(model, mode, N_str_or_"n/a")`` from a phase4_throughput run_id.
 
-    Shape: ``phase4_throughput:{model}:{mode}:{layout}:reuse={reuse}:seed={seed}:{sha}``
-    or with an optional ``N={N}`` segment inserted before ``reuse=``. A run without ``N=``
-    maps to the sentinel N key ``"n/a"``.
+def _throughput_cell_key(run_id: str) -> tuple[str, str, str] | None:
+    """``(model, mode, arm)`` for a phase4_throughput row, or None to drop it.
+
+    ``arm`` is ``"{layout}/reuse={reuse}"``. It used to be an ``N={N}`` scan with a
+    ``"n/a"`` sentinel fallback. No producer has
+    ever emitted ``N=`` here (the throughput runner takes a scalar ``docs_per_request``, not
+    an ``Ns:`` sweep), so the sentinel was the only value the axis ever took —
+    ``cache_throughput.yaml``'s ``cols: N`` rendered as one unnamed column. Meanwhile
+    ``layout`` and ``reuse=``, which ARE in every run_id and DO name different experiments,
+    were parsed and then dropped from the cell key: a store holding both a `sequential` and a
+    `restart` throughput run averaged them into a single number with nothing in the output
+    saying so. The sentinel is gone and the key now carries the axis that actually exists.
+
+    Current producers include ``top``, ``N``, ``L``, ``Q`` and ``A`` inside the reuse value,
+    so request shapes no longer collide. Historical rows retain their shorter legacy arm.
     """
-    if not run_id.startswith(_THROUGHPUT_PREFIX):
+    parsed = ThroughputRunId.parse(run_id)
+    if parsed is None:
         return None
-    parts = run_id.split(":")
-    if len(parts) < 7:
-        return None
-    model = parts[1]
-    mode = parts[2]
-    n_str: str | None = None
-    for seg in parts[3:]:
-        if seg.startswith("N="):
-            n_str = seg[2:]
-            break
-    return model, mode, (n_str if n_str is not None else "n/a")
+    return parsed.model, parsed.mode, parsed.arm
 
 
-def _throughput_mode_order(modes: Iterable[str]) -> list[str]:
-    uniq = list(dict.fromkeys(modes))
-    ordered = [m for m in _THROUGHPUT_PREFERRED_MODES if m in uniq]
-    extras = sorted(m for m in uniq if m not in _THROUGHPUT_PREFERRED_MODES)
-    return ordered + extras
+def _throughput_arm_axis(values: Iterable[str]) -> list[str]:
+    """Arms sort alphabetically; the unshaped sentinel goes last so it never leads a row."""
+    arms = set(values)
+    ordered = sorted(arms - {_THROUGHPUT_UNKNOWN_ARM})
+    if _THROUGHPUT_UNKNOWN_ARM in arms:
+        ordered.append(_THROUGHPUT_UNKNOWN_ARM)
+    return ordered
 
 
-def _collect_throughput(spec: dict, store: Path, model_filter: str | None = None) -> dict:
+def _collect_throughput(spec: dict, store: Path, rows: list[dict]) -> dict:
     """Return the JSON body for one report.tables[] entry (kind: throughput)."""
     metric = spec.get("metric") or "qps"
-
-    all_rows = load_rows(store, model_filter)
-    if not any(str(r.get("run_id", "")).startswith(_THROUGHPUT_PREFIX) for r in all_rows):
-        raise ValueError(
-            f"throughput[{metric}]: no phase4_throughput rows in store {store}. "
-            "Run the phase4 sweep first."
-        )
-
-    per_cell: dict[tuple[str, str, str], list[float]] = defaultdict(list)
-    all_ns_per_model: dict[str, set[str]] = defaultdict(set)
-    all_modes_per_model: dict[str, set[str]] = defaultdict(set)
-    backing_rows: list[dict] = []
-    for row in filter_rows(all_rows, metric=metric):
-        parsed = _throughput_parse_run_id(str(row.get("run_id", "")))
-        if parsed is None:
-            continue
-        model, mode, n_str = parsed
-        try:
-            val = float(row["value"])
-        except (KeyError, TypeError, ValueError):
-            continue
-        per_cell[(model, mode, n_str)].append(val)
-        all_ns_per_model[model].add(n_str)
-        all_modes_per_model[model].add(mode)
-        backing_rows.append(row)
-
-    if not per_cell:
-        raise ValueError(
-            f"throughput[{metric}]: no phase4_throughput rows carried metric={metric!r}."
-        )
-
-    # Sort N keys numerically when possible, else lexicographic (keeps the "n/a" sentinel
-    # at the end deterministically).
-    def _n_sort_key(n_str: str) -> tuple[int, int | str]:
-        try:
-            return (0, int(n_str))
-        except ValueError:
-            return (1, n_str)
-
-    models = sorted(all_modes_per_model)
-    data: dict[str, dict[str, dict[str, float]]] = {}
-    for model in models:
-        model_body: dict[str, dict[str, float]] = {}
-        n_keys = sorted(all_ns_per_model[model], key=_n_sort_key)
-        for mode in _throughput_mode_order(all_modes_per_model[model]):
-            mode_body: dict[str, float] = {}
-            for n in n_keys:
-                vals = per_cell.get((model, mode, n))
-                if not vals:
-                    continue
-                mode_body[n] = sum(vals) / len(vals)
-            if mode_body:
-                model_body[mode] = mode_body
-        if model_body:
-            data[model] = model_body
-
-    return {
-        "kind": "throughput",
-        "metric": metric,
-        "backing_rows": len(backing_rows),
-        "distinct_run_ids": len({r.get("run_id") for r in backing_rows}),
-        "seeds": sorted({int((r.get("provenance") or {}).get("seed", 0)) for r in backing_rows}),
-        "models": models,
-        "data": data,
-    }
+    return _collect(
+        kind="throughput",
+        metric=metric,
+        rows=rows,
+        store=store,
+        prefix=ThroughputRunId.PREFIX,
+        no_rows_hint="Run the phase4 sweep first.",
+        bucket=lambda rs: _bucket_by_metric(rs, metric, _throughput_cell_key),
+        reduce=_mean,
+        axes=(
+            _sorted_axis,                                   # model
+            _preferred_axis(_THROUGHPUT_PREFERRED_MODES),   # mode
+            _throughput_arm_axis,                           # arm
+        ),
+    )
 
 
 # ---- Correctness kind ----------------------------------------------------------------------
@@ -679,122 +703,53 @@ def _collect_throughput(spec: dict, store: Path, model_filter: str | None = None
 # (model, mode, N, L). ``max`` (not mean) is the worst-case gate — a single bad query
 # would otherwise be washed out.
 
-_CORRECTNESS_PREFIX = "phase4_cache:"
 _CORRECTNESS_BASELINE_MODE = "full_causal"
 
+# Baseline (``full_causal``) first, then remaining modes alphabetically — the reference
+# arm has to lead the block for the table to read as a comparison against it.
+_CORRECTNESS_PREFERRED_MODES: tuple[str, ...] = (_CORRECTNESS_BASELINE_MODE,)
 
-def _correctness_parse_run_id(run_id: str) -> tuple[str, str, int, int, int] | None:
-    """Return ``(model, mode, N, L, query_i)`` from a phase4_cache correctness run_id.
 
-    Shape: ``phase4_cache:{model}:{mode}:N={N}:L={L}:seed={seed}:{sha}:q{query_i}``.
-    Returns None if the shape doesn't match — malformed rows are silently skipped.
+def _correctness_cell_key(run_id: str) -> tuple[str, int, str, int] | None:
+    """``(model, L, mode, N)`` for a phase4_cache row, or None to drop it.
+
+    Note the component order: L before mode. That is the order the axes are *read* in — the
+    mode axis is ordered within each L — while the emitted JSON nests mode outside L (see
+    `_CORRECTNESS_NEST_ORDER`). The two differ, and this collector is the only one where
+    they do.
     """
-    if not run_id.startswith(_CORRECTNESS_PREFIX):
+    parsed = CorrectnessRunId.parse(run_id)
+    if parsed is None:
         return None
-    parts = run_id.split(":")
-    if len(parts) < 8:
-        return None
-    model, mode = parts[1], parts[2]
-    n_seg, l_seg = parts[3], parts[4]
-    if not (n_seg.startswith("N=") and l_seg.startswith("L=")):
-        return None
-    try:
-        n = int(n_seg[2:])
-        l_ = int(l_seg[2:])
-    except ValueError:
-        return None
-    q_seg = parts[-1]
-    if not q_seg.startswith("q"):
-        return None
-    try:
-        query_i = int(q_seg[1:])
-    except ValueError:
-        return None
-    return model, mode, n, l_, query_i
+    return parsed.model, parsed.L, parsed.mode, parsed.N
 
 
-def _correctness_mode_order(modes: Iterable[str]) -> list[str]:
-    """Baseline (``full_causal``) first, then remaining modes alphabetically."""
-    uniq = sorted(set(modes))
-    ordered: list[str] = []
-    if _CORRECTNESS_BASELINE_MODE in uniq:
-        ordered.append(_CORRECTNESS_BASELINE_MODE)
-    for m in uniq:
-        if m != _CORRECTNESS_BASELINE_MODE:
-            ordered.append(m)
-    return ordered
+# {model: {mode: {L: {N: value}}}} out of a (model, L, mode, N) traversal — mode is the outer
+# axis under model per the spec, but its reading order is settled per-L, first L first.
+_CORRECTNESS_NEST_ORDER: tuple[int, ...] = (0, 2, 1, 3)
 
 
-def _collect_correctness(spec: dict, store: Path, model_filter: str | None = None) -> dict:
+def _collect_correctness(spec: dict, store: Path, rows: list[dict]) -> dict:
     """Return the JSON body for one report.tables[] entry (kind: correctness)."""
     metric = spec.get("metric") or "max_abs_logit_diff"
-
-    all_rows = load_rows(store, model_filter)
-    if not any(str(r.get("run_id", "")).startswith(_CORRECTNESS_PREFIX) for r in all_rows):
-        raise ValueError(
-            f"correctness[{metric}]: no phase4_cache rows in store {store}. "
-            "Run the cache/correctness task first."
-        )
-
-    per_cell: dict[tuple[str, str, int, int], list[float]] = defaultdict(list)
-    all_ls_per_model: dict[str, set[int]] = defaultdict(set)
-    all_ns_per_ml: dict[tuple[str, int], set[int]] = defaultdict(set)
-    all_modes_per_ml: dict[tuple[str, int], set[str]] = defaultdict(set)
-    backing_rows: list[dict] = []
-    for row in filter_rows(all_rows, metric=metric):
-        parsed = _correctness_parse_run_id(str(row.get("run_id", "")))
-        if parsed is None:
-            continue
-        model, mode, n, l_, _q = parsed
-        try:
-            value = float(row["value"])
-        except (KeyError, TypeError, ValueError):
-            continue
-        per_cell[(model, mode, l_, n)].append(value)
-        all_ls_per_model[model].add(l_)
-        all_ns_per_ml[(model, l_)].add(n)
-        all_modes_per_ml[(model, l_)].add(mode)
-        backing_rows.append(row)
-
-    if not per_cell:
-        raise ValueError(
-            f"correctness[{metric}]: no phase4_cache rows carried metric={metric!r}."
-        )
-
-    models = sorted(all_ls_per_model)
-    data: dict[str, dict[str, dict[str, dict[str, float]]]] = {}
-    for model in models:
-        model_body: dict[str, dict[str, dict[str, float]]] = {}
-        for l_ in sorted(all_ls_per_model[model]):
-            ns = sorted(all_ns_per_ml[(model, l_)])
-            modes = _correctness_mode_order(all_modes_per_ml[(model, l_)])
-            # {mode: {L: {N: value}}} — mode is the outer axis under model per the spec.
-            for mode in modes:
-                mode_body = model_body.setdefault(mode, {})
-                l_body: dict[str, float] = {}
-                for n in ns:
-                    vals = per_cell.get((model, mode, l_, n))
-                    if not vals:
-                        continue
-                    # Worst-case gate: max, not mean.
-                    l_body[str(n)] = max(vals)
-                if l_body:
-                    mode_body[str(l_)] = l_body
-            # Prune modes that ended up with no L blocks (shouldn't happen given the loop
-            # structure, but keeps the missing-cell contract clean).
-            model_body = {mode: body for mode, body in model_body.items() if body}
-        if model_body:
-            data[model] = model_body
-
-    return {
-        "kind": "correctness",
-        "metric": metric,
-        "backing_rows": len(backing_rows),
-        "distinct_run_ids": len({r.get("run_id") for r in backing_rows}),
-        "seeds": sorted({int((r.get("provenance") or {}).get("seed", 0)) for r in backing_rows}),
-        "models": models,
-        "data": data,
-    }
+    return _collect(
+        kind="correctness",
+        metric=metric,
+        rows=rows,
+        store=store,
+        prefix=CorrectnessRunId.PREFIX,
+        no_rows_hint="Run the cache/correctness task first.",
+        bucket=lambda rs: _bucket_by_metric(rs, metric, _correctness_cell_key),
+        # Worst-case gate: max, not mean. A single bad query would otherwise be washed out.
+        reduce=max,
+        axes=(
+            _sorted_axis,                                   # model
+            _sorted_axis,                                   # L (int, labelled str)
+            _preferred_axis(_CORRECTNESS_PREFERRED_MODES),  # mode
+            _sorted_axis,                                   # N (int, labelled str)
+        ),
+        nest_order=_CORRECTNESS_NEST_ORDER,
+    )
 
 
 # ---- Finetune / perplexity kinds (parity with ddi/finetune.py rows, #120) ------------------
@@ -805,43 +760,9 @@ def _collect_correctness(spec: dict, store: Path, model_filter: str | None = Non
 # trajectory in the summary JSON for eyeballing. Fancier renderers (loss curves,
 # pplx-vs-teacher deltas) are #120 follow-ups.
 
-_FINETUNE_PREFIX = "finetune:"
-
-
-def _finetune_parse_run_id(run_id: str) -> dict | None:
-    """Parse ``finetune:{model}:ddi_qf:seed=S:{sha}:step=N`` or ``:epoch=E``.
-
-    Returns ``{"model", "seed", "step" | "epoch"}`` or ``None`` if the shape doesn't
-    match. Malformed rows are dropped silently.
-    """
-    parts = run_id.split(":")
-    if len(parts) < 6 or (parts[0] + ":") != _FINETUNE_PREFIX:
-        return None
-    model, _tag, seed_field, _sha = parts[1], parts[2], parts[3], parts[4]
-    if not seed_field.startswith("seed="):
-        return None
-    try:
-        seed = int(seed_field[len("seed="):])
-    except ValueError:
-        return None
-    tail = parts[5]
-    if tail.startswith("step="):
-        try:
-            return {"model": model, "seed": seed, "step": int(tail[len("step="):])}
-        except ValueError:
-            return None
-    if tail.startswith("epoch="):
-        try:
-            return {"model": model, "seed": seed, "epoch": int(tail[len("epoch="):])}
-        except ValueError:
-            return None
-    return None
-
-
-def _collect_finetune_loss(spec: dict, store: Path, model_filter: str | None = None) -> dict:
+def _collect_finetune_loss(spec: dict, store: Path, rows: list[dict]) -> dict:
     """Dump per-step training rows (kl_loss + lr) keyed by (model, step)."""
-    all_rows = load_rows(store, model_filter)
-    if not any(str(r.get("run_id", "")).startswith(_FINETUNE_PREFIX) for r in all_rows):
+    if not any(str(r.get("run_id", "")).startswith(FinetuneRunId.PREFIX) for r in rows):
         raise ValueError(
             f"finetune_loss: no finetune rows in store {store}. "
             "Run the finetune YAML first."
@@ -850,9 +771,9 @@ def _collect_finetune_loss(spec: dict, store: Path, model_filter: str | None = N
     per_step: dict[tuple[str, int], dict[str, float]] = {}
     backing_rows: list[dict] = []
     seeds: set[int] = set()
-    for row in all_rows:
-        parsed = _finetune_parse_run_id(str(row.get("run_id", "")))
-        if parsed is None or "step" not in parsed:
+    for row in rows:
+        parsed = FinetuneRunId.parse(str(row.get("run_id", "")))
+        if parsed is None or parsed.step is None:
             continue
         metric = row.get("metric")
         if metric not in ("kl_loss", "lr"):
@@ -861,9 +782,9 @@ def _collect_finetune_loss(spec: dict, store: Path, model_filter: str | None = N
             value = float(row["value"])
         except (KeyError, TypeError, ValueError):
             continue
-        key = (parsed["model"], parsed["step"])
+        key = (parsed.model, parsed.step)
         per_step.setdefault(key, {})[metric] = value
-        seeds.add(parsed["seed"])
+        seeds.add(parsed.seed)
         backing_rows.append(row)
 
     # {model: {step: {kl_loss, lr}}}
@@ -876,7 +797,7 @@ def _collect_finetune_loss(spec: dict, store: Path, model_filter: str | None = N
             str(k): data[model][str(k)] for k in sorted(int(s) for s in data[model])
         }
 
-    return {
+    out = {
         "kind": "finetune_loss",
         "backing_rows": len(backing_rows),
         "distinct_run_ids": len({r.get("run_id") for r in backing_rows}),
@@ -885,15 +806,32 @@ def _collect_finetune_loss(spec: dict, store: Path, model_filter: str | None = N
         "data": data,
     }
 
+    # An empty table here is not the same as "training produced no loss", but it renders
+    # identically to a reader — VIBEQUEUE-2 row 8 finished a full 8-GPU finetune and its
+    # report showed `backing_rows: 0, data: {}` with nothing anywhere saying why.
+    #
+    # Deliberately a note rather than a raise: the run above it trained correctly and
+    # uploaded a usable checkpoint, so failing the whole aggregation — and with it the
+    # graph's post_grid block — over a missing curve would be a worse outcome than a
+    # loud, self-explaining hole in the report. The `no finetune rows at all` case above
+    # still raises, because that one means the finetune YAML was never run.
+    if not backing_rows:
+        out["warning"] = (
+            "no per-step rows: the store holds finetune rows (epoch-level perplexity) but "
+            "no kl_loss/lr at any step. Cause is almost always a run shorter than "
+            "`log_every` (default 50) on a build predating the first/last-step fix — "
+            "training was fine, only the curve is missing."
+        )
+    return out
 
-def _collect_perplexity(spec: dict, store: Path, model_filter: str | None = None) -> dict:
+
+def _collect_perplexity(spec: dict, store: Path, rows: list[dict]) -> dict:
     """Dump per-epoch perplexity rows keyed by (model, epoch).
 
     Emits every ``perplexity_*`` metric name unchanged (pre/post student, teacher)
     so a reader can compare trajectories without hunting through the store.
     """
-    all_rows = load_rows(store, model_filter)
-    if not any(str(r.get("run_id", "")).startswith(_FINETUNE_PREFIX) for r in all_rows):
+    if not any(str(r.get("run_id", "")).startswith(FinetuneRunId.PREFIX) for r in rows):
         raise ValueError(
             f"perplexity: no finetune rows in store {store}. "
             "Run the finetune YAML first."
@@ -902,9 +840,9 @@ def _collect_perplexity(spec: dict, store: Path, model_filter: str | None = None
     per_epoch: dict[tuple[str, int], dict[str, float]] = {}
     backing_rows: list[dict] = []
     seeds: set[int] = set()
-    for row in all_rows:
-        parsed = _finetune_parse_run_id(str(row.get("run_id", "")))
-        if parsed is None or "epoch" not in parsed:
+    for row in rows:
+        parsed = FinetuneRunId.parse(str(row.get("run_id", "")))
+        if parsed is None or parsed.epoch is None:
             continue
         metric = row.get("metric")
         if not isinstance(metric, str) or not metric.startswith("perplexity_"):
@@ -913,9 +851,9 @@ def _collect_perplexity(spec: dict, store: Path, model_filter: str | None = None
             value = float(row["value"])
         except (KeyError, TypeError, ValueError):
             continue
-        key = (parsed["model"], parsed["epoch"])
+        key = (parsed.model, parsed.epoch)
         per_epoch.setdefault(key, {})[metric] = value
-        seeds.add(parsed["seed"])
+        seeds.add(parsed.seed)
         backing_rows.append(row)
 
     # {model: {epoch: {perplexity_*: value}}}
@@ -939,7 +877,7 @@ def _collect_perplexity(spec: dict, store: Path, model_filter: str | None = None
 
 # ---- Dispatcher + public API ---------------------------------------------------------------
 
-_COLLECTORS: dict[str, Callable[[dict, Path, str | None], dict]] = {
+_COLLECTORS: dict[str, Callable[[dict, Path, list[dict]], dict]] = {
     "quality": _collect_quality,
     "timing": _collect_timing,
     "throughput": _collect_throughput,
@@ -955,25 +893,89 @@ def _log(msg: str) -> None:
     print(f"[ddi.aggregate] {msg}", file=sys.stderr, flush=True)
 
 
-def collect_table(spec: dict, store: Path, model_filter: str | None = None) -> dict:
+# ---------------------------------------------------------------------------
+# What a `report.tables[]` entry is allowed to say, per kind.
+#
+# Every collector reads its spec through `spec.get(...)`, so an unrecognised key is not an
+# error — it is simply never looked at, while sitting in a checked-in YAML teaching every
+# subsequent reader that the knob works. This mirrors `ddi/run.py::_validate_set_keys`,
+# which exists because a `--set` override was accepted, folded into the config hash so the
+# store row looked distinct, and then never read — it cost an 8-GPU allocation.
+#
+# The same class of key had accumulated here: `split_by: [L, backend]` on all six
+# performance.yaml tables, `rows:`/`cols:` on every table in every YAML. They described a
+# markdown renderer that no longer exists; the JSON body's shape is fixed per kind (and
+# for timing already nests by L then backend, which is what `split_by` was asking for).
+# Adding a spec key means adding it here, or aggregation refuses it.
+# ---------------------------------------------------------------------------
+
+_TABLE_KEYS_COMMON: frozenset[str] = frozenset({"kind"})
+
+_TABLE_KEYS: dict[str, frozenset[str]] = {
+    "quality": _TABLE_KEYS_COMMON | {"metric"},
+    "timing": _TABLE_KEYS_COMMON | {"metric"},
+    "throughput": _TABLE_KEYS_COMMON | {"metric"},
+    "restart_quality": _TABLE_KEYS_COMMON | {"metric"},
+    "correctness": _TABLE_KEYS_COMMON | {"metric"},
+    # These two dump every matching store row; they have no metric selector.
+    "finetune_loss": _TABLE_KEYS_COMMON,
+    "perplexity": _TABLE_KEYS_COMMON,
+}
+
+
+def _validate_table_keys(kind: str, spec: dict) -> None:
+    """Reject a ``report.tables[]`` key this kind's collector will never read."""
+    allowed = _TABLE_KEYS[kind]
+    for key in spec:
+        if key in allowed:
+            continue
+        raise ValueError(
+            f"report.tables[]: kind {kind!r} has no table key {str(key)!r}, so the "
+            "setting would be merged into the spec, never read, and the rendered table "
+            "would be exactly the same as if it were absent — a config that documents a "
+            "knob nobody implements. "
+            f"Valid keys for kind={kind!r}: {', '.join(sorted(allowed))}. "
+            "The emitted JSON shape is fixed per kind (see this module's docstring); if "
+            "you need a different shape, that is a code change, not a config key."
+        )
+
+
+def collect_table(
+    spec: dict,
+    store: Path,
+    model_filter: str | None = None,
+    rows: list[dict] | None = None,
+) -> dict:
     """Collect one ``report.tables[]`` entry into a JSON-serializable dict.
 
     ``spec`` keys:
       - ``kind``: ``quality`` | ``timing`` | ``throughput`` | ``restart_quality`` |
-        ``correctness``.
-      - ``rows`` / ``cols``: axis names (informational; the emitted shape is fixed per kind).
-      - ``metric``: which metric to render.
+        ``correctness`` | ``finetune_loss`` | ``perplexity``.
+      - ``metric``: which metric to render (not accepted by ``finetune_loss`` /
+        ``perplexity``, which dump every matching row).
+
+    Any other key raises — see ``_TABLE_KEYS``.
 
     ``model_filter`` scopes every collector to a single model — the store is shared and
     append-only, so a caller that just ran one model wants to see only that model in the
     summary.
+
+    ``rows`` is the already-loaded, already-model-filtered store. Every collector used to
+    call ``load_rows`` itself (and ``timing`` called it twice), so rendering
+    `performance.yaml`'s six timing tables re-read and re-JSON-parsed the whole store seven
+    times. `aggregate` now loads once and passes the list down; ``store`` is still taken
+    because the "no rows in store" errors name it. Left optional so the public single-table
+    entry point keeps working on its own.
     """
     kind = spec.get("kind")
     if kind not in _COLLECTORS:
         raise ValueError(
             f"unknown table kind {kind!r}; expected one of {sorted(_COLLECTORS)}"
         )
-    return _COLLECTORS[kind](spec, store, model_filter)
+    _validate_table_keys(kind, spec)
+    if rows is None:
+        rows = load_rows(store, model_filter)
+    return _COLLECTORS[kind](spec, store, rows)
 
 
 # ---- Provenance envelope helpers -----------------------------------------------------------
@@ -1070,13 +1072,16 @@ def aggregate(
         f"{store}{scope}"
     )
     t0 = time.perf_counter()
+    # Read and parse the store ONCE for the whole YAML rather than once per collector.
+    rows = load_rows(store, model_filter)
+    _log(f"loaded {len(rows)} store row(s) ({time.perf_counter() - t0:.2f}s)")
     tables: list[dict] = []
     for i, spec in enumerate(tables_spec, 1):
         kind = spec.get("kind", "?")
         metric = spec.get("metric", "?")
         t = time.perf_counter()
         try:
-            tables.append(collect_table(spec, store, model_filter))
+            tables.append(collect_table(spec, store, model_filter, rows=rows))
             _log(
                 f"  table {i}/{len(tables_spec)}: kind={kind} metric={metric} → OK "
                 f"({time.perf_counter() - t:.2f}s)"

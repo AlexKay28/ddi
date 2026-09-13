@@ -51,12 +51,16 @@ def _write_row(
 
 
 def _seed_quality_store(store: Path) -> None:
-    """One f1 row per (mask, dataset) so we hit every column."""
+    """One f1 row per (mask, dataset) so we hit every column.
+
+    `kilt_nq` is deliberately absent: it is in `_QUALITY_DROPPED_DATASETS` now (its
+    documents were Wikipedia titles, review R1), so seeding it here would assert the
+    opposite of the intended behaviour.
+    """
     for ds in (
         "synthetic_qa",
         "hotpot_qa",
         "musique",
-        "kilt_nq",
     ):
         _write_row(store, f"phase2_train_free:Qwen:{ds}:full:seed=0:sha:r0", "f1", 0.8)
         _write_row(
@@ -68,7 +72,7 @@ def _seed_quality_store(store: Path) -> None:
 def test_collect_quality_kind_shape(tmp_path: Path) -> None:
     store = tmp_path / "runs.jsonl"
     _seed_quality_store(store)
-    spec = {"kind": "quality", "rows": "mask", "cols": "dataset", "metric": "f1"}
+    spec = {"kind": "quality", "metric": "f1"}
     body = collect_table(spec, store)
 
     assert body["kind"] == "quality"
@@ -80,7 +84,9 @@ def test_collect_quality_kind_shape(tmp_path: Path) -> None:
     assert list(qwen) == ["full", "ddi_qf", "blind"]
     # Every dataset column present, no dashes / nulls.
     for mask in ("full", "ddi_qf", "blind"):
-        assert set(qwen[mask]) == {"synthetic_qa", "hotpot_qa", "musique", "kilt_nq"}
+        assert set(qwen[mask]) == {"synthetic_qa", "hotpot_qa", "musique"}
+    # Column order follows _QUALITY_PREFERRED_DATASETS.
+    assert list(qwen["full"]) == ["synthetic_qa", "hotpot_qa", "musique"]
     # Raw numeric values, no delta annotations.
     assert qwen["full"]["hotpot_qa"] == pytest.approx(0.8)
     assert qwen["ddi_qf"]["hotpot_qa"] == pytest.approx(0.79)
@@ -104,9 +110,15 @@ def test_collect_quality_missing_cell_omits_key(tmp_path: Path) -> None:
 
 
 def test_collect_quality_excludes_nq_and_stress_and_composition(tmp_path: Path) -> None:
-    """Historical rows for pruned datasets are silently dropped."""
+    """Historical rows for pruned datasets are silently dropped.
+
+    Load-bearing since the dataset axis became derived: anything NOT dropped here becomes
+    a column, so this is now the only thing keeping a store full of stale `nq` / `kilt_nq`
+    rows from putting a void column into a published table.
+    """
     store = tmp_path / "runs.jsonl"
     _write_row(store, "phase2_train_free:Qwen:nq:full:seed=0:sha:r0", "f1", 0.9)
+    _write_row(store, "phase2_train_free:Qwen:kilt_nq:full:seed=0:sha:r0", "f1", 0.88)
     _write_row(
         store, "phase2_train_free:Qwen:composition:full:seed=0:sha:r0", "f1", 0.5
     )
@@ -121,6 +133,7 @@ def test_collect_quality_excludes_nq_and_stress_and_composition(tmp_path: Path) 
     body = collect_table({"kind": "quality", "metric": "f1"}, store)
     qwen_full = body["data"]["Qwen"]["full"]
     assert "nq" not in qwen_full
+    assert "kilt_nq" not in qwen_full
     assert "composition" not in qwen_full
     assert "ddi_stress__fact_chain" not in qwen_full
     assert qwen_full["hotpot_qa"] == pytest.approx(0.7)
@@ -267,25 +280,31 @@ def test_collect_timing_rejects_unknown_metric(tmp_path: Path) -> None:
 
 
 def _seed_throughput_store(store: Path) -> None:
-    for n, qps_cache, qps_recompute, qps_full in [
-        (3, 12.0, 4.0, 2.5),
-        (9, 20.0, 5.5, 3.0),
+    """Two layouts x three modes, in the run_id shape `_cache_throughput` really writes.
+
+    The old fixture inserted an `N={n}` segment. No producer has ever emitted one — the
+    throughput runner takes a scalar `docs_per_request`, not an `Ns:` sweep — so the
+    fixture was testing a parsing path that only existed in this file.
+    """
+    for layout, qps_cache, qps_recompute, qps_full in [
+        ("sequential", 12.0, 4.0, 2.5),
+        ("restart", 20.0, 5.5, 3.0),
     ]:
         _write_row(
             store,
-            f"phase4_throughput:Qwen:ddi_cache:restart:N={n}:reuse=zipf:seed=0:sha",
+            f"phase4_throughput:Qwen:ddi_cache:{layout}:reuse=zipf(a=1.5):seed=0:sha",
             "qps",
             qps_cache,
         )
         _write_row(
             store,
-            f"phase4_throughput:Qwen:ddi_recompute:restart:N={n}:reuse=uniform:seed=0:sha",
+            f"phase4_throughput:Qwen:ddi_recompute:{layout}:reuse=zipf(a=1.5):seed=0:sha",
             "qps",
             qps_recompute,
         )
         _write_row(
             store,
-            f"phase4_throughput:Qwen:full_causal:restart:N={n}:reuse=uniform:seed=0:sha",
+            f"phase4_throughput:Qwen:full_causal:{layout}:reuse=zipf(a=1.5):seed=0:sha",
             "qps",
             qps_full,
         )
@@ -300,11 +319,55 @@ def test_collect_throughput_kind_shape(tmp_path: Path) -> None:
     qwen = body["data"]["Qwen"]
     # Mode order follows _THROUGHPUT_PREFERRED_MODES.
     assert list(qwen) == ["ddi_cache", "ddi_recompute", "full_causal"]
-    # N keys sorted numerically.
-    assert list(qwen["ddi_cache"]) == ["3", "9"]
-    assert qwen["ddi_cache"]["3"] == pytest.approx(12.0)
-    assert qwen["ddi_cache"]["9"] == pytest.approx(20.0)
-    assert qwen["full_causal"]["3"] == pytest.approx(2.5)
+    # The inner axis is the arm: "{layout}/reuse={reuse}", sorted.
+    assert list(qwen["ddi_cache"]) == [
+        "restart/reuse=zipf(a=1.5)",
+        "sequential/reuse=zipf(a=1.5)",
+    ]
+    assert qwen["ddi_cache"]["sequential/reuse=zipf(a=1.5)"] == pytest.approx(12.0)
+    assert qwen["ddi_cache"]["restart/reuse=zipf(a=1.5)"] == pytest.approx(20.0)
+    assert qwen["full_causal"]["sequential/reuse=zipf(a=1.5)"] == pytest.approx(2.5)
+
+
+def test_collect_throughput_does_not_average_layouts_together(tmp_path: Path) -> None:
+    """A store holding a `sequential` AND a `restart` run must not merge them.
+
+    The old cell key was (model, mode, N) with N always the `"n/a"` sentinel, so both
+    layouts landed in the same cell and were averaged into one number with nothing in the
+    output saying so — (12.0 + 20.0) / 2 = 16.0 here.
+    """
+    store = tmp_path / "runs.jsonl"
+    _seed_throughput_store(store)
+    ddi_cache = collect_table({"kind": "throughput", "metric": "qps"}, store)["data"][
+        "Qwen"
+    ]["ddi_cache"]
+    assert len(ddi_cache) == 2
+    assert 16.0 not in ddi_cache.values()
+    assert "n/a" not in ddi_cache
+
+
+def test_collect_throughput_keeps_reuse_distribution_distinct(tmp_path: Path) -> None:
+    """Two reuse distributions at the same layout are different experiments."""
+    store = tmp_path / "runs.jsonl"
+    _write_row(
+        store,
+        "phase4_throughput:Qwen:ddi_cache:restart:reuse=zipf(a=1.5):seed=0:sha",
+        "qps",
+        20.0,
+    )
+    _write_row(
+        store,
+        "phase4_throughput:Qwen:ddi_cache:restart:reuse=uniform:seed=0:sha",
+        "qps",
+        8.0,
+    )
+    ddi_cache = collect_table({"kind": "throughput", "metric": "qps"}, store)["data"][
+        "Qwen"
+    ]["ddi_cache"]
+    assert ddi_cache == {
+        "restart/reuse=uniform": pytest.approx(8.0),
+        "restart/reuse=zipf(a=1.5)": pytest.approx(20.0),
+    }
 
 
 def test_collect_throughput_metric_defaults_to_qps(tmp_path: Path) -> None:
@@ -459,6 +522,135 @@ def test_collect_table_rejects_unknown_kind(tmp_path: Path) -> None:
     store.touch()
     with pytest.raises(ValueError, match="unknown table kind"):
         collect_table({"kind": "not_a_kind"}, store)
+
+
+# ---- report.tables[] key whitelist ----------------------------------------------------------
+#
+# Mirrors `ddi/run.py::_validate_set_keys`. A spec key no collector reads is not an error at
+# runtime — it is simply never looked at, while a checked-in YAML teaches every subsequent
+# reader that the knob works. `split_by: [L, backend]` sat on all six performance.yaml tables
+# and `rows:`/`cols:` on every table in every YAML for exactly that reason.
+
+
+@pytest.mark.parametrize(
+    ("spec", "bad_key"),
+    [
+        ({"kind": "timing", "metric": "ttft", "split_by": ["L", "backend"]}, "split_by"),
+        ({"kind": "quality", "metric": "f1", "rows": "mask"}, "rows"),
+        ({"kind": "quality", "metric": "f1", "cols": "dataset"}, "cols"),
+        ({"kind": "throughput", "metric": "qps", "cols": "N"}, "cols"),
+        ({"kind": "correctness", "rows": "mode"}, "rows"),
+        ({"kind": "restart_quality", "metric": "em", "cols": "dataset"}, "cols"),
+        # These two kinds dump every matching row; they have no metric selector at all.
+        ({"kind": "finetune_loss", "metric": "kl_loss"}, "metric"),
+        ({"kind": "perplexity", "metric": "perplexity_student"}, "metric"),
+    ],
+)
+def test_collect_table_rejects_unread_spec_keys(
+    tmp_path: Path, spec: dict, bad_key: str
+) -> None:
+    store = tmp_path / "runs.jsonl"
+    store.touch()
+    with pytest.raises(ValueError) as excinfo:
+        collect_table(spec, store)
+    message = str(excinfo.value)
+    # The message must name the offending key, the kind, and what is actually allowed —
+    # a bare "invalid config" sends the reader back to the source.
+    assert repr(bad_key) in message
+    assert repr(spec["kind"]) in message
+    assert "never read" in message
+    assert "Valid keys" in message
+
+
+_EXPERIMENTS_DIR = Path(__file__).resolve().parents[1] / "experiments"
+
+
+@pytest.mark.parametrize(
+    "name", sorted(p.name for p in _EXPERIMENTS_DIR.glob("*.yaml"))
+)
+def test_collect_table_accepts_the_shipped_yaml_specs(tmp_path: Path, name: str) -> None:
+    """Every `report.tables[]` entry in every checked-in config must pass the whitelist.
+
+    A glob, not a list: the whitelist is worth nothing if the repo's own configs violate
+    it, and a new YAML is exactly where an unread key gets reintroduced.
+
+    Runs against an empty store on purpose — key validation happens before collection, so
+    a spec that is merely unsatisfiable fails with a *different* error and this test only
+    cares about the key check.
+    """
+    path = _EXPERIMENTS_DIR / name
+    cfg = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    store = tmp_path / "runs.jsonl"
+    store.touch()
+    specs = (cfg.get("report") or {}).get("tables") or []
+    assert specs, f"{name}: no report.tables[] entries — layout changed?"
+    for spec in specs:
+        with pytest.raises(ValueError) as excinfo:
+            collect_table(spec, store)
+        assert "has no table key" not in str(excinfo.value), f"{name}: {excinfo.value}"
+
+
+# ---- Derived axes (no hardcoded whitelist) --------------------------------------------------
+#
+# `_TIMING_N_COLUMNS` and `_QUALITY_DATASET_COLUMNS` used to be ENFORCED as filters
+# (`if n not in _TIMING_N_COLUMNS: continue`). They happened to match the checked-in YAMLs,
+# so nothing published was wrong — but an edit to `Ns:` emptied the timing table with no
+# error anywhere, because the "no phase3_timing rows in store" guard only checks the run_id
+# prefix, which keeps matching perfectly well at an unlisted N.
+
+
+def test_timing_n_axis_is_derived_from_the_rows_present(tmp_path: Path) -> None:
+    store = tmp_path / "runs.jsonl"
+    # Ns nowhere near the preferred tuple (1, 3, 5, 9, 13, 25).
+    for n in (2, 4, 8):
+        _write_row(
+            store,
+            f"phase3_timing:Qwen:N={n}:L=512:Q=1:full:sdpa:seed=0:sha",
+            "ftt_median_ms",
+            100.0 * n,
+        )
+    body = collect_table({"kind": "timing", "metric": "ttft"}, store)
+    full = body["data"]["Qwen"]["512"]["sdpa"]["full"]
+    assert list(full) == ["2", "4", "8"]
+    assert full["8"] == pytest.approx(800.0)
+    # The old code reported backing_rows > 0 alongside data == {} — the failure was
+    # invisible precisely because the row count looked healthy.
+    assert body["backing_rows"] == 3
+
+
+def test_timing_n_axis_orders_preferred_first_then_extras(tmp_path: Path) -> None:
+    store = tmp_path / "runs.jsonl"
+    for n in (7, 3, 25, 2):
+        _write_row(
+            store,
+            f"phase3_timing:Qwen:N={n}:L=512:Q=1:full:sdpa:seed=0:sha",
+            "ftt_median_ms",
+            float(n),
+        )
+    body = collect_table({"kind": "timing", "metric": "ttft"}, store)
+    full = body["data"]["Qwen"]["512"]["sdpa"]["full"]
+    # 3 and 25 are in _TIMING_PREFERRED_NS (in that order); 2 and 7 are appended sorted.
+    assert list(full) == ["3", "25", "2", "7"]
+
+
+def test_quality_dataset_axis_is_derived_from_the_rows_present(tmp_path: Path) -> None:
+    store = tmp_path / "runs.jsonl"
+    _write_row(store, "phase2_train_free:Qwen:hotpot_qa:full:seed=0:sha:r0", "f1", 0.8)
+    _write_row(store, "phase2_train_free:Qwen:triviaqa:full:seed=0:sha:r0", "f1", 0.6)
+    body = collect_table({"kind": "quality", "metric": "f1"}, store)
+    full = body["data"]["Qwen"]["full"]
+    # A dataset nobody hardcoded still gets a column, after the preferred ones.
+    assert list(full) == ["hotpot_qa", "triviaqa"]
+    assert full["triviaqa"] == pytest.approx(0.6)
+
+
+def test_restart_quality_dataset_axis_is_derived(tmp_path: Path) -> None:
+    store = tmp_path / "runs.jsonl"
+    _write_row(
+        store, "phase4_restart:Qwen:triviaqa:tag:restart:seed=0:sha:r0", "f1", 0.42
+    )
+    body = collect_table({"kind": "restart_quality", "metric": "f1"}, store)
+    assert body["data"]["Qwen"]["restart"] == {"triviaqa": pytest.approx(0.42)}
 
 
 # ---- Model filter ---------------------------------------------------------------------------

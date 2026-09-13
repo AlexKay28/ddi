@@ -1,0 +1,422 @@
+# DDI experiments — running the science on a machine with a GPU.
+# See experiments/SERVERLESS.md for the full flow.
+#
+# This half knows nothing about Nirvana. It is what the Nirvana jobs *invoke* once their
+# code has been delivered (`make yt-fetch`, `make finetune`, `make exp-quality`), and what
+# you run by hand on a dev box. Workflow administration lives in Makefile.nirvana.
+#
+# Included by the root Makefile; also usable directly as `make -f Makefile.exp <target>`.
+
+.PHONY: exp-% finetune hf-fetch yt-fetch yt-fetch-records delta \
+        test lint setup smoke smoke-model list-experiments gpu-check help-exp
+
+YT_PROXY ?= watt
+YT_MODELS_ROOT ?= //home/gena/alexkay28/tickets/ALIGNMENT-2445/models
+YT_RECORDS_ROOT ?= //home/gena/alexkay28/tickets/ALIGNMENT-2445/data/records_cache
+
+# `finetune` defaults, baked in after a live OOM + offline-fetch run (issue #120):
+#   FT_OFFLINE          this repo has no direct HF Hub access outside a networked
+#                        dev box; set 0 to allow live Hub fetches instead.
+#   FT_GRAD_CHECKPOINT   a 7B teacher+student pair sits right at an 80GB GPU's
+#                        limit without it (see ddi/finetune.py's AdamW8bit comment);
+#                        set 0 to trade the memory headroom back for speed.
+#   FT_CUDA_ALLOC_CONF   works around allocator fragmentation on the same tight-fit
+#                        GPUs; rarely needs overriding.
+#   NUM_GPUS             single-host data parallelism (issue #123). Default 1 = the
+#                        original single-device path. >1 launches training under
+#                        `torchrun --nproc_per_node=$(NUM_GPUS)` and passes the
+#                        value through as `--num-gpus` so the trainer knows to
+#                        expect the DDP env.
+FT_OFFLINE ?= 1
+FT_GRAD_CHECKPOINT ?= 1
+FT_CUDA_ALLOC_CONF ?= expandable_segments:True
+NUM_GPUS ?= 1
+
+# Python interpreter used by every target below. Default is the system `python3` — matches
+# the offline serverless container's setup where torch/transformers/numpy are pre-installed
+# at the OS level. Override on a dev machine to run inside a venv:
+#
+#   PY="uv run --no-sync python" make exp-c1 MODEL=Qwen/Qwen2.5-7B-Instruct
+#   PY=/path/to/venv/bin/python make test
+#
+# `test` and `lint` also honour PY (via the PYTEST/RUFF variables further down); neither
+# runs an install step of its own any more, so a prepared environment is never re-resolved
+# underneath you. Run `make setup` explicitly when you want one.
+PY ?= python3
+
+# Grid support: per-cell overrides of any top-level YAML key, space-separated.
+#   make finetune MODEL=... SETS='lr=2e-5 epochs=2 output_dir=results/checkpoints/cellC3'
+# Each entry becomes a `--set key=value` on ddi.run. Values are YAML-scalar-parsed, and
+# the overrides are folded into the run's config hash so two cells that differ only by
+# SETS stay distinguishable in results/runs.jsonl.
+#
+# Each entry is single-quoted on the way to the shell. A YAML list override is written
+# `datasets=[kilt_nq]`, and `[...]` is a glob: unquoted, the shell expands it the moment a
+# single-character file named k, i, l, t, _, n or q exists in the repo root, and `ddi.run`
+# then receives a filename where a dataset list should be. No such file exists today, which
+# is exactly why this would surface as a one-off mystery failure rather than a reproducible
+# one. Quoting is a no-op for every entry already in use (`output_dir=...`, `seed=0`).
+#
+# `ddi.run` VALIDATES each key against what the config's `kind:` actually reads
+# (`_SET_KEYS` in ddi/run.py) and raises on anything else, naming the valid keys. This used
+# to be a bare `cfg[key] = value` with no check at all: a misspelled or not-yet-supported
+# key was merged, folded into cfg_hash — so the run looked distinct — and then never read.
+# That is how a 27B graph passed `--set trainable_layers=` to a pinned revision that
+# predated the key, attempted a full finetune and OOMed an 8-GPU slot with no error
+# anywhere.
+#
+# The one case the check cannot see is still live and still belongs to Nirvana: job-side
+# code at a DIFFERENT revision that reads a key this revision does not. `--set-unchecked`
+# is the deliberate escape hatch for it — it merges and hashes exactly like `--set` and
+# echoes the bypassed keys into the run log. Reach for it only after `nv-pin` has told you
+# what the pin is missing (see Makefile.nirvana).
+SETS ?=
+SET_ARGS = $(foreach s,$(SETS),--set '$(s)')
+
+# Where `finetune` writes its summary. Overridable so grid cells do not clobber each
+# other; `exp-%` already namespaces its summary by experiment name.
+FT_SUMMARY ?= logs/finetune_summary.json
+
+help-exp:
+	@echo "experiments (Makefile.exp):"
+	@echo "  make exp-<name> MODEL=<hf-id> [BACKENDS=sdpa,fa2]   # run experiments/<name>.yaml"
+	@echo "  make finetune MODEL=<hf-id> [NUM_GPUS=N]  # self-distillation train (issue #120) — writes"
+	@echo "                                     # results/checkpoints/... + finetune_summary.json"
+	@echo "                                     # (offline + grad-checkpoint on by default; override"
+	@echo "                                     # via FT_OFFLINE/FT_GRAD_CHECKPOINT/FT_CUDA_ALLOC_CONF)"
+	@echo "                                     # NUM_GPUS=N>1 runs under torchrun for DDP (issue #123)"
+	@echo "  make yt-fetch MODEL=<hf-id>        # cache a HF model into HF_HOME from YT — the normal path"
+	@echo "  make yt-fetch-records              # restore results/splits/*_records.jsonl from YT (dataset cache)"
+	@echo "  make hf-fetch MODEL=<hf-id>        # same, but from the HF Hub. NEEDS HUB ACCESS, which the"
+	@echo "                                     # dev boxes and serverless containers do not have. Its only"
+	@echo "                                     # real use is seeding the YT mirror from a networked host."
+	@echo "  make delta MODEL=<hf-id> DATASET=<name> METRIC=<name> [K=2.0] [STORE=<file>] [RECORD=1]"
+	@echo "                                     # compute Δ from the run store via ddi.delta_cli"
+	@echo "  make setup                         # install deps (uv sync --extra dev, else pip -r requirements-dev.txt)"
+	@echo "  make lint                          # \$$(RUFF) check . (CI lint step)"
+	@echo "  make test                          # \$$(PYTEST) tests/ -q (does NOT run setup first)"
+	@echo "  make smoke                         # CPU-only end-to-end: run -> store -> aggregate, ~10s."
+	@echo "                                     # No GPU, no network, no HF Hub — builds its own tiny model."
+	@echo "                                     # Proves the pipeline runs; the numbers are meaningless."
+	@echo "  make list-experiments              # list all available exp-* targets"
+	@echo "  make gpu-check                     # confirm CUDA is visible"
+
+# One-shot experiment: matches any experiments/<name>.yaml.
+#   MODEL     optional at the make layer — ddi.run raises loudly if the YAML has no `model:`
+#             and no --model was passed.
+#   BACKENDS  comma-separated override of the YAML's `backends:` list (e.g. `sdpa` or
+#             `sdpa,fa2`). Only kind: timing consumes it; ignored for other kinds. Handy for
+#             skipping the fa2 sub-blocks that #70 leaves empty on hosts without flash-attn:
+#             `make exp-c3 MODEL=... BACKENDS=sdpa`.
+exp-%:
+	$(PY) -m ddi.run experiments/$*.yaml $(if $(MODEL),--model $(MODEL)) $(if $(BACKENDS),--backends $(BACKENDS)) $(SET_ARGS)
+	$(PY) -m ddi.aggregate experiments/$*.yaml --out logs/$*_summary.json $(if $(MODEL),--model $(MODEL))
+
+# Self-distillation trainer (issue #120): teacher = base + full mask, student = base + ddi_qf.
+# Env vars set here are the FT_* defaults above — override any of them on the command line,
+# e.g. `make finetune MODEL=... FT_GRAD_CHECKPOINT=0` to trade memory headroom back for
+# speed. Unlike other kinds, `finetune` doesn't route through the `exp-%` pattern because
+# the run step may need `torchrun` (issue #123) while the aggregate step stays single-
+# process — swapping the launcher for one step only is what this rule owns. Summary file
+# name/path still match what the pattern rule would have produced.
+#
+# NUM_GPUS>1 launches the run step under `torchrun --nproc_per_node=$(NUM_GPUS) --standalone`
+# and passes `--num-gpus` so the trainer knows to expect the DDP env. NUM_GPUS=1 (default)
+# invokes plain `$(PY) -m ddi.run` — behavior byte-identical to the pre-#123 target.
+FT_LAUNCHER = $(if $(filter-out 1,$(NUM_GPUS)),torchrun --nproc_per_node=$(NUM_GPUS) --standalone,$(PY))
+
+finetune:
+	@test -n "$(MODEL)" || (echo "usage: make finetune MODEL=<hf-id> [NUM_GPUS=N]" && exit 2)
+	HF_HUB_OFFLINE=$(FT_OFFLINE) TRANSFORMERS_OFFLINE=$(FT_OFFLINE) \
+	DDI_GRAD_CHECKPOINT=$(FT_GRAD_CHECKPOINT) \
+	PYTORCH_CUDA_ALLOC_CONF=$(FT_CUDA_ALLOC_CONF) \
+	$(FT_LAUNCHER) -m ddi.run experiments/finetune.yaml --model $(MODEL) --num-gpus $(NUM_GPUS) $(SET_ARGS)
+	$(PY) -m ddi.aggregate experiments/finetune.yaml --out $(FT_SUMMARY) --model $(MODEL)
+
+# Fetch a HF model once from the HF Hub (respects HF_HOME).
+#
+# NOT the normal path, and kept for one reason. No host this project runs on has HF Hub
+# access — that is why `yt-fetch` below exists and why every job preamble sets
+# HF_HUB_OFFLINE=1. On those hosts this target fails at the first `from_pretrained`.
+# It stays because it is how a model GETS onto the YT mirror in the first place: somebody
+# on a networked machine runs `hf-fetch`, then `upload_models_to_yt.sh`, and from then on
+# everyone else uses `yt-fetch`. Reach for it only when adding a new model to the mirror.
+hf-fetch:
+	@test -n "$(MODEL)" || (echo "usage: make hf-fetch MODEL=<hf-id>" && exit 2)
+	$(PY) -c "from transformers import AutoModelForCausalLM, AutoTokenizer; \
+	           AutoTokenizer.from_pretrained('$(MODEL)'); \
+	           AutoModelForCausalLM.from_pretrained('$(MODEL)', torch_dtype='auto')"
+
+# Fetch a HF model from our YT mirror instead of the HF Hub, for hosts with no
+# direct HF access. Rebuilds a local HF_HOME cache (refs/main + a synthetic
+# snapshot dir) so `from_pretrained(MODEL)` resolves offline afterwards — same
+# contract as `hf-fetch`, different source. Requires the model to have already
+# been mirrored to YT_MODELS_ROOT (see experiments/SERVERLESS.md).
+# Two naming conventions exist on the YT mirror, depending on how the model
+# was uploaded:
+#   * Base models (upload_models_to_yt.sh) use the bare repo suffix —
+#     `Qwen/Qwen3.5-4B-Instruct` -> `Qwen3.5-4B-Instruct`.
+#   * Fine-tuned checkpoints (the Nirvana finetune block's upload loop, in
+#     nirvana/graphs/scripts.py) use `safe_name` with `/` -> `__` —
+#     `Qwen/Qwen3.5-4B-Instruct__ddi_qf__seed0` ->
+#     `Qwen__Qwen3.5-4B-Instruct__ddi_qf__seed0`.
+# `basename` only handles the first; the `sed` transform only handles the
+# second. Try the `sed` form first (it's the one the automatic upload path
+# produces), then fall back to `basename` so base models still resolve.
+#
+# Failure handling (VIBEQUEUE-16). This recipe used to be one logical line ending in the
+# `echo` below, so the `echo` set the recipe's exit status and ANY yt failure after the
+# `exists` pre-check still exited 0 — a half-fetched HF cache reported as a success. The
+# `exists` check only guards the case where yt is broken at that first call; a yt that
+# answers `exists` and then fails (or returns nothing) on `list` produced an empty snapshot
+# dir and exit 0. Three defenses now:
+#   * `set -e`            — any failing yt aborts the recipe.
+#   * empty-listing check — an empty `list` is a failure, not "zero files to fetch".
+#   * `.part` + `mv`      — `> "$snap/$f"` created the destination file *before* the read,
+#                           so an interrupted read left a truncated shard that a later run
+#                           would treat as cached. Write aside, rename into place.
+yt-fetch:
+	@test -n "$(MODEL)" || (echo "usage: make yt-fetch MODEL=<hf-id>" && exit 2)
+	@test -n "$(HF_HOME)" || (echo "usage: HF_HOME=<dir> make yt-fetch MODEL=<hf-id>" && exit 2)
+	@set -e; \
+	repo_name="$$(echo '$(MODEL)' | sed 's#/#__#g')"; \
+	cache_name="models--$$(echo '$(MODEL)' | sed 's#/#--#g')"; \
+	src="$(YT_MODELS_ROOT)/$$repo_name"; \
+	if ! yt --proxy=$(YT_PROXY) exists "$$src" | grep -q true; then \
+	    alt_name="$$(basename $(MODEL))"; \
+	    alt_src="$(YT_MODELS_ROOT)/$$alt_name"; \
+	    if yt --proxy=$(YT_PROXY) exists "$$alt_src" | grep -q true; then \
+	        repo_name="$$alt_name"; src="$$alt_src"; \
+	    else \
+	        echo "no such model on YT: $$src (also tried $$alt_src)" >&2; exit 1; \
+	    fi; \
+	fi; \
+	files="$$(yt --proxy=$(YT_PROXY) list "$$src")"; \
+	test -n "$$files" || { \
+	    echo "yt-fetch: '$$src' on proxy $(YT_PROXY) listed no files — refusing to report a cached model" >&2; \
+	    exit 1; \
+	}; \
+	dest="$(HF_HOME)/hub/$$cache_name"; \
+	snap="$$dest/snapshots/yt-cache"; \
+	mkdir -p "$$snap" "$$dest/refs"; \
+	printf yt-cache > "$$dest/refs/main"; \
+	for f in $$files; do \
+	    echo "fetching $$f ..."; \
+	    yt --proxy=$(YT_PROXY) read-file "$$src/$$f" > "$$snap/$$f.part"; \
+	    mv "$$snap/$$f.part" "$$snap/$$f"; \
+	done; \
+	echo "cached $(MODEL) -> $$dest"
+
+# Restore the primed dataset record cache from our YT mirror, for hosts with
+# no direct HF access. Unlike yt-fetch (models), this does NOT reconstruct an
+# HF_HOME hub cache: mirroring the raw HF hub snapshot is not sufficient to
+# make `datasets.load_dataset()` work offline (its offline path needs its own
+# prebuilt arrow cache, not just the raw source files). Instead this restores
+# results/splits/*_records.jsonl directly (see ddi/data/records_cache.py) -
+# every ddi.data loader checks that cache first and never touches the HF Hub
+# on a hit. Requires the cache to have already been mirrored to
+# YT_RECORDS_ROOT (see upload_records_cache_to_yt.sh).
+#
+# Failure handling (VIBEQUEUE-16) — same fix as yt-fetch above, and this one mattered more.
+# The recipe was a single logical line ending in the `echo`, so the `echo` set the exit
+# status: a broken proxy, a missing path or an empty listing all exited 0. Every Nirvana job
+# preamble wraps this in `make yt-fetch-records || { echo "FATAL: ..."; exit 1; }` (see
+# nirvana/graphs/scripts.py) — that guard could never fire, and the failure it guards is the
+# one where datasets silently drop out of the eval and read as a quality change rather than
+# a missing input. `set -e` + an explicit empty-listing check make the guard live; `.part` +
+# `mv` keep a partial read from leaving a truncated shard that a later run treats as cached.
+yt-fetch-records:
+	@set -e; \
+	mkdir -p results/splits; \
+	files="$$(yt --proxy=$(YT_PROXY) list $(YT_RECORDS_ROOT))"; \
+	test -n "$$files" || { \
+	    echo "yt-fetch-records: '$(YT_RECORDS_ROOT)' on proxy $(YT_PROXY) listed no files — refusing to report a restored cache" >&2; \
+	    exit 1; \
+	}; \
+	for f in $$files; do \
+	    echo "fetching $$f ..."; \
+	    yt --proxy=$(YT_PROXY) read-file "$(YT_RECORDS_ROOT)/$$f" > "results/splits/$$f.part"; \
+	    mv "results/splits/$$f.part" "results/splits/$$f"; \
+	done; \
+	echo "cached dataset records -> results/splits/"
+
+# Compute the DDI Δ for one (model, dataset, metric) triple out of the run store.
+#
+# Note the module: `ddi.delta_cli`, NOT `ddi.delta`. `ddi.delta` is the library half and has
+# no `main()`, so `python -m ddi.delta` imports it, runs nothing and exits 0 — a silent
+# no-op that looks like a successful run with an empty result. The console script in
+# pyproject.toml (`ddi-delta`) points at `ddi.delta_cli:main` for the same reason; this
+# target goes through `$(PY) -m` so it uses the same interpreter as every other target here
+# rather than whatever `ddi-delta` happens to be first on PATH.
+#
+# K/STORE/RECORD are optional passthroughs to the CLI's own defaults.
+#   make delta MODEL=Qwen/Qwen2.5-7B DATASET=nq METRIC=em [K=2.0] [STORE=...] [RECORD=1]
+delta:
+	@test -n "$(MODEL)" || (echo "usage: make delta MODEL=<hf-id> DATASET=<name> METRIC=<name> [K=2.0] [STORE=<file>] [RECORD=1]" && exit 2)
+	@test -n "$(DATASET)" || (echo "usage: make delta MODEL=<hf-id> DATASET=<name> METRIC=<name> [K=2.0] [STORE=<file>] [RECORD=1]" && exit 2)
+	@test -n "$(METRIC)" || (echo "usage: make delta MODEL=<hf-id> DATASET=<name> METRIC=<name> [K=2.0] [STORE=<file>] [RECORD=1]" && exit 2)
+	$(PY) -m ddi.delta_cli --model $(MODEL) --dataset $(DATASET) --metric $(METRIC) \
+	    $(if $(K),--k $(K)) $(if $(STORE),--store $(STORE)) $(if $(RECORD),--record)
+
+# `publish-summary` was DELETED here (VIBEQUEUE-16). It ran
+# `gh issue comment $(ISSUE) --body-file $(SUMMARY)`, and every part of that was wrong for
+# where this project actually lives:
+#   * `gh` is not installed on any host this repo runs on — dev box or serverless container
+#     — and nothing installs it, so the target exited 127 wherever it was invoked;
+#   * it posts to github.com/AlexKay28/ddi, which is a mirror at most. The code that
+#     produced every published number is the Arcadia branch
+#     users/alexkay28/alignment-2445-ddi, and the numbers themselves were reported into the
+#     Yandex ticket, not into a GitHub issue;
+#   * README.md, experiments/README.md and SERVERLESS.md all presented it as the final step
+#     of the standard flow, so it was the last thing a newcomer hit and the first thing that
+#     failed.
+# It was referenced by exactly those three docs and nothing else — no graph, no script, no
+# CI job. Publishing a summary today is a copy-paste into the ticket; if that ever wants
+# automating it should target the tracker, not GitHub. Do not restore this without one.
+
+# Housekeeping.
+# Note: `uv run pytest` picks up a system-installed pytest without torch — use
+# `python -m pytest` via the venv interpreter instead. Also ensure the [dev]
+# extra (pytest) is installed before invoking.
+#
+# uv is NOT assumed to exist (VIBEQUEUE-16). `setup`/`test`/`lint` used to shell out to it
+# unconditionally and exited 127 on every host that didn't happen to have it, with nothing
+# anywhere saying to install it. All three now work either way:
+#   * `setup` prefers `uv sync --extra dev` when uv is on PATH, else pip-installs
+#     requirements-dev.txt (CPU-only, no torch — see that file's header).
+#   * `test`/`lint` run through PYTEST/RUFF, which follow the same rule: on a uv box they
+#     resolve into the uv-managed .venv that `setup` populated (the CI job installs uv, so
+#     hardcoding `$(PY) -m ...` would look outside that venv and find nothing); elsewhere
+#     they are the plain module form under $(PY). Override either explicitly if you want a
+#     specific interpreter: `PYTEST="/path/to/venv/bin/python -m pytest" make test`.
+#
+# `--no-sync` is deliberate: neither target may re-resolve dependencies. `uv run` on its own
+# implies a sync, which is exactly the implicit `setup` that `test` must not perform.
+# `python -m pytest` rather than bare `pytest` keeps the pre-existing note above true — a
+# bare `pytest` can resolve to a system install that has no torch.
+UV := $(shell command -v uv 2>/dev/null)
+# An explicitly-set PY (command line or environment) always wins over the uv autodetect —
+# `PY=/path/to/venv/bin/python make test` must mean that interpreter even on a uv box.
+RUNPY = $(if $(filter-out file default undefined,$(origin PY)),$(PY),$(if $(UV),uv run --no-sync python,$(PY)))
+PYTEST ?= $(RUNPY) -m pytest
+RUFF ?= $(RUNPY) -m ruff
+
+# CI-facing install step. Kept separate from `test` (which deliberately does NOT depend on
+# it) so a CI job can install once and then run lint and tests as separate steps, and so
+# `make test` on a prepared box never silently re-resolves dependencies underneath you.
+setup:
+	@if command -v uv >/dev/null 2>&1; then \
+	    echo "setup: uv found -> uv sync --extra dev"; \
+	    uv sync --extra dev; \
+	else \
+	    echo "setup: no uv on PATH -> $(PY) -m pip install -r requirements-dev.txt"; \
+	    $(PY) -m pip install -r requirements-dev.txt; \
+	fi
+
+# Ruff over the whole tree. Config lives in pyproject.toml (line-length=100, rules E/F/I/UP/B).
+# NOTE: main currently carries ~20 pre-existing lint errors unrelated to any single feature;
+# the CI workflow calls this step with `continue-on-error: true` while that debt is burned
+# down in a follow-up PR.
+lint:
+	$(RUFF) check .
+
+test:
+	$(PYTEST) tests/ -q
+
+# ---------------------------------------------------------------------------------------
+# smoke — the CPU-only end-to-end check (VIBEQUEUE-16).
+#
+# WHY. `make test` covers every component and two research bugs still shipped: a decode
+# loop that ran unmasked after step 0, and a prompt that never mentioned the retrieved
+# documents. Both needed a real tokenizer, a real forward pass and a real store round-trip
+# to surface. Until this target there was no way to run one on a machine without a GPU, an
+# HF token and a mirrored 7B checkpoint — i.e. on any machine a newcomer has.
+#
+# WHAT IT NEEDS: torch + transformers + tokenizers, and nothing else. No GPU (smoke.yaml
+# sets `require_gpu: false`), no HF Hub, no network, no YT, no Nirvana. Under 15s.
+#
+# WHAT IT PROVES: `ddi.run` -> `ddi.store` -> `ddi.aggregate` executes end to end under all
+# three masks, on a real `LlamaForCausalLM` forward and a real greedy decode, and produces
+# a well-formed summary JSON. It does NOT prove anything about quality: the model is
+# randomly initialised, so em/f1/presence are ~0 by construction. Read the exit status.
+#
+# THE MODEL. `hf-internal-testing/tiny-random-LlamaForCausalLM` would be the obvious
+# choice and is deliberately NOT used: it is a Hub download, and the hosts this repo runs
+# on (dev boxes and the serverless containers) have no Hub access — which is the entire
+# reason `yt-fetch` exists. It is not mirrored under YT_MODELS_ROOT either, and mirroring
+# it would make a "works everywhere" target depend on a YT token. So the model is
+# CONSTRUCTED locally instead, from a config, with no download of any kind:
+#
+#   * a byte-level tokenizer built from `tokenizers`' own 256-char ByteLevel alphabet with
+#     an empty merge table — every string round-trips, no vocab file to fetch;
+#   * a chat template. Not optional: `ddi/prompt.py::build_query_text` goes through
+#     `tokenizer.apply_chat_template`, so a tokenizer without one raises before the first
+#     forward pass. A base model with no template cannot be evaluated by this harness at
+#     all — worth knowing before you point `MODEL=` at one;
+#   * a 2-layer / 32-hidden `LlamaForCausalLM` under a fixed torch seed, so the weights
+#     (and therefore the smoke summary) are reproducible.
+#
+# Rebuild it by deleting $(SMOKE_MODEL_DIR). It lands under results/, which is ignored.
+SMOKE_MODEL_DIR ?= results/smoke_model
+SMOKE_SUMMARY ?= logs/smoke_summary.json
+# Must match `output_store:` in experiments/smoke.yaml. `ddi.aggregate` does NOT read that
+# key — it takes `--store` and otherwise defaults to results/runs.jsonl — so the two are
+# coupled by hand here. That is also why `smoke` does not go through the `exp-%` pattern
+# rule: `exp-%` never passes `--store`, so it silently aggregates the wrong file for any
+# YAML that sets `output_store`. smoke.yaml sets one on purpose, to keep rows from a
+# random-weights model out of the store that `ddi.delta_cli` and every summary read.
+SMOKE_STORE ?= results/smoke_runs.jsonl
+
+define SMOKE_MODEL_PY
+import sys, torch
+from pathlib import Path
+from tokenizers import Tokenizer, decoders, models, pre_tokenizers
+from transformers import LlamaConfig, LlamaForCausalLM, PreTrainedTokenizerFast
+out = Path(sys.argv[1])
+vocab = {ch: i for i, ch in enumerate(sorted(pre_tokenizers.ByteLevel.alphabet()))}
+for special in ('<unk>', '<s>', '</s>'):
+    vocab[special] = len(vocab)
+backend = Tokenizer(models.BPE(vocab=vocab, merges=[], unk_token='<unk>'))
+backend.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False, use_regex=True)
+backend.decoder = decoders.ByteLevel()
+chat = ("{% for m in messages %}{{ m['role'] }}: {{ m['content'] }}\n"
+        "{% endfor %}{% if add_generation_prompt %}assistant: {% endif %}")
+PreTrainedTokenizerFast(tokenizer_object=backend, unk_token='<unk>', bos_token='<s>',
+                       eos_token='</s>', chat_template=chat).save_pretrained(out)
+torch.manual_seed(0)
+LlamaForCausalLM(LlamaConfig(
+    vocab_size=len(vocab), hidden_size=32, intermediate_size=64, num_hidden_layers=2,
+    num_attention_heads=4, num_key_value_heads=2, max_position_embeddings=4096,
+    bos_token_id=vocab['<s>'], eos_token_id=vocab['</s>'], tie_word_embeddings=True,
+)).save_pretrained(out)
+print('smoke: built a tiny random model at ' + str(out))
+endef
+export SMOKE_MODEL_PY
+
+# A file target, so a second `make smoke` reuses the model instead of rebuilding it.
+$(SMOKE_MODEL_DIR)/config.json:
+	@$(PY) -c "$$SMOKE_MODEL_PY" "$(SMOKE_MODEL_DIR)"
+
+smoke-model: $(SMOKE_MODEL_DIR)/config.json
+
+# The store is truncated first: it is a throwaway, and appending would make the summary an
+# average over every smoke run this checkout has ever done.
+# HF_HUB_OFFLINE/TRANSFORMERS_OFFLINE are belt-and-braces — nothing here resolves a repo
+# id, but a stray Hub call would otherwise hang rather than fail on a disconnected host.
+smoke: $(SMOKE_MODEL_DIR)/config.json
+	@rm -f $(SMOKE_STORE)
+	HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+	    $(PY) -m ddi.run experiments/smoke.yaml --model $(SMOKE_MODEL_DIR)
+	$(PY) -m ddi.aggregate experiments/smoke.yaml --out $(SMOKE_SUMMARY) \
+	    --store $(SMOKE_STORE) --model $(SMOKE_MODEL_DIR)
+	@echo ""
+	@echo "smoke OK — run -> store -> aggregate executed under all three masks."
+	@echo "  store   $(SMOKE_STORE)"
+	@echo "  summary $(SMOKE_SUMMARY)"
+	@echo "  the numbers in it are from a random-weights model. Do not read them."
+
+list-experiments:
+	@ls experiments/*.yaml 2>/dev/null | xargs -n1 basename | sed 's/\.yaml//' | sed 's/^/  exp-/'
+
+gpu-check:
+	$(PY) -c "import torch; assert torch.cuda.is_available(); print('CUDA:', torch.cuda.get_device_name())"

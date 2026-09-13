@@ -1,0 +1,26 @@
+{
+  "dataset": "synthetic_qa__seed0__val",
+  "ids": [
+    "synthetic_qa-0-0003",
+    "synthetic_qa-0-0009",
+    "synthetic_qa-0-0018",
+    "synthetic_qa-0-0026",
+    "synthetic_qa-0-0039",
+    "synthetic_qa-0-0040",
+    "synthetic_qa-0-0042",
+    "synthetic_qa-0-0055",
+    "synthetic_qa-0-0056",
+    "synthetic_qa-0-0058",
+    "synthetic_qa-0-0060",
+    "synthetic_qa-0-0068",
+    "synthetic_qa-0-0071",
+    "synthetic_qa-0-0075",
+    "synthetic_qa-0-0077",
+    "synthetic_qa-0-0082",
+    "synthetic_qa-0-0089",
+    "synthetic_qa-0-0090",
+    "synthetic_qa-0-0092",
+    "synthetic_qa-0-0095"
+  ],
+  "limit": 100
+}

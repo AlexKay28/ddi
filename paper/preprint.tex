@@ -2,30 +2,48 @@
 % Decoupled Document Inference — arXiv preprint scaffold.
 %
 % Ground rules (paper/RESEARCH_PLAN.md, issue #1):
-%   1. Every empirical claim is backed by an artifact rendered from
-%      ddi/reports/ into paper/generated/. No hand-typed numbers.
-%   2. If the store is empty for a given renderer, paper/build.sh emits a
-%      \todoreport stub so the document still compiles.
+%   1. Every empirical number is rendered from paper/evidence.json, which pins
+%      its raw inputs by full SHA-256; see paper/build.sh.
+%   2. Missing generated inputs are surfaced as \todoreport stubs so the
+%      document still compiles.
 %   3. Framing throughout is a *characterization study*: how much
 %      cross-document attention can be removed, and what does removing it
 %      buy? (RESEARCH_PLAN §12.)
 %
-% Regenerate + compile:  make paper
+% Compile checked-in artifacts:  ./paper/build.sh
 % =====================================================================
 
-\documentclass[11pt]{article}
+\documentclass[10pt]{article}
 
 % --- geometry & layout ------------------------------------------------
-\usepackage[letterpaper,margin=1in]{geometry}
+\usepackage[letterpaper,margin=.8in]{geometry}
 \usepackage{parskip}
+\setlength{\columnsep}{.25in}
+\setlength{\textfloatsep}{7pt plus 2pt minus 2pt}
+\setlength{\floatsep}{6pt plus 2pt minus 2pt}
 
 % --- graphics, colour, links ------------------------------------------
 \usepackage{graphicx}
+\usepackage{caption}
+\usepackage{float}
+\captionsetup{font=small,labelfont=bf,skip=8pt}
 \usepackage{xcolor}
 \usepackage[hidelinks]{hyperref}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\usepgfplotslibrary{groupplots}
+\pgfplotsset{compat=1.18}
+\definecolor{ddiBlue}{HTML}{1263D6}
+\definecolor{ddiGold}{HTML}{F07818}
+\definecolor{ddiGreen}{HTML}{008C69}
+\definecolor{ddiPurple}{HTML}{773BBD}
+\definecolor{ddiRed}{HTML}{D1495B}
+\setlength{\emergencystretch}{2em}
+\raggedbottom
 
 % --- tables & typography ----------------------------------------------
 \usepackage{booktabs}
+\usepackage{multirow}
 \usepackage{xspace}
 
 % --- math -------------------------------------------------------------
@@ -41,8 +59,8 @@
 %
 % \todoreport{human message}{regeneration hint}
 %   Rendered in place of any table / figure the store cannot yet
-%   populate. paper/build.sh emits stubs that call this macro so the
-%   compiled PDF advertises exactly which sweep unblocks each cell.
+%   populate. Sections call this macro when a checked-in artifact is absent so
+%   the compiled PDF advertises exactly which sweep unblocks each cell.
 % =====================================================================
 \newcommand{\todoreport}[2]{%
     \begin{center}%
@@ -73,21 +91,21 @@
             \label{#3}%
         \end{figure}%
     }{%
-        \todoreport{figure \texttt{#1} missing}{make paper}%
+        \todoreport{figure \texttt{#1} missing}{./paper/build.sh}%
     }%
 }
 
 % =====================================================================
 % Title block.
 %
-% AUTHORS: replace the two "Placeholder Author" entries below with real
-% names and affiliations before circulating; keep the \and separator so
-% arXiv's parser is happy.
+% Author metadata is approved for this preprint.
 % =====================================================================
-\title{Decoupled Document Inference: A Characterization Study of
-       Block-Diagonal Attention in RAG Prefill}
+\title{Prefill Once, Reuse Anywhere?\\
+       Quality, Sparsity, and Document KV Reuse in RAG}
 
-\author{Placeholder Author \and Placeholder Author}
+\author{Aleksandr Kaigorodov\\
+        Yandex\\
+        \texttt{alexkay28@yandex-team.ru}}
 
 \date{\today}
 
@@ -96,39 +114,48 @@
 \maketitle
 
 \begin{abstract}
-Retrieval-augmented prompts concatenate mutually independent documents, then pay
-quadratic prefill cost to model the resulting cross-document interactions.
-\emph{Decoupled Document Inference} (DDI) replaces the lower-triangular causal
-mask with a block-diagonal one: each document is causal within itself and blind
-to every other document, while the query and answer regions bridge the blocks.
-We frame the study as a characterization rather than a method-wins result:
-we ask how much cross-document attention can be removed before answer quality
-degrades on single-hop parity benchmarks, and what removing it actually buys
-in terms of prefill cost and per-document key/value cache reuse. Multi-hop
-failure characterization, PCW comparison, and fine-tuning are out of scope
-for this preprint. All tables and figures in this preprint are regenerated
-from the results store by \texttt{paper/build.sh}; empty cells are surfaced
-as explicit TODOs.
+Retrieval-augmented generation (RAG) repeats document prefill across requests.
+Decoupled Document Inference (DDI) isolates document attention via a
+block-diagonal mask and uses restart positions to make independently computed
+document KVs reusable. Block-Attention~\citep{ma2025blockattention} achieves
+98.7\% TTFT reduction with full-model fine-tuning; this paper asks how far
+lightweight self-distillation goes and what serving boundary remains.
+Two approaches compose: \textbf{sparse cold prefill} reduces attention work on
+cache misses; \textbf{warm KV reuse} loads stored document states and skips
+document prefill. At $N=25,L=512,Q=64$, DDI-QF removes
+95.04\% of causal prefill pairs, but measured dense-SDPA prefill remains near the
+full-causal latency (the 4D additive mask forces SDPA's slow math backend).
+Historical Flex logs report 1.77$\times$ whole-model prefill gain; their older
+mask semantics and failed parity gates prevent treating these as validated
+current-DDI speedups. Natural-QA mask and document-count studies show quality
+losses (HotpotQA EM 0.56$\to$0.30 train-free); matched three-seed self-distillation
+(top-8 layers) does not reach prescribed parity gates. A trained link-token
+contract (V70) then closes the quality gate: on 300 untouched records, cached
+versus fresh generation is \textbf{byte-identical} (C$-$B $=0$, CI $[0,0]$),
+replicated at a second seed (V72). The trained contract's serving boundary
+(V71) keeps the warm-path win: all-hit TTFT up to 5.55$\times$ with zero
+identity violations across 240 cells, winning above hit-fraction crossovers
+($h\geq 0.7$ at $L=512$, $h\geq 0.8$ at $L=128$). The win is scoped:
+mixed-hit traffic remains slower, and the sparse cold path wins only at long
+shapes (1.12--1.29$\times$ at $L=512$). We therefore claim a measured, audited
+warm-path speedup with byte-identical serving after contract training --- not
+yet a quality-preserving general replacement for full causal attention at scale.
 \end{abstract}
 
 % ---------------------------------------------------------------------
 % Body — every section is a separate .tex under sections/. Keep the
-% split so a section can be regenerated / re-reviewed independently
-% and so build.sh's re-render step does not touch the prose.
+% split so a section can be reviewed independently from checked-in artifacts.
 % ---------------------------------------------------------------------
-\input{sections/00_intro.tex}
-\input{sections/01_related_work.tex}
-\input{sections/02_method.tex}
-\input{sections/03_experimental_design.tex}
-\input{sections/04_results_quality.tex}
-\input{sections/05_results_efficiency.tex}
-\input{sections/06_results_caching.tex}
-\input{sections/08_limitations_conclusion.tex}
+\input{sections/main_story.tex}
 
 % ---------------------------------------------------------------------
 % Bibliography — references.bib lives next to this file and is the
 % single source of truth (also read by any tooling that greps citations).
 % ---------------------------------------------------------------------
 \bibliography{references}
+
+\clearpage
+\appendix
+\input{sections/appendix.tex}
 
 \end{document}

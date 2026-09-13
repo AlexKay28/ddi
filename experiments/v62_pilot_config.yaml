@@ -1,0 +1,126 @@
+# V62 — bounded equal-budget k0 pilot (config-only artifact; NOT a run record).
+#
+# Frozen before the first GPU launch, per the ROADMAP "Approved-training-only V62"
+# stage: no training has been launched by this file's creation. This config trains
+# the k=0 arm ONLY of the V62 link-token ablation (ddi/link_token_contract.py,
+# _LINK_COUNTS = (0, 1, 5)): no link tokens, plain ddi_qf mask under restart
+# positions. The link-token k=1 and k=5 arms are SEPARATE LATER ABLATIONS with
+# their own configs — this file must not be retagged or --set into serving them,
+# because the frozen budget below is only comparable between arms that share it
+# verbatim.
+#
+# Schema follows experiments/finetune.yaml and experiments/README.md; every
+# machine-read key below is in _SET_KEYS["finetune"] (ddi/run.py). As in every
+# YAML here there is NO `model:` key — supply it at invocation time (expected:
+# Qwen/Qwen2.5-7B-Instruct, the ddi_qf 8L restart lineage), e.g.
+#
+#   python -m ddi.run experiments/v62_pilot_config.yaml --model Qwen/Qwen2.5-7B-Instruct
+#
+# num_gpus: 1 keeps the single-device path (no torchrun), i.e. exactly one A100.
+#
+# ---------------------------------------------------------------------------
+# Frozen split manifest (referenced by sha)
+#
+#   experiments/v62_split_manifest.json
+#   file sha256: 5ad3761106ecaed967b28d21c3919fa1869ebf70bf0e178c1e773a14bf8ee098
+#   train:        n=800  sha256 a3b1f5b6b1fcd9e099969b62d7ee2922c1e2e1e62397d9bbd4c1c6b42630bcbb
+#   development:  n=100  sha256 aa03e6892b9a05454e254567d6865e56bfc24e2958a62806447f836cb80760df
+#   confirmation: n=100  sha256 529f0109eefbf2ef42ede00be146d95cf19876e35859bc1358fbceb1b1bf04d7
+#
+# Built from ddi.data.load("hotpot_qa", "train", 0) with the V58 QA manifest and
+# V60 confirmation ids excluded; arms are pairwise disjoint and disjoint from
+# every previously observed id. The arms load directly into
+# ddi.link_token_contract.SplitManifest(train_ids, development_ids,
+# confirmation_ids).
+#
+# LAUNCH CONTRACT: the trainer entry point at this revision has no id-manifest
+# knob — `datasets:` loads the raw hotpot_qa train stream (90,447 records). A
+# launch is a V62 k0 pilot ONLY if the training stream is first filtered to the
+# manifest's train arm (800 ids, sha256 a3b1f5b6...), and the development and
+# confirmation arms NEVER enter training. Until that filter is wired into
+# ddi.finetune, launching this file unfiltered trains on the wrong stream while
+# every store row still says "finetune" — treat that as not-a-V62-run, not as a
+# failed arm. max_records below matches the train-arm size so the cap is inert
+# once the filter exists.
+#
+# ---------------------------------------------------------------------------
+# Objective / entry points (ddi/finetune.py, unchanged)
+#
+# Teacher = base model + `full` causal mask, FROZEN: ddi.finetune puts the
+# teacher in eval() and sets requires_grad=False on every parameter, and it never
+# receives an optimizer. The student = same weights + `ddi_qf` mask, trained by
+# temperature-scaled KL on answer-position logits against the teacher, with the
+# R1 anchor weights carried over from experiments/finetune_qwen_v52_r1_pilot_seed0.yaml
+# so this arm is objective-comparable with the reference pilot. Losses, clipping,
+# the finite-gradient skip guard and the NaN-checkpoint refusal are all the
+# existing trainer's; nothing here changes trainer code.
+#
+# ddi_qf RESTART layout: `layout: restart` gives the student restart positions on
+# every record (the teacher always sees sequential positions — trainer-fixed),
+# matching the C4 restart contract and the existing
+# Qwen__Qwen2.5-7B-Instruct__ddi_qf__8L_restart checkpoint lineage. End-of-epoch
+# perplexity is additionally scored under layout="restart" because of this.
+#
+# CANONICAL-SDPA ENCODER NOTE: the pilot's evaluation-side encoder contract is
+# the V60 same-backend canonical policy — ddi/canonical_cache.py
+# ExecutionContract(backend="sdpa"). Rationale (ROADMAP-EXECUTION.md, session
+# 2026-09-09): on the V60 development QA matrix the SDPA-canonical policy matched
+# arm A's EM exactly (0.50, 18/20 first tokens; residual F1 -0.057 undiagnosed),
+# while the eager contract did not. The trainer itself has no encoder-contract
+# knob — this note governs how the trained checkpoint is EVALUATED on the frozen
+# development/confirmation arms: canonical per-document reuse with backend="sdpa",
+# identity-keyed so eager caches cannot collide.
+#
+# ---------------------------------------------------------------------------
+# Bounded equal budget (the definition a k=1/k=5 arm must copy verbatim)
+#
+#   * 100 optimizer steps (max_steps) — hard trainer stop, mid-epoch.
+#   * effective batch 4: 1 record per backward x grad_accum_steps 4
+#     => 400 record-presentations total (~half of the 800-id train arm).
+#   * lr 1.0e-5, linear warmup 20 steps then constant (finetune.yaml: drop to
+#     ~20 for short runs; a 100-step budget must actually exit warmup).
+#   * seed 0, kl_temperature 1.0, max_grad_norm 1.0.
+#
+# Stop conditions — trainer-enforced:
+#   * max_steps 100 reached => stop, save, score post-epoch perplexity.
+#   * max_skipped_steps 10 (tightened from the default 20 = 20% of this budget):
+#     more than 10 non-finite-gradient steps aborts the run instead of saving.
+#   * _assert_finite_weights refuses to write a NaN checkpoint.
+# Stop conditions — operator-enforced (no trainer knob exists):
+#   * exactly one A100-80GB (num_gpus 1); abort if reserved memory exceeds 70 GiB
+#     or wall clock exceeds 4 h. For scale: the V61 canonical smoke on the same
+#     checkpoint peaked at 29.78 GiB reserved; the teacher+student pair plus 8
+#     frozen-trunk grads/AdamW8bit states fits comfortably but is larger.
+#   * artifact bound: one checkpoint directory + one output_store jsonl, < 20 GiB.
+
+kind: finetune
+seed: 0
+datasets: [hotpot_qa]   # manifest-scoped: no frozen ids exist for musique/synthetic_qa
+output_dir: results/checkpoints/Qwen__Qwen2.5-7B-Instruct__ddi_qf__v62_k0_pilot_seed0
+output_store: results/finetune_qwen_v62_k0_pilot_seed0.jsonl
+
+max_records: 800        # inert until the manifest train-arm filter is wired; see above
+held_out_frac: 0.05     # trainer-internal tail holdout for perplexity ONLY — it is NOT
+                        # the manifest's development arm and must never be read as one
+holdout_eval_records: 100
+epochs: 1
+lr: 1.0e-5
+kl_temperature: 1.0
+teacher_first_token_weight: 1.0
+full_anchor_weight: 1.0
+blind_anchor_weight: 1.0
+grad_accum_steps: 4
+warmup_steps: 20
+log_every: 25
+max_steps: 100
+num_gpus: 1             # one A100, single-device path
+min_docs: 2             # explicit: single-doc records are zero-KL (ddi.finetune prefilter)
+trainable_layers: 8     # 8L restart lineage; trunk + embeddings + lm_head stay frozen
+max_grad_norm: 1.0
+max_skipped_steps: 10
+layout: restart         # ddi_qf restart layout; teacher stays sequential (trainer-fixed)
+
+report:
+  tables:
+    - kind: finetune_loss
+    - kind: perplexity

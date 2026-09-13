@@ -1,0 +1,26 @@
+# V77: Full-model fine-tuning with SDPA backend pinning
+# Tests whether training all 28 layers (not just top-8) closes the quality gap,
+# matching Block-Attention's approach (ICLR 2025).
+#
+# Run: python -m ddi.run experiments/v77_full_model_ft.yaml
+#      MODEL=Qwen/Qwen2.5-7B-Instruct
+
+kind: finetune
+model: "${MODEL}"
+datasets:
+  - hotpot_qa
+  - musique
+trainable_layers: null
+sdpa_backend: math
+lr: 1.0e-5
+warmup_steps: 20
+max_steps: 26000
+layout: sequential
+batch_size: 4
+grad_accum_steps: 1
+kl_temperature: 2.0
+teacher_first_token_weight: 0.5
+report:
+  tables:
+    - kind: quality
+      metric: em

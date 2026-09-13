@@ -82,3 +82,135 @@ that forces retention beyond what #81 already lists as in-scope
 fine-tuning entry points are all cleared to delete). No sections
 survived that require any of the dropped code to keep compiling; #89
 can proceed on the plan in #81 without paper-side blockers.
+
+## VIBEQUEUE-46: matched transfer result
+
+VIBEQUEUE-46 supersedes the single-seed evidence boundary below. Qwen2.5-7B
+and Llama-3.1-8B now each have three independently trained top-8-layer
+checkpoints, fixed seed-specific manifests, paired per-example outputs, and
+matched base/tuned controls. Neither reaches natural-QA parity. Only musique F1
+admits a cross-architecture contrast: Llama minus Qwen normalized closure is
++0.028 with a 95% equal-seed bootstrap interval of [-0.085, +0.179]. This does
+not establish a practical architecture difference or architecture equivalence.
+
+## VIBEQUEUE-43: bounded Llama result (superseded)
+
+The available Llama-3.1-8B checkpoints support only a single-seed diagnostic:
+the 16-layer, 20k-record checkpoint scored full/DDI-QF EM of 0.45/0.40 on
+100 hotpot examples and 0.36/0.18 on 100 musique examples. The earlier 8-layer
+hotpot diagnostic had a 0.16 gap. The runner uses `seed` to select the
+validation split and no fixed-ID manifest or independently trained Llama seeds
+is stored, so a seed sweep from the current artifacts would not be a controlled
+fixed-set cross-architecture evaluation. `04_results_quality.tex`,
+`08_limitations_conclusion.tex`, `00_intro.tex`, and `preprint.tex` now state
+this as an architecture- and task-dependent negative result rather than a
+universal transfer claim.
+
+## VIBEQUEUE-42: evidence-to-claim boundary
+
+The paper and repository-facing documentation distinguish canonical mask
+semantic tests and raw direct-sparse construction from model-level conclusions.
+The unsupported archived Flex timing observations are not retained as numerical
+evidence. The corrected single-run restart control is 0.45 sequential versus
+0.47 restart; it invalidates the earlier restart-wall and RoPE interpretations
+but does not
+establish parity. Only the four Qwen full-baseline descriptive t-intervals are CIs;
+all other quality values remain single-run estimates.
+
+## 2026-09-06: evidence and paper reproducibility audit
+
+The paper workflow had split into three contradictory states: prose promised
+automatic generation, `paper/build.sh` documented manual artifacts, and a stale
+`paper/render.py` expected absent summary files while producing incompatible
+tables and figures. The stale renderer and duplicate generated-directory build
+script were retired. VIBEQUEUE-50 remains open because the raw stores behind
+T2--T6 are local ignored files; only T7 and the F5 aggregate have tracked source
+evidence sufficient for a clean-checkout audit.
+
+The audit corrected the T4 restart-tuned hotpot delta from +0.03 to -0.03,
+identified the actual T4-16L 100-record source, recomputed T6 F1 intervals from
+unrounded seed means, aligned T3 prose with its TTFT/TPOT/sparsity columns, and
+removed F3 from the manuscript because its archived PDF has no matching tracked
+source and disagrees with the retired renderer. Flex proxy values now report all
+three failed mask arms from VIBEQUEUE-47 rather than an older aggregate value.
+
+VIBEQUEUE-52 is retained only as campaign bookkeeping. Its preregistered seed-0
+pilot stopped after DDI F1 regressed by 0.121 on hotpot_qa and 0.041 on musique,
+but it is not a deciding paper cell: the run used a dirty tree, its checkpoint
+was removed after hashing, and three-seed expansion and paired bootstrap did not
+run. VIBEQUEUE-48, VIBEQUEUE-49, and VIBEQUEUE-50 were open at this point, so
+this entry is not the current scope disposition.
+
+## 2026-09-06: VIBEQUEUE-50 deterministic rendering
+
+This entry supersedes the open VIBEQUEUE-50 status in the preceding audit entry.
+`paper/evidence.json` now preserves the audited aggregates behind every retained
+paper artifact and records each raw input's full SHA-256 and byte size. The
+standard-library `paper/render.py` validates that manifest, verifies all tracked
+sources and every historical source available locally, and deterministically
+renders T1, T2, T3, T4, T4-16L, T4-restart, T5, T6-delta, T7-transfer, and F5.
+`paper/build.sh` runs that renderer before its optional TeX pass.
+
+T3-flex and its numerical claims were removed because the cited historical log
+is absent and therefore cannot receive hash provenance. F5 is now deterministic
+TeX rather than an opaque PDF. T4-restart retains only the corrected matched
+control; its old defect row combined cells from different lineages and was
+removed rather than preserved as a comparison. PDF compilation was not run on the audit host,
+which has neither `pdflatex` nor `bibtex`; cross-installation PDF byte identity
+is not claimed without a validated pinned TeX distribution.
+
+## 2026-09-06: VIBEQUEUE-48 scope disposition
+
+This entry supersedes VIBEQUEUE-48's open-prerequisite interpretation in the
+earlier audit entry. The bounded characterization paper does not require the
+powered quality expansion or larger-model cells. Their protocols and experiment
+plans remain available as deferred future work so VIBEQUEUE-48 can be reopened,
+but no unrun cell is counted as completed or successful.
+
+The admitted quality evidence is limited to the measured
+Qwen2.5-7B-Instruct and Llama-3.1-8B-Instruct checkpoints, named datasets,
+frozen manifests, and retained outputs from VIBEQUEUE-46. VIBEQUEUE-52 remains
+a stopped one-seed pilot and adds no deciding cell. The sole valid natural-QA
+architecture contrast is musique F1; it establishes no parity, equivalence,
+architecture invariance, or scale trend.
+
+## 2026-09-06: VIBEQUEUE-49 scope disposition
+
+This entry supersedes VIBEQUEUE-49's open-prerequisite interpretation in the
+earlier audit entry. Compiled Flex timing is deferred outside the bounded
+characterization paper and did not run: the V47 full-model proxy at
+`N=2,L=128,Q=64` fails the required cosine >=0.999 and 100% token-argmax gates
+for `full`, `ddi_qf`, and `blind`. This remains a mechanistic boundary, not a
+successful Flex result.
+
+The bounded paper retains SDPA timing and the corrected one-shape cache result
+as its only current efficiency/system evidence. It makes no Flex
+model-throughput, batching, or serving claim and retains no numerical historical
+Flex result. `EVIDENCE_TO_CLAIM.md` preserves the exact reopen protocol: all
+applicable parity gates must pass unchanged before timing may begin.
+
+## VIBEQUEUE-53 cache workload audit
+
+The cache interpretation in the preceding entry is superseded. V51's nominal
+shape is not exact after decode/retokenize, and full causal versus DDI does not
+establish equal decode work. The throughput claim is withdrawn. Historical
+source rows and their hashes remain unchanged, but F5 now renders the withdrawal
+rather than validated-looking bars. Exact-input local revalidation preserves
+source/diff hashes and is not clean-revision evidence. SDPA timing is unaffected.
+
+## VIBEQUEUE-55 manuscript reconciliation
+
+The manuscript now distinguishes legacy descriptive tables from the matched
+three-seed transfer study and the withdrawn cache-throughput result. It states
+that strict has one query bridge row while answer rows directly attend documents,
+and that the `N=1` full-causal return is an isolation-free correctness
+convention. Full-causal caching is qualified to unchanged exact prefixes; DDI
+per-document reuse remains conditional on restart layout and implementation.
+
+The retained `N=25, l=512, Q=64` arithmetic is now exact: 82,747,680 full
+prefill pairs versus 4,104,480 DDI-QF pairs, a 20.1603x pair-count ratio and
+95.0398% sparsity. Unsupported SDPA dispatch, materialization, and bottleneck
+attribution was removed; the retained result is only no observed TTFT gain at
+the listed fixed-shape cells. No author-approved metadata or TeX engine was
+available in this checkout, so placeholders and PDF compilation remain
+submission blockers.

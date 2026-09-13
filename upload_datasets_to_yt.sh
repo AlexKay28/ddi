@@ -7,10 +7,14 @@ DEST_ROOT="//home/gena/alexkay28/tickets/ALIGNMENT-2445/data"
 HF_CACHE="$HOME/.cache/huggingface/hub"
 
 # cache_name (datasets--<cache_name>) -> repo_name (destination dir on YT)
+# Keys track the loaders' _HF_DATASET_ID with / -> --, so they must stay namespaced:
+# the HF cache dir is datasets--<namespace>--<name>, and a bare key finds no snapshot
+# (silently, via the `ls | head -1` below) now that the loaders resolve namespaced ids.
+# Destinations are unchanged, so the existing YT mirrors stay where they are.
 declare -A DATASETS=(
-  ["kilt_tasks"]="kilt_tasks"
+  ["facebook--kilt_tasks"]="kilt_tasks"
   ["dgslibisey--MuSiQue"]="MuSiQue"
-  ["hotpot_qa"]="hotpot_qa"
+  ["hotpotqa--hotpot_qa"]="hotpot_qa"
 )
 
 for cache_name in "${!DATASETS[@]}"; do

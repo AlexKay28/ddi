@@ -22,6 +22,10 @@ import pytest
 import torch
 
 from ddi import run as ddi_run
+from ddi.delta import compute_delta
+from ddi.parity import read_means
+from ddi.provenance import Provenance
+from ddi.store import append
 
 # ---------------------------------------------------------------------------
 # Pure-unit: YAML loading + top-level validation.
@@ -70,7 +74,7 @@ def test_run_seed_override_wins_over_yaml(tmp_path: Path, monkeypatch: pytest.Mo
     """--seed overrides YAML seed; runner dispatches with the CLI seed."""
     seen: dict[str, int] = {}
 
-    def _fake_quality(cfg, cfg_hash, seed, yaml_path):
+    def _fake_quality(cfg, cfg_hash, seed):
         seen["seed"] = seed
 
     monkeypatch.setitem(ddi_run._DISPATCH, "quality", _fake_quality)
@@ -164,6 +168,124 @@ def test_quality_requires_datasets(tmp_path: Path) -> None:
     p = _write_yaml(tmp_path, body)
     with pytest.raises(ValueError, match="missing required key: 'datasets'"):
         ddi_run.run(p)
+
+
+def test_quality_checkpoint_requires_unique_evaluation_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Checkpoint rows must not share the base model's aggregate identity."""
+    monkeypatch.setattr(
+        ddi_run.inference, "load", lambda *a, **k: (_FakeModel(), object())
+    )
+    body = (
+        "kind: quality\nseed: 0\nmodel: base\ncheckpoint: tuned\n"
+        "datasets: [ds]\nmasks: [full]\nmetrics: [f1]\n"
+    )
+    p = _write_yaml(tmp_path, body)
+    with pytest.raises(ValueError, match="requires a unique 'evaluation_model'"):
+        ddi_run.run(p)
+
+
+def test_quality_uses_evaluation_model_in_run_id(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: list[str] = []
+
+    def _fake_cell(**kwargs):
+        seen.append(kwargs["model_name"])
+
+    monkeypatch.setattr(ddi_run, "_quality_cell", _fake_cell)
+    monkeypatch.setattr(
+        ddi_run.inference, "load", lambda *a, **k: (_FakeModel(), object())
+    )
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    body = (
+        "kind: quality\nseed: 0\nmodel: base\ncheckpoint: tuned\n"
+        "evaluation_model: base__ddi_qf_tuned\nheldout_manifest_mode: verify\n"
+        f"heldout_manifest: {tmp_path / 'manifest'}\n"
+        "datasets: [ds]\nmasks: [full]\nmetrics: [f1]\n"
+    )
+    ddi_run.run(_write_yaml(tmp_path, body))
+    assert seen == ["base__ddi_qf_tuned"]
+
+
+def test_quality_checkpoint_rejects_seed_qualified_evaluation_model(tmp_path: Path) -> None:
+    body = (
+        "kind: quality\nseed: 0\nmodel: base\ncheckpoint: tuned\n"
+        "evaluation_model: base__ddi_qf_tuned__seed0\n"
+        "heldout_manifest_mode: verify\n"
+        f"heldout_manifest: {tmp_path / 'manifest'}\n"
+        "datasets: [ds]\nmasks: [full]\nmetrics: [f1]\n"
+    )
+    with pytest.raises(ValueError, match="across seeds"):
+        ddi_run.run(_write_yaml(tmp_path, body))
+
+
+def test_quality_verify_only_manifest_never_creates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        ddi_run, "load_dataset", lambda *_a: iter([{"id": "a", "possible_answers": ["a"]}])
+    )
+    manifest_root = tmp_path / "manifest"
+    with pytest.raises(FileNotFoundError, match="verify-only"):
+        ddi_run._quality_cell(
+            model=object(),
+            tokenizer=object(),
+            dataset="ds",
+            mask_variant="full",
+            bridge_k=None,
+            model_name="base__ddi_qf_tuned",
+            seed=0,
+            max_records=1,
+            max_new_tokens=1,
+            metrics=["f1"],
+            cfg_hash="test",
+            store_path=tmp_path / "runs.jsonl",
+            heldout_manifest=manifest_root,
+            heldout_manifest_mode="verify",
+            predictions_store=None,
+            checkpoint="tuned",
+        )
+    assert not manifest_root.exists()
+
+
+def test_shared_evaluation_identity_aggregates_three_seed_rows(tmp_path: Path) -> None:
+    store = tmp_path / "runs.jsonl"
+    evaluation_model = "base__ddi_qf_tuned"
+    for seed, value in enumerate((0.1, 0.2, 0.3)):
+        prov = Provenance(
+            git_sha="test",
+            dirty=False,
+            config_hash="test",
+            seed=seed,
+            model_revision=evaluation_model,
+            dataset_revision="ds",
+            gpu_model="cpu",
+            driver_version="unknown",
+            cuda_version="cpu",
+            torch_version="test",
+            timestamp_utc="2026-01-01T00:00:00+00:00",
+            checkpoint_revision=f"results/checkpoints/tuned-seed-{seed}",
+        )
+        append(
+            f"phase2_train_free:{evaluation_model}:ds:full:seed={seed}:deadbeef:record-{seed}",
+            "f1",
+            value,
+            prov,
+            store=store,
+        )
+
+    delta = compute_delta(store, evaluation_model, "ds", "f1")
+    assert delta.n_seeds == 3
+    assert delta.per_seed_means == {0: 0.1, 1: 0.2, 2: 0.3}
+    assert read_means(store)[(evaluation_model, "ds", "full", "f1")] == pytest.approx(0.2)
+    rows = _read_rows(store)
+    assert {row["provenance"]["checkpoint_revision"] for row in rows} == {
+        "results/checkpoints/tuned-seed-0",
+        "results/checkpoints/tuned-seed-1",
+        "results/checkpoints/tuned-seed-2",
+    }
 
 
 def test_timing_requires_backends(tmp_path: Path) -> None:
@@ -465,6 +587,8 @@ def test_finetune_dispatch_writes_expected_rows(
         f"output_dir: {output_dir}\n"
         "max_records: 4\nheld_out_frac: 0.25\nepochs: 2\n"
         "lr: 5.0e-5\nkl_temperature: 2.0\ngrad_accum_steps: 2\n"
+        "teacher_first_token_weight: 0.5\nfull_anchor_weight: 0.75\n"
+        "blind_anchor_weight: 1.25\n"
         "warmup_steps: 7\nlog_every: 10\n"
         f"output_store: {store}\n"
     )
@@ -480,6 +604,9 @@ def test_finetune_dispatch_writes_expected_rows(
     assert kw["epochs"] == 2
     assert kw["lr"] == 5e-5
     assert kw["kl_temperature"] == 2.0
+    assert kw["teacher_first_token_weight"] == 0.5
+    assert kw["full_anchor_weight"] == 0.75
+    assert kw["blind_anchor_weight"] == 1.25
     assert kw["grad_accum_steps"] == 2
     assert kw["warmup_steps"] == 7
     assert kw["log_every"] == 10
@@ -588,7 +715,7 @@ def test_finetune_dispatch_missing_output_dir_raises(tmp_path: Path) -> None:
 
 @_INTEG
 def test_cache_restart_quality_dispatch_writes_expected_rows(tmp_path: Path) -> None:
-    """End-to-end: kind: cache task: restart_quality → phase4_restart rows for each dataset x layout."""
+    """Dispatch restart quality and write rows for every dataset and layout."""
     from ddi.data import register_loader
 
     ds_name = "tiny_restart_run85"

@@ -1,0 +1,52 @@
+# CPU-only development / test install for DDI.
+#
+# What this is for: making `pytest tests/` *collectible* on a plain host with no `uv`, no
+# GPU and no CUDA toolchain — a CI runner, a laptop, or an Arcadia checkout. Without it the
+# suite exits 2 with collection errors before a single test runs, because seven test modules
+# import `ddi.model` / `ddi.inference` / `ddi.finetune`, which import `transformers` (and,
+# until #VIBEQUEUE-16, `bitsandbytes` at module scope).
+#
+# Use it via `make setup` (which prefers `uv sync --extra dev` when uv is on PATH and falls
+# back to this file otherwise), or directly:
+#
+#     python3 -m pip install -r requirements-dev.txt
+#
+# TORCH IS DELIBERATELY OMITTED. pyproject.toml pins torch to the `pytorch-cu121` index
+# because this project's GPU boxes run driver 535.129.03 (CUDA 12.2 max) and cannot load the
+# `+cu130` wheel that plain PyPI resolves for an unpinned `torch>=2.4` (issue #31). That pin
+# is host-specific: baking `torch==2.5.1+cu121` in here would either fail to resolve on a
+# host without the extra index, or install a build that host cannot run. Install torch
+# separately for your machine (a CPU-only wheel is enough for everything in tests/).
+#
+# Versions are pinned to WHAT THE GPU JOBS ACTUALLY RUN, not to what uv.lock resolves.
+#
+# That distinction is the whole point of this file. `uv.lock` was resolved under the old
+# `transformers>=4.44,<4.53` ceiling and pins 4.52.4 — the pre-4.53 `_update_causal_mask`
+# path. Every published DDI number was produced by the PyDL image's transformers 5.14.1,
+# which takes the `masking_utils.create_causal_mask` path instead: a different code path
+# through `ddi/model.py`, reached by a different hook. Pinning the lock's version here would
+# hand a newcomer a reproduction that never executes the code the results came from, which is
+# the exact divergence VIBEQUEUE-16 exists to close.
+#
+# Verified: this set gives 434 passed / 33 skipped / 2 failed (both `test_provenance`,
+# environmental — no `.git` in an Arcadia checkout) on a CPU-only host with no GPU.
+#
+# uv.lock is therefore STALE relative to pyproject.toml's widened bound. Someone with `uv`
+# on PATH should run `uv lock` so the two agree; until then `make setup` prefers uv and will
+# resolve the older set, while the pip fallback here resolves the production one. The suite
+# is API-aware and passes on either, so this is a reproduction-fidelity gap, not a breakage.
+
+transformers==5.14.1
+tokenizers==0.22.2
+safetensors==0.8.0
+regex==2026.7.19
+huggingface_hub==1.26.0
+hf-xet==1.5.2
+
+# CUDA-oriented (41 MB) but pure-python-importable; it is the `train` extra in pyproject and
+# is only actually *used* on a CUDA device (ddi/finetune.py's AdamW8bit branch). Kept here so
+# tests/test_finetune.py can exercise the trainer's code paths on CPU.
+bitsandbytes==0.50.0
+
+ruff==0.16.0
+pytest==9.1.1

@@ -1,14 +1,20 @@
 # C3 — timing grid.
+# Historical/general timing configuration. Flex cells are not admitted V49
+# evidence and must not be run for a claim until every applicable unchanged
+# full-model gate in EVIDENCE_TO_CLAIM.md passes first. Current V47 parity fails.
 #
 # Model-agnostic: run once per model with `make exp-c3 MODEL=<hf-id>`. On `main` this
 # is exercised against Qwen2.5-7B-Instruct (tracking: #74) and Llama-3.1-8B-Instruct
 # (tracking: #75) — same 108-cell shape either way.
 #
-# 3 masks x 6 Ns x 3 Ls x 2 backends = 108 cells. One table per timing metric,
-# split into blocks by (L, backend) so each block is a clean rows=mask, cols=N grid.
+# 3 masks x 6 Ns x 3 Ls x 3 backends = 162 cells. One table per timing metric,
+# split into blocks by (L, backend) so each block is a clean mask x N grid. That split is
+# the JSON body's own shape -- `{model: {L: {backend: {mask: {N: value}}}}}` -- not a knob:
+# the tables below used to carry `split_by: [L, backend]`, which no code read.
 #
 # fa2 cells may fail on machines without flash-attn (blocked by #70); the runner
-# annotates rather than aborting.
+# annotates rather than aborting. flex uses torch.nn.attention.flex_attention
+# (built into torch 2.13+, no external deps).
 #
 # Schema: experiments/README.md + issue #81 YAML format section.
 
@@ -16,41 +22,28 @@ kind: timing
 seed: 0
 Ns: [1, 3, 5, 9, 13, 25]
 Ls: [128, 512, 2048]
-backends: [sdpa, fa2]
+backends: [sdpa, fa2, flex]
 masks: [full, ddi_qf, blind]
 n_repeats: 5
 warmup: 3
-metrics: [ttft, tpot, sparsity, analytical, realized, realization]
+
+# NO top-level `metrics:` here, deliberately. `run_timing` does not read one -- every
+# timing cell unconditionally writes ftt_median_ms / tpot_median_ms / mask_sparsity /
+# analytical_speedup, and which of those a table renders is `report.tables[].metric`
+# below. The list that used to sit here named six metrics (including the two DERIVED
+# ones, which have no store rows at all) and selected none of them.
 
 report:
   tables:
     - kind: timing
-      rows: mask
-      cols: N
       metric: ttft
-      split_by: [L, backend]
     - kind: timing
-      rows: mask
-      cols: N
       metric: tpot
-      split_by: [L, backend]
     - kind: timing
-      rows: mask
-      cols: N
       metric: sparsity
-      split_by: [L, backend]
     - kind: timing
-      rows: mask
-      cols: N
       metric: analytical
-      split_by: [L, backend]
     - kind: timing
-      rows: mask
-      cols: N
       metric: realized
-      split_by: [L, backend]
     - kind: timing
-      rows: mask
-      cols: N
       metric: realization
-      split_by: [L, backend]

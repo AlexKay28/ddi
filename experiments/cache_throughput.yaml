@@ -4,9 +4,6 @@
 # to dominate ddi_recompute (which in turn dominates full_causal) as the per-doc
 # KV blocks amortize across queries.
 #
-# Shape mirrors cache_correctness_c4.yaml so the two experiments can share a
-# fixture generator downstream.
-#
 # Tracking: C4 rollup issue (pending — see experiments/README.md).
 # Schema:   experiments/README.md + issue #81 YAML format section.
 
@@ -14,13 +11,29 @@ kind: cache
 seed: 0
 task: throughput
 modes: [ddi_cache, ddi_recompute, full_causal]
-Ns: [3, 9, 25]
-Ls: [512]
-n_queries_per_doc: 5
 
+# This file used to declare `Ns: [3, 9, 25]`, `Ls: [512]` and `n_queries_per_doc: 5`, with
+# a comment claiming the shape mirrored cache_correctness.yaml. `_cache_throughput` reads
+# NONE of those three. It reads the scalars below, and it loops over `modes:` only -- so
+# the advertised 3x9x25 grid never existed and every throughput run this file ever
+# produced used the runner's built-in defaults for document shape.
+#
+# The values below ARE those defaults, written down: this config now describes the
+# experiment that actually ran, so its rows stay comparable with every row already in the
+# store. Nothing here changes what a re-run measures.
+top_docs: 32            # size of the synthetic document universe requests draw from
+docs_per_request: 5     # documents attached to each request — this is the real "N"
+doc_token_len: 500      # tokens per document — this is the real "L"
+
+# Sweeping the document count needs one invocation per point, e.g.
+#   python -m ddi.run experiments/cache_throughput.yaml --model <id> --set docs_per_request=9
+# because the runner takes a scalar, not a list. The generated run ID carries every request
+# dimension in its `reuse=` arm, keeping these invocations in distinct aggregate cells.
+
+# Shape is encoded in the `reuse=` arm as `top=...,N=...,L=...,Q=...,A=...`, so runs with
+# different request shapes no longer collapse into one aggregate cell. The body is
+# `{model: {mode: {arm: value}}}` where `arm` contains layout, reuse, and request shape.
 report:
   tables:
     - kind: throughput
-      rows: mode
-      cols: N
       metric: qps

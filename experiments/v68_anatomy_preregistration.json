@@ -1,0 +1,63 @@
+{
+  "schema_version": "v68_anatomy_preregistration_v1",
+  "created_utc": "2026-09-10T13:15:00+00:00",
+  "task": "VIBEQUEUE-68: anatomy of KV-cache reuse output differences (diagnostic, CPU-only)",
+  "prereg_md_sha256": "4bdc42f004ebef32eb58871b991a4edd995158950042c338985cf4be67327b2b",
+  "ordering": "this prereg freeze precedes any classification; mechanical identification of differing records may precede the freeze and did (count only)",
+  "inputs": {
+    "qa_requests": {
+      "path": "results/v65_combined_20260910T102918Z/qa_requests.jsonl",
+      "sha256": "68b1806e6104705e0da1a45b6c8579c3a06c5e08ecea9a7a2dfd9bb80d649f3a",
+      "retained_fields": ["A/C: prediction, natural_generated_ids, fixed_generated_ids, fixed_ids_sha256, quality(em/f1/presence), stop_reason", "gold_answers", "prediction_equal", "first_token_equal", "doc_lengths", "query_length", "request_index"],
+      "logits_retained": false
+    },
+    "v65_manifest": {"path": "results/v65_combined_20260910T102918Z/manifest.json", "sha256": "4dc558c97d0f86c93de098afaa8d930ec2f641a203dc47fc1c3c4dc6e78f2cdd"},
+    "split_manifest": {"path": "experiments/v62_split_manifest.json", "sha256": "5ad3761106ecaed967b28d21c3919fa1869ebf70bf0e178c1e773a14bf8ee098", "confirmation_count": 100},
+    "v60_confirmation24_requests": {"path": "results/v60_confirmation24_20260910T093500Z/requests.jsonl", "sha256": "ec08d056d6ebe9208cf831e8a63e2d527cc8afec90d377ad9356635767410a5c"},
+    "v60_dev20_sdpa_requests": {"path": "results/v60_qa_dev20_sdpa_20260909T103000Z/requests.jsonl", "sha256": "7430d3306cd60133878d42e418434685c06d09b28161696018d1d3561cc25390"},
+    "v60_dev20_requests": {"path": "results/v60_qa_dev20_20260909T100000Z/requests.jsonl", "sha256": "7f4aba0556b2f45cb707f66e458816fc151e45626b1af9ee2041a2e387f90764"},
+    "extraction_script": {"path": "scripts/v68_extract_differing.py", "sha256": "bf693a50bae8b7213e816659f2b167b482b037c211588ec9c352593c8f965254"}
+  },
+  "arms": {"cached": "C = optimized all-hit canonical reuse (CanonicalCache store prebuilt)", "fresh": "A = original monolithic ddi_qf on SDPA", "decoding": "greedy, budgets 48/16, dtype bfloat16, checkpoint Qwen2.5-7B-Instruct ddi_qf 8L restart"},
+  "record_selection_rule": "every confirmation record where cached prediction != fresh prediction under the frozen dev eval (C.prediction != A.prediction in qa_requests.jsonl); extractor asserts consistency with the retained prediction_equal flag",
+  "mechanical_identification_pre_freeze": {
+    "allowed": true,
+    "total_confirmation_records_parsed": 100,
+    "differing_records": 22,
+    "differing_records_artifact": {
+      "path": "results/v68_anatomy_20260910T131036Z/differing_records.jsonl",
+      "sha256": "c7184d0ce3ef323efb8d61c472d016dfbe4640a9dfae96c1fde1eeaca5983928",
+      "note": "features only; no labels"
+    }
+  },
+  "classification_rubric": {
+    "labels": ["near_tie_greedy_flip", "clear_semantic_change", "truncation_stopping_artifact", "ambiguous"],
+    "definitions_verbatim_from_ticket": {
+      "near_tie_greedy_flip": "minimal-edit difference (entity swap, synonym, word-order, punctuation/function-word change) where both outputs answer in the same neighborhood",
+      "clear_semantic_change": "different factual content/answer",
+      "truncation_stopping_artifact": "one output is a prefix/subset or differs mainly in length/stopping"
+    },
+    "ambiguous_rule": "explicit allowed label; never force a bucket; use when evidence does not discriminate",
+    "evidence_consulted": ["char edit distance", "whitespace-token difflib opcodes", "token-level prefix relations (whitespace and model-token)", "first-divergence position", "gold containment per side", "retained em/f1 per side"],
+    "decision_guidance": "pick the label whose description dominates the observed difference; when near-tie and truncation features co-occur, judge which reading dominates; if genuinely unclear, label ambiguous; near-tie is a structural/textual judgment only (logits unavailable, no probability margin verifiable)"
+  },
+  "divergence_position_taxonomy": {
+    "first_token_divergence": "index 0 of retained natural_generated_ids differs (same quantity as retained first_token_equal; extractor asserts agreement)",
+    "mid_generation_divergence": "first differing model-token position > 0, or pure length difference with common prefix",
+    "tokenization_assumption": "retained ids are Qwen2.5 generation ids counted from 0 = first sampled token after the prompt; natural generations end at <|im_end|> (151645); fallback measure = whitespace tokenization of prediction strings (str.split()), first differing whitespace-token index; model-token measure is primary",
+    "role": "reported feature, not itself a classification label"
+  },
+  "interpretation_rules": [
+    "diagnostic-only language; no fix evaluation, no mechanism attribution",
+    "tiny n (22 differing of 100, single seed, single checkpoint); no rate claims; counts/shares are descriptive of this sample only",
+    "no causal claims; 'consistent with' language only",
+    "logits unavailable: near-tie claims are structural analogies, stated as such",
+    "every number traces to a sha-pinned artifact; missing data reported as missing"
+  ],
+  "v60_cross_reference_plan": {
+    "pre_declared": true,
+    "compare": ["first-token vs mid-generation mix", "presence/absence of clear semantic changes"],
+    "against": ["V60 dev-20 residual analysis (3/20 differed; ticket records ~50% first-token / ~50% mid-generation, claimed 'no semantic signature')", "V60 confirmation-24 artifact"],
+    "verdict_options": ["agrees", "agrees on position mix but disagrees on semantic signature", "disagrees"]
+  }
+}

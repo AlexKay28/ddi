@@ -15,23 +15,34 @@ kind: cache
 seed: 0
 task: restart_quality
 layouts: [sequential, restart]
-datasets: [hotpot_qa, musique, kilt_nq, synthetic_qa, nq]
+# Mirrors `datasets:` in quality.yaml and finetune.yaml, and for the same reasons.
+#
+# `kilt_nq` is gone: its documents were Wikipedia titles rather than passage bodies
+# (harness review R1), so its loader raised on every load -- fresh AND cached, since every
+# existing cache was written by the pre-review loader. Listing it here did not weaken the
+# result, it aborted that cell outright. The loader was deleted in VIBEQUEUE-16; restoring
+# the dataset needs the KILT knowledge-source join first.
+#
+# `nq` is gone too: NQ Open ships no passages, so `info_contexts` was always empty, every
+# DDI mask variant coerced to `full` (the runner logs "coerced variant ... -> 'full'"), and
+# the aggregator dropped the rows again on the way out. Each cell burned ~100 record-passes
+# to measure nothing by construction.
+datasets: [hotpot_qa, musique, synthetic_qa]
 masks: [ddi_qf]
 max_records: 100
 max_new_tokens: 64
-metrics: [em, f1, presence]
 
+# NO top-level `metrics:` here. `_cache_restart_quality` does not read one -- it writes
+# loss/em/f1/presence for every record unconditionally. The list that used to sit here
+# said [em, f1, presence], which was both unread and wrong (loss is written too).
+
+# `rows:` / `cols:` dropped from the tables below for the same reason as quality.yaml:
+# the body shape `{model: {layout: {dataset: value}}}` is fixed per kind.
 report:
   tables:
     - kind: restart_quality
-      rows: layout
-      cols: dataset
       metric: em
     - kind: restart_quality
-      rows: layout
-      cols: dataset
       metric: f1
     - kind: restart_quality
-      rows: layout
-      cols: dataset
       metric: presence

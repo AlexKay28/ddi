@@ -1,22 +1,43 @@
 # paper/ — DDI preprint scaffold
 
-This directory holds the arXiv-submittable LaTeX skeleton for the DDI preprint.
-The document compiles today with `\todoreport{...}` placeholders wherever the
-results store is empty, and it auto-fills as experiments land: every table
-and figure in `sections/*.tex` is regenerated from `results/runs.jsonl` via
-`ddi.report` (per ground rule 3 in [`RESEARCH_PLAN.md`](RESEARCH_PLAN.md) and
-[issue #1](https://github.com/AlexKay28/ddi/issues/1)). No section file types
-a number by hand; an unrendered cell surfaces as an explicit TODO in the
-compiled PDF that names the sweep to run.
+This directory holds the LaTeX scaffold for the DDI preprint. The compact,
+tracked `paper/evidence.json` preserves the audited aggregate values behind the
+paper and the full SHA-256 and byte size of every raw input. Large historical
+JSONL stores remain ignored; they are not needed to render from a clean checkout.
+If one is present locally, its hash is verified before rendering. Required
+tracked inputs must always be present and match.
 
-To rebuild, run `make paper` from the repository root. That target invokes
-[`build.sh`](build.sh), which (i) regenerates every markdown table via
-`python -m ddi.report_cli --name <T*>` and converts it to `.tex` with
-`pandoc`, (ii) regenerates every figure PDF via
-`python -m ddi.report_cli --name <F*> --output generated/<name>.pdf`, and
-(iii) runs `pdflatex`/`bibtex`/`pdflatex`/`pdflatex` on `preprint.tex` if a
-TeX toolchain is available. `pandoc` is required for the table conversions;
-`pdflatex` is only needed for the final PDF (its absence is a warning, not an
-error, so containers without a TeX distribution can still refresh the
-generated artifacts). The `paper/generated/` directory is populated
-exclusively by this script — do not edit its contents by hand.
+From the repository root, the one paper command is:
+
+```sh
+./paper/build.sh
+```
+
+It validates `evidence.json`, verifies source hashes, regenerates every retained
+artifact in `paper/generated/`, and then runs `pdflatex`, `bibtex`, `pdflatex`,
+`pdflatex` when both TeX programs are installed. Without `pdflatex`, rendering
+still succeeds and PDF compilation is explicitly skipped. This checkout has no
+TeX installation, so VIBEQUEUE-50 does not claim a local PDF build result.
+
+The renderer requires only Python 3.11 or newer and the standard library:
+
+```sh
+python3 paper/render.py --check
+python3 paper/render.py --require-all-sources --check
+```
+
+The first command is the clean-checkout drift check. The second is the stronger
+local audit and also requires every ignored historical store. A source that is
+present but differs in size or SHA-256 always fails either command.
+
+The build exports `TZ=UTC`, `FORCE_SOURCE_DATE=1`, and a default
+`SOURCE_DATE_EPOCH=1788725843` (the evidence-audit commit time) before invoking
+TeX. The repository does not pin a validated TeX distribution or container
+digest, so byte-identical `preprint.pdf` output is not claimed across arbitrary
+TeX installations. Required LaTeX packages are `geometry`, `parskip`,
+`graphicx`, `xcolor`, `hyperref`, `booktabs`, `multirow`, `amsmath`, `amssymb`,
+and `natbib`.
+
+T3-flex was removed rather than preserved as numbers: its cited historical log
+is absent, so no SHA-256 provenance can be established. F5 is deterministic TeX
+instead of a renderer-dependent PDF binary.

@@ -13,6 +13,7 @@ from pathlib import Path
 
 import torch
 from transformers import (
+    AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
     PreTrainedModel,
@@ -21,8 +22,10 @@ from transformers import (
 
 _ORIGINAL_ATTR = "__ddi_original_update_causal_mask__"
 
+_DDI_BACKENDS = {"sdpa", "fa2", "flex", "eager"}
+
 # DDI's own backend names (see ddi.attention.Backend) vs. HF's `attn_implementation` strings.
-_HF_ATTN_IMPLEMENTATION = {"fa2": "flash_attention_2"}
+_HF_ATTN_IMPLEMENTATION = {"fa2": "flash_attention_2", "flex": "eager"}
 
 
 def _resolve_offline_snapshot(name: str) -> str:
@@ -67,16 +70,26 @@ def load_model(
     name: str,
     dtype: torch.dtype = torch.bfloat16,
     attn_implementation: str = "sdpa",
+    rope_theta: float | None = None,
 ) -> tuple[PreTrainedModel, PreTrainedTokenizerBase]:
     hf_attn_implementation = _HF_ATTN_IMPLEMENTATION.get(
         attn_implementation, attn_implementation
     )
     resolved = _resolve_offline_snapshot(name)
-    model = AutoModelForCausalLM.from_pretrained(
-        resolved, torch_dtype=dtype, attn_implementation=hf_attn_implementation
-    )
+    # rope_theta override (Sprint D, VIBEQUEUE-28): ABF-style Adjusted Base
+    # Frequency. Mutate the config BEFORE from_pretrained so HF's rotary
+    # embedding module initializes with the new base. None = model default.
+    kwargs: dict = {"torch_dtype": dtype, "attn_implementation": hf_attn_implementation}
+    if rope_theta is not None:
+        cfg = AutoConfig.from_pretrained(resolved)
+        cfg.rope_theta = rope_theta
+        kwargs["config"] = cfg
+    model = AutoModelForCausalLM.from_pretrained(resolved, **kwargs)
     tokenizer = AutoTokenizer.from_pretrained(resolved)
     patch_model(model)
+    if attn_implementation == "flex":
+        from ddi.flex_attention import patch_model_for_flex
+        patch_model_for_flex(model)
     return model, tokenizer
 
 
