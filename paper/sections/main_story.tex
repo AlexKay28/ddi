@@ -302,6 +302,26 @@ measured on the same contract.
 \label{tab:v71boundary}
 \end{table}
 
+\begin{figure}[H]
+\centering
+\input{generated/V14_crossover_chart.tex}
+\caption{TTFT speedup vs monolithic baseline as a function of hit rate
+$h$, at $L{=}512$. Dashed lines: untrained contract (V66); solid lines:
+trained contract (V71). The trained contract shifts the crossover left
+(reuse wins at lower hit rates) and reaches 5.55$\times$ at all-hit
+($N{=}10$). Below the break-even line (gray dashed), reuse loses.}
+\label{fig:crossover512}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\input{generated/V15_crossover_L128.tex}
+\caption{Same as Fig.~\ref{fig:crossover512} at $L{=}128$. The crossover
+is sharper: reuse only wins near all-hit ($h\geq 0.8$). Short documents
+amortize less.}
+\label{fig:crossover128}
+\end{figure}
+
 \paragraph{Prefix-cache baseline (V73).}
 An optimized exact-prefix KV cache was benchmarked against DDI warm reuse
 and monolithic on reorder-heavy HotpotQA. When document order is fixed,

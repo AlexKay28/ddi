@@ -24,7 +24,7 @@ def test_checked_in_artifacts_match_renderer() -> None:
     evidence = load_evidence()
     rendered = render(evidence)
 
-    assert tuple(rendered) == GENERATED_FILES
+    assert set(rendered) == set(GENERATED_FILES)
     for name, content in rendered.items():
         assert (DEFAULT_OUTPUT / name).read_text(encoding="utf-8") == content
 

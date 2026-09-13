@@ -1,0 +1,24 @@
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.95\linewidth, height=6cm,
+  xlabel={Hit rate $h$}, ylabel={Speedup vs.\ monolithic (A/B)},
+  xmin=0, xmax=1.05, ymin=0, ymax=3,
+  legend style={at={(0.02,0.98)}, anchor=north west, font=\scriptsize},
+  grid=both, grid style={gray!20},
+]
+\addplot[gray, dashed, no marks, domain=0:1.05] {1};
+\addlegendentry{break-even}
+\addplot[ddiBlue, dashed, mark=*, mark size=1.5pt] coordinates {(0.00,0.379) (0.50,0.411) (1.00,0.586)};
+\addlegendentry{V66 $N{=}2$}
+\addplot[ddiBlue, solid, mark=square*, mark size=1.5pt] coordinates {(0.00,0.294) (0.50,0.468) (1.00,1.132)};
+\addlegendentry{V71 $N{=}2$}
+\addplot[ddiGreen, dashed, mark=*, mark size=1.5pt] coordinates {(0.00,0.521) (0.20,0.528) (0.60,0.605) (0.80,0.682) (1.00,0.938)};
+\addlegendentry{V66 $N{=}5$}
+\addplot[ddiGreen, solid, mark=square*, mark size=1.5pt] coordinates {(0.00,0.232) (0.20,0.269) (0.60,0.461) (0.80,0.767) (1.00,1.740)};
+\addlegendentry{V71 $N{=}5$}
+\addplot[ddiGold, dashed, mark=*, mark size=1.5pt] coordinates {(0.00,0.725) (0.30,0.768) (0.50,0.827) (0.60,0.826) (0.70,0.895) (0.80,0.933) (0.90,1.119) (1.00,1.387)};
+\addlegendentry{V66 $N{=}10$}
+\addplot[ddiGold, solid, mark=square*, mark size=1.5pt] coordinates {(0.00,0.217) (0.30,0.291) (0.50,0.398) (0.60,0.467) (0.70,0.578) (0.80,0.769) (0.90,1.082) (1.00,2.128)};
+\addlegendentry{V71 $N{=}10$}
+\end{axis}
+\end{tikzpicture}
