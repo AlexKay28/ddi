@@ -209,11 +209,20 @@ def _concat_to_device(tensors: list[torch.Tensor], device: torch.device) -> torc
 def assemble_dynamic_cache(
     entries: list[CacheEntry], device: torch.device
 ) -> DynamicCache:
-    """Concatenate restart-layout document K/V blocks in request order."""
+    """Concatenate per-document K/V blocks in request order.
+
+    Accepts both ``"restart"`` and ``"deferred"`` layout entries.  ``"deferred"``
+    entries contain un-rotated keys (see ``ddi.deferred_rope``); the caller is
+    responsible for applying rotation at attention time.
+    """
     if not entries:
         raise ValueError("at least one cache entry is required")
-    if any(entry.layout != "restart" for entry in entries):
-        raise ValueError("document KV reuse requires restart-layout cache entries")
+    valid_layouts = ("restart", "deferred")
+    if any(entry.layout not in valid_layouts for entry in entries):
+        raise ValueError(
+            f"document KV reuse requires {valid_layouts} layout cache entries, "
+            f"got {[e.layout for e in entries]}"
+        )
     layer_count = len(entries[0].k_per_layer)
     if layer_count == 0 or len(entries[0].v_per_layer) != layer_count:
         raise ValueError("cache entries must contain matching non-empty K/V layers")
@@ -392,3 +401,125 @@ def compute_doc_kv(
         token_ids_sha256=token_ids_sha256,
         tensor_dtype=str(k_list[0].dtype),
     )
+
+
+def recompute_selected_tokens(
+    model: PreTrainedModel,
+    documents: list[torch.Tensor],
+    entries: list[CacheEntry],
+    recompute_indices: list[set[int]],
+) -> list[CacheEntry]:
+    """Re-encode selected token positions with full cross-document attention.
+
+    Tokens in ``recompute_indices`` get re-encoded with a full causal mask that
+    lets them attend to all preceding documents — restoring the cross-document
+    bridges that DDI's block-diagonal mask removes.  The remaining tokens keep
+    their cached KV (no recomputation).
+
+    The result is a hybrid cache: per-document KV blocks where most rows are
+    cached (fast) and a few rows are recomputed with full attention (quality).
+
+    Args:
+        model: HF causal LM (eval mode, on GPU).
+        documents: ``[N]`` list of ``[1, L_i]`` token-ID tensors, one per document.
+        entries: current cached entries (restart or deferred layout).
+        recompute_indices: per-document sets of intra-document token indices
+            to recompute with full attention.  Empty set = no recomputation
+            for that document.
+
+    Returns:
+        Updated ``CacheEntry`` list with hybrid cached/recomputed KV.
+    """
+    from ddi.masks import build_mask, to_additive
+    from ddi.positions import build_positions
+
+    if len(documents) != len(entries) or len(documents) != len(recompute_indices):
+        raise ValueError(
+            f"length mismatch: documents={len(documents)}, "
+            f"entries={len(entries)}, indices={len(recompute_indices)}"
+        )
+
+    # If no tokens need recomputation, return original entries unchanged.
+    if all(len(s) == 0 for s in recompute_indices):
+        return entries
+
+    doc_lengths = [int(d.shape[-1]) for d in documents]
+
+    # Concatenate all documents into one sequence for full-causal re-encoding.
+    all_ids = torch.cat(documents, dim=-1).to(model.device)
+    # Build a full causal mask (every token attends to all preceding tokens).
+    allow_full = build_mask(doc_lengths, 0, 0, "full")
+    additive_full = (
+        to_additive(allow_full, dtype=model.dtype)
+        .to(model.device)
+        .unsqueeze(0)
+        .unsqueeze(0)
+    )
+    positions_full = build_positions(doc_lengths, 0, 0, "sequential").unsqueeze(0).to(
+        model.device
+    )
+
+    with torch.no_grad():
+        out = model(
+            input_ids=all_ids,
+            attention_mask=additive_full,
+            position_ids=positions_full,
+            use_cache=True,
+        )
+
+    past = out.past_key_values
+    if hasattr(past, "key_cache") and hasattr(past, "value_cache"):
+        full_k_layers = past.key_cache
+        full_v_layers = past.value_cache
+    else:
+        full_k_layers = [layer[0] for layer in past]
+        full_v_layers = [layer[1] for layer in past]
+
+    # Splice recomputed KV into cached entries.
+    updated_entries: list[CacheEntry] = []
+    offset = 0
+    for entry, indices in zip(entries, recompute_indices, strict=True):
+        if not indices:
+            updated_entries.append(entry)
+            offset += entry.doc_len
+            continue
+
+        new_k = list(entry.k_per_layer)
+        new_v = list(entry.v_per_layer)
+
+        for layer_idx in range(len(new_k)):
+            cached_k = entry.k_per_layer[layer_idx].clone()
+            cached_v = entry.v_per_layer[layer_idx].clone()
+            # full_k_layers[layer_idx]: [batch, heads, doc_total, head_dim]
+            # Extract the rows for this document from the full-causal forward.
+            doc_start = offset
+            for token_idx in indices:
+                global_idx = doc_start + token_idx
+                cached_k[..., token_idx, :] = full_k_layers[layer_idx][
+                    0, :, global_idx, :
+                ].cpu()
+                cached_v[..., token_idx, :] = full_v_layers[layer_idx][
+                    0, :, global_idx, :
+                ].cpu()
+
+            new_k[layer_idx] = cached_k
+            new_v[layer_idx] = cached_v
+
+        updated_entries.append(
+            CacheEntry(
+                key=entry.key,
+                k_per_layer=new_k,
+                v_per_layer=new_v,
+                doc_len=entry.doc_len,
+                layout=entry.layout,
+                cache_identity=entry.cache_identity,
+                token_ids_sha256=entry.token_ids_sha256,
+                tensor_dtype=entry.tensor_dtype,
+                schema_version=entry.schema_version,
+                validated_by="",  # hybrid entries are not store-validated
+                validated_sha256="",
+            )
+        )
+        offset += entry.doc_len
+
+    return updated_entries

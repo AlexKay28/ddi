@@ -292,7 +292,14 @@ def patch_model_for_flex(model: torch.nn.Module) -> torch.nn.Module:
 
                 cos, sin = position_embeddings
                 from transformers.models.qwen2.modeling_qwen2 import apply_rotary_pos_emb
-                query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+                from ddi.deferred_rope import is_deferred_rope
+                if is_deferred_rope(model_ref):
+                    query_states, _ = apply_rotary_pos_emb(
+                        query_states, key_states, cos, sin)
+                else:
+                    query_states, key_states = apply_rotary_pos_emb(
+                        query_states, key_states, cos, sin)
 
                 if past_key_value is not None:
                     cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}

@@ -178,7 +178,7 @@ def test_logical_positions_vs_physical_slots(model, tmp_path, monkeypatch):
     assert query["cache_position"].tolist() == [7, 8]
     assert query["attention_mask"].shape == (1, 1, 2, 9)
     assert query["attention_mask"][0, 0, 0, :8].eq(0).all()
-    assert query["attention_mask"][0, 0, 0, 8].isneginf()
+    assert query["attention_mask"][0, 0, 0, 8] <= torch.finfo(query["attention_mask"].dtype).min
     assert calls[3]["position_ids"].tolist() == [[5]]
     assert calls[3]["cache_position"].tolist() == [9]
     entries = api.documents([b, a, a])
@@ -328,7 +328,7 @@ def test_fresh_reencodes_and_duplicate_cold_hits(model, tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("field,value", [
-    ("model_type", "llama"), ("rope_scaling", {"rope_type": "dynamic", "factor": 2.0}),
+    ("model_type", "gemma"), ("rope_scaling", {"rope_type": "dynamic", "factor": 2.0}),
     ("use_sliding_window", True), ("_attn_implementation", "sdpa"),
 ])
 def test_unsupported_model_rejected(model, field, value):

@@ -123,8 +123,11 @@ def test_visualizations_are_rendered_from_audited_artifacts() -> None:
     assert "Measured (validation program)" in rendered["V10_coverage.tex"]
     assert "Still missing" in rendered["V10_coverage.tex"]
     assert "V70 trained contract" in rendered["V10_coverage.tex"]
-    assert "Multi-seed robustness" in rendered["V10_coverage.tex"]
-    assert "trained-contract serving latency" in rendered["V10_coverage.tex"]
+    assert "V72 seed-1 replication" in rendered["V10_coverage.tex"]
+    assert "V71: trained-contract serving boundary" in rendered["V10_coverage.tex"]
+    assert "Scale beyond" in rendered["V10_coverage.tex"]
+    assert "Mixed/partial-hit beating baseline" in rendered["V10_coverage.tex"]
+    assert "trained-contract serving latency" not in rendered["V10_coverage.tex"]
     for name, content in rendered.items():
         if name.startswith("V"):
             assert "resizebox" not in content

@@ -137,7 +137,7 @@ def test_assemble_dynamic_cache_requires_restart_entries() -> None:
         doc_len=entry.doc_len,
         layout="sequential",
     )
-    with pytest.raises(ValueError, match="restart-layout"):
+    with pytest.raises(ValueError, match="layout"):
         assemble_dynamic_cache([entry], torch.device("cpu"))
 
 

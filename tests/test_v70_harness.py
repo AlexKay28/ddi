@@ -450,7 +450,7 @@ def test_layout_tensor_is_real_4d_additive_mask(setup):
     _, mask, _ = layout_tensors(result.layout, model.dtype, model.device)
     assert mask.ndim == 4
     assert mask[0, 0, 0, 0] == 0
-    assert torch.isneginf(mask[0, 0, 0, 1])
+    assert mask[0, 0, 0, 1] <= torch.finfo(mask.dtype).min
 
 
 def test_runner_record_encoding_preserves_exact_segment_boundaries():

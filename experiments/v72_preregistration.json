@@ -1,0 +1,79 @@
+{
+  "schema": "v72-prereg-v1",
+  "ticket": "VIBEQUEUE-72",
+  "frozen_utc": "2026-09-12T00:00:00Z",
+  "inherits": "experiments/v70_preregistration.json",
+  "seed": 1,
+  "checkpoint_dirs": {
+    "smoke": "results/v72_seed1_smoke/checkpoint_{k0,k5}",
+    "full": "results/v72_arms_seed1/checkpoint_{k0,k5}"
+  },
+  "budget": {
+    "total_hard_cap_seconds": 21600,
+    "projection": "identical formula to V70: 2 * full_steps * mean_step_s <= 21600"
+  },
+  "gates": {
+    "C-B": {
+      "margin": -0.02,
+      "resamples": 10000,
+      "bootstrap_seed": 47,
+      "metrics": [
+        "em",
+        "f1"
+      ],
+      "expectation": "exact zero"
+    },
+    "C-D": {
+      "margin": -0.02,
+      "resamples": 10000,
+      "bootstrap_seed": 47,
+      "metrics": [
+        "em",
+        "f1"
+      ],
+      "role": "inherited gate; margin and sign additionally recorded as characterization"
+    }
+  },
+  "selection": "lexicographic max persisted C EM, then C F1, between k0 and k5 (inherited)",
+  "out_of_scope": [
+    "serving timing (VIBEQUEUE-71)",
+    "llama transfer (V72 stage 2)"
+  ],
+  "pins": {
+    "scripts/v70_run.py": "93d52a1f382805d0bdb98de20f374fb9f4bcedfa3c718ba8a982f190b9ee7208",
+    "scripts/v70_harness.py": "8c3483649b928048cfc45774c95764cc0360ecbfb5d560126b10b294eb696349",
+    "scripts/v70_schedule.py": "bf812a8ffa85113a68b60e573c20eaecfcf9a53cec80b78e0fe3024695e7f04a",
+    "tests/test_v70_harness.py": "5ba28c4965e1e4e26c7661bbc6480e59a873dd435131bbecc79f20f997ade42f",
+    "experiments/v70_preregistration.json": "e06d9d6b7448c9ce200116d2691cd32cad5cee1c832c3a92bc5afa8459b148a6",
+    "experiments/v70_confirmation300.json": "0df9b0eb54487fd000c0bd82d5dfa51456f39da118f82ae8fe07297f663b2568"
+  },
+  "amendments": [
+    {
+      "id": 1,
+      "utc": "2026-09-12",
+      "stage": "pre-full-run",
+      "title": "Budget smoke passed, full count frozen at 1000 steps/arm",
+      "smoke_elapsed_seconds": {
+        "k0": 61.725,
+        "k5": 63.154
+      },
+      "mean_step_seconds": 3.12197,
+      "projected_seconds": 6243.9,
+      "projected_hours": 1.734,
+      "full_count_frozen": 1000,
+      "all_steps_finite": true
+    },
+    {
+      "id": 2,
+      "utc": "2026-09-12",
+      "stage": "post-training",
+      "title": "Infrastructure incident during checkpoint save; no rerun required",
+      "incident": "/home filesystem reached 100% during k5 checkpoint save; arcadia FUSE mount crashed ('Transport endpoint is not connected'); chain and one partial dev eval killed",
+      "recovery": "arcadia remounted; 57G reclaimed (user-approved cleanup of superseded V62/V67/V53-store artifacts; paper-pinned V53 summary files and V67-prereg comparison.json preserved); both checkpoints verified byte-complete; chain restarted with disk guards",
+      "k0_aggregate_sha256": "44abe1b8a3af2022bc3baaae564a8b4c20401beb5e0163b2d2237e809cf16fbd",
+      "k5_aggregate_sha256": "ce8adf82548294ff07d2461dc5dbc736595c2c3fc765c08abcf036602f2531dd",
+      "rerun_required": false,
+      "change": "infrastructure incident only; no treatment/data/gate/analysis change"
+    }
+  ]
+}

@@ -114,33 +114,32 @@
 \maketitle
 
 \begin{abstract}
-Repeated retrieval makes document prefill an attractive target for reuse.
-Decoupled Document Inference (DDI) isolates document attention and uses restart
-positions to make independently computed document KVs reusable. Two approaches
-compose: \textbf{sparse cold prefill} reduces attention work on cache misses;
-\textbf{warm KV reuse} loads stored document states and skips document prefill.
-At $N=25,L=512,Q=64$, DDI-QF removes
+Retrieval-augmented generation (RAG) repeats document prefill across requests.
+Decoupled Document Inference (DDI) isolates document attention via a
+block-diagonal mask and uses restart positions to make independently computed
+document KVs reusable. Block-Attention~\citep{ma2025blockattention} achieves
+98.7\% TTFT reduction with full-model fine-tuning; this paper asks how far
+lightweight self-distillation goes and what serving boundary remains.
+Two approaches compose: \textbf{sparse cold prefill} reduces attention work on
+cache misses; \textbf{warm KV reuse} loads stored document states and skips
+document prefill. At $N=25,L=512,Q=64$, DDI-QF removes
 95.04\% of causal prefill pairs, but measured dense-SDPA prefill remains near the
-full-causal latency. Historical Flex logs separately report 8.24$\times$ kernel
-and 1.77$\times$ whole-model prefill gains at a larger geometry; their older
+full-causal latency (the 4D additive mask forces SDPA's slow math backend).
+Historical Flex logs report 1.77$\times$ whole-model prefill gain; their older
 mask semantics and failed parity gates prevent treating these as validated
 current-DDI speedups. Natural-QA mask and document-count studies show quality
-losses; matched three-seed self-distillation does not reach the prescribed parity
-gates. A deployment validation program then
-closes the loop on matched requests. On 100 frozen HotpotQA records, full
-attention reaches EM/F1 .56/.70 against DDI-QF's .30/.42 under dense SDPA --- the
-isolation cost is real. Persisted document-KV reuse itself, however, becomes an
-audited win: on 24 frozen requests, optimized all-hit reuse serves TTFT
-\textbf{2.05$\times$ faster than the original monolithic DDI baseline}
-(ratio 0.4885, 95\% CI $[0.433,0.550]$) with \textbf{byte-identical outputs};
-end-to-end wall time improves 1.43$\times$. The win is scoped: mixed-hit traffic
-remains slower than the baseline, and quality non-inferiority on 100 untouched
-records is \textbf{not established} (EM $-0.010$ $[-0.070,+0.050]$, F1 $-0.0095$
-$[-0.053,+0.031]$ against a preregistered $-0.02$ floor). Segmented causal
-attention accelerates sparse cold prefill only at long-document shapes
-(1.12--1.29$\times$ at $L{=}512$). We therefore claim a measured, audited
-warm-path speedup with byte-identical serving --- not yet a quality-preserving
-general win --- and report the measured panels that bound it.
+losses (HotpotQA EM 0.56$\to$0.30 train-free); matched three-seed self-distillation
+(top-8 layers) does not reach prescribed parity gates. A trained link-token
+contract (V70) then closes the quality gate: on 300 untouched records, cached
+versus fresh generation is \textbf{byte-identical} (C$-$B $=0$, CI $[0,0]$),
+replicated at a second seed (V72). The trained contract's serving boundary
+(V71) keeps the warm-path win: all-hit TTFT up to 5.55$\times$ with zero
+identity violations across 240 cells, winning above hit-fraction crossovers
+($h\geq 0.7$ at $L=512$, $h\geq 0.8$ at $L=128$). The win is scoped:
+mixed-hit traffic remains slower, and the sparse cold path wins only at long
+shapes (1.12--1.29$\times$ at $L=512$). We therefore claim a measured, audited
+warm-path speedup with byte-identical serving after contract training --- not
+yet a quality-preserving general replacement for full causal attention at scale.
 \end{abstract}
 
 % ---------------------------------------------------------------------

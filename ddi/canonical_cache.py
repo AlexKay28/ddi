@@ -176,11 +176,19 @@ class CanonicalCache:
     the disk payload stays authoritative.
     """
 
-    def __init__(self, model: Any, contract: ExecutionContract, store: DocCache | None = None):
+    def __init__(
+        self,
+        model: Any,
+        contract: ExecutionContract,
+        store: DocCache | None = None,
+        *,
+        recompute_ratio: float = 0.0,
+    ):
         self.model = model
         self.contract = contract
         self.store = store
         self._loaded = _LoadedEntryLru()
+        self.recompute_ratio = recompute_ratio
         self._check_model()
 
     def _check_model(self) -> None:
@@ -188,14 +196,21 @@ class CanonicalCache:
         config = model.config
         if any(module.training for module in model.modules()):
             raise ValueError("canonical execution requires model.eval() on all modules")
+        rope_scaling = getattr(config, "rope_scaling", None)
+        static_rope = (
+            rope_scaling is None
+            or (isinstance(rope_scaling, dict) and rope_scaling.get("rope_type") == "llama3")
+        )
         if (
-            config.model_type != "qwen2"
-            or getattr(config, "rope_scaling", None)
+            config.model_type not in ("qwen2", "llama")
+            or not static_rope
             or getattr(config, "use_sliding_window", False)
             or getattr(model, "is_quantized", False)
             or getattr(model, "hf_device_map", None)
         ):
-            raise ValueError("requires dense single-device Qwen2 with static RoPE")
+            raise ValueError(
+                "requires dense single-device Qwen2 or Llama with static RoPE"
+            )
         if (
             config._attn_implementation != contract.backend
             or str(model.dtype) != contract.dtype
@@ -414,6 +429,16 @@ class CanonicalCache:
         if max_new_tokens == 0:
             return []
         entries = self.documents(documents)
+        if self.recompute_ratio > 0:
+            from ddi.cache import recompute_selected_tokens
+            from ddi.scoring import score_tokens
+            recompute_indices = score_tokens(
+                self.model, query_ids, entries,
+                top_p=self.recompute_ratio,
+            )
+            entries = recompute_selected_tokens(
+                self.model, documents, entries, recompute_indices,
+            )
         if max_new_tokens is None:
             return forward_query_with_doc_cache(self.model, query_ids, entries)
         return generate_tokens_with_doc_cache(

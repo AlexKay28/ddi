@@ -1,0 +1,99 @@
+{
+  "schema": "v71-prereg-v1",
+  "ticket": "VIBEQUEUE-71",
+  "design": "experiments/v71_trained_serving_design.md",
+  "grid": {
+    "inherits": "v66 (frozen)",
+    "split_manifest_sha256": "5ad3761106ecaed967b28d21c3919fa1869ebf70bf0e178c1e773a14bf8ee098",
+    "v60_manifest_sha256": "2dffebf5d04065021dfb2b9e694651b34f0ebfae4f3d4b9aabd672908aa6cb07",
+    "hit_fractions": [
+      0.0,
+      0.25,
+      0.5,
+      0.6,
+      0.7,
+      0.8,
+      0.9,
+      1.0
+    ],
+    "doc_lengths": [
+      128,
+      512
+    ],
+    "conditional_doc_length": 32,
+    "n_docs": [
+      2,
+      5,
+      10
+    ],
+    "decode_budgets": [
+      8,
+      16,
+      32,
+      64
+    ],
+    "ttft_budget": 1,
+    "content_seed": 47
+  },
+  "arms": {
+    "A": {
+      "checkpoint": "results/checkpoints/Qwen__Qwen2.5-7B-Instruct__ddi_qf__8L_restart",
+      "checkpoint_sha256": "00df4c47d67660cab8292da313ea133290b0bb320437290d725cd149c3d31de9",
+      "execution": "monolithic full-causal, restart positions, generate_ids, fixed work"
+    },
+    "BP": {
+      "checkpoint": "results/v70_arms_valid_seed47/checkpoint_k5",
+      "checkpoint_aggregate_sha256": "04fe4dcb3c70f0ef75f0cdfbf1f99164a90ab54df0833cb4b14cc56bd723ba87",
+      "execution": "trained fresh: independent canonical encode per pass, k=5 link layout, generate_independent_ids"
+    },
+    "CP": {
+      "checkpoint": "results/v70_arms_valid_seed47/checkpoint_k5",
+      "checkpoint_aggregate_sha256": "04fe4dcb3c70f0ef75f0cdfbf1f99164a90ab54df0833cb4b14cc56bd723ba87",
+      "execution": "trained cached: DocCache entries via CanonicalCache, write-through misses, k=5 link layout"
+    },
+    "DP": {
+      "checkpoint": "results/v70_arms_valid_seed47/checkpoint_k5",
+      "execution": "trained full-causal no-link monolithic prefill; TTFT only, D1 block only, diagnostic"
+    }
+  },
+  "d_resolutions": {
+    "D1": "untimed per-unit prebuild into unit store; reset to hit pre-state; verify after every block",
+    "D2": "mixed-hit misses encode on trained model via CanonicalCache write-through inside timed pass; pruned untimed after every pass; miss counts recorded; all-hit cells fail closed",
+    "D3": "BP runs in every block of every cell",
+    "D4": "3 warmups + 15 timed repeats; cap shrink to 10 allowed; 10 is the floor"
+  },
+  "gates": {
+    "primary": "A/CP paired ratio of medians, 10k resamples, seed 47, CI 0.95; win CI_low>1.05, lose CI_high<1/1.05, else tie",
+    "identity": "CP vs BP generated ids byte-identical per repeat, every block; divergence pauses (abort) unless --continue-on-identity-divergence",
+    "descriptive": [
+      "A/BP ratios",
+      "DP TTFT ratio vs A TTFT",
+      "miss-encode counts",
+      "A vs BP/CP first-token agreement (not gated)",
+      "cross-run V66 wall comparisons (not gated)",
+      "A/BP TTFT ratio (BP-TTFT timed in D1 block)"
+    ]
+  },
+  "caps": {
+    "hard_cap_minutes": 300,
+    "unit_cutoff_minutes": 270,
+    "l32_gate_minutes": 170,
+    "min_repeats": 10
+  },
+  "environment": {
+    "venv": ".venv",
+    "torch": "2.13.0+cu126",
+    "transformers": "4.57.6",
+    "gpu": "1x A100 80GB",
+    "min_free_gpu_fraction": 0.7
+  },
+  "amendments": [
+    {
+      "id": 1,
+      "utc": "2026-09-12",
+      "title": "serving path rebuilt after harness-overhead finding",
+      "superseded_cells": "first-attempt L128 cells in results/v71_trained_serving discarded (per-call Python layout+mask construction dominated BP/CP timings: ~51ms build_request_layout + ~43ms layout_tensors per call and per decode step at prefix 729)",
+      "change": "BP/CP/DP timed callables use scripts/v71_serving_paths.py precomputed structures; layout/mask/positions built once per unit untimed (arm-A parity); executed model calls identical to the V70 harness path (tiny-model tests + real-model smoke cross-check); CP==BP identity gate unchanged"
+    }
+  ]
+}

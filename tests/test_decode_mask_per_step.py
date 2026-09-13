@@ -124,14 +124,16 @@ def test_measure_decode_blind_never_lets_the_answer_see_a_document() -> None:
     for call in _run_measure_decode("blind").decode_calls:
         assert call.attention_mask is not None
         row = call.attention_mask.values.flatten()
-        assert torch.isinf(row[:doc_total]).all(), "blind decode step can read the documents"
-        assert not torch.isinf(row[doc_total:]).any()
+        fmin = torch.finfo(row.dtype).min
+        assert (row[:doc_total] <= fmin).all(), "blind decode can read docs"
+        assert not (row[doc_total:] <= fmin).any()
 
 
 def test_measure_decode_full_lets_the_answer_see_everything() -> None:
     for call in _run_measure_decode("full").decode_calls:
         assert call.attention_mask is not None
-        assert not torch.isinf(call.attention_mask.values).any()
+        vals = call.attention_mask.values
+        assert not (vals <= torch.finfo(vals.dtype).min).any()
 
 
 def test_measure_decode_variants_do_not_all_agree() -> None:
@@ -362,7 +364,8 @@ def test_generate_blind_never_lets_the_answer_see_a_document() -> None:
     for call in _run_generate("blind").decode_calls:
         assert call.attention_mask is not None
         row = call.attention_mask.values.flatten()
-        assert torch.isinf(row[:doc_total]).all(), "blind decode step can read the documents"
+        fmin = torch.finfo(row.dtype).min
+        assert (row[:doc_total] <= fmin).all(), "blind decode can read docs"
 
 
 @pytest.mark.parametrize("layout", ["sequential", "restart"])

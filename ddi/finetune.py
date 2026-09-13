@@ -47,8 +47,29 @@ from ddi.provenance import Provenance
 from ddi.store import append
 
 
-def _log(msg: str) -> None:
-    print(f"[ddi.finetune] {msg}", file=sys.stderr, flush=True)
+def _sdpa_ctx(backend: str | None) -> contextlib.AbstractContextManager:
+    """Pin the SDPA backend for the student forward.
+
+    The flash attention kernel produces NaN gradients on some head_dim=128 models
+    (e.g. Qwen2.5-7B) when a 4D additive mask is supplied.  Pinning to ``math`` or
+    ``efficient`` avoids the broken kernel.  ``None`` (default) leaves the
+    backend selection to PyTorch (current behaviour).
+    """
+    if backend is None:
+        return contextlib.nullcontext()
+    from torch.nn.attention import SDPBackend, sdpa_kernel
+
+    mapping = {
+        "math": SDPBackend.MATH,
+        "efficient": SDPBackend.EFFICIENT_ATTENTION,
+        "flash": SDPBackend.FLASH_ATTENTION,
+    }
+    if backend not in mapping:
+        raise ValueError(f"sdpa_backend must be one of {list(mapping)} or None, got {backend!r}")
+    return sdpa_kernel(mapping[backend])
+
+
+def _log(msg: str) -> None:    print(f"[ddi.finetune] {msg}", file=sys.stderr, flush=True)
 
 
 def _mix_records(datasets: list[str], seed: int, max_records: int | None) -> list[dict]:
@@ -436,6 +457,7 @@ def finetune(
     max_grad_norm: float = 1.0,
     max_skipped_steps: int = 20,
     layout: str = "sequential",
+    sdpa_backend: str | None = None,
     provenance: Provenance,
     store_path: Path,
 ) -> None:
@@ -813,12 +835,13 @@ def finetune(
                 # objective paths, summing graph-bearing losses before backward can exceed
                 # an 80GB card even though each path fits independently.
                 with sync_ctx:
-                    student_out = student(
-                        input_ids=full_ids,
-                        attention_mask=mask,
-                        position_ids=positions,
-                        use_cache=False,
-                    )
+                    with _sdpa_ctx(sdpa_backend):
+                        student_out = student(
+                            input_ids=full_ids,
+                            attention_mask=mask,
+                            position_ids=positions,
+                            use_cache=False,
+                        )
                     student_ans = student_out.logits[:, lo:hi, :].float()
                     component_loss = _answer_kl(
                         student_ans, target_logits, kl_temperature

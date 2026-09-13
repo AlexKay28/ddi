@@ -937,10 +937,12 @@ Quality / prefill speedup & \textcolor{ddiBlue}{V57: matched full-vs-DDI QA + ti
         r""" same 100 requests} &
 \textcolor{ddiRed}{Matched QA under a validated sparse kernel} \\[5pt]
 Quality / KV reuse & \textcolor{ddiGreen}{V58 + V65: gold-answer QA under hits; V64 audited;
-V68 divergence anatomy; V70 trained contract: C$-$B exactly zero, $n{=}300$, both gates passed} &
-\textcolor{ddiRed}{Multi-seed robustness; scale beyond $n{=}300$} \\[5pt]
-Warm-path serving win & \textcolor{ddiGreen}{V65: 2.05$\times$ TTFT, byte-identical, gate passed} &
-\textcolor{ddiRed}{Mixed/partial-hit beating baseline; prefix-cache baseline; trained-contract serving latency} \\[5pt]
+V68 divergence anatomy; V70 trained contract: C$-$B exactly zero, $n{=}300$, both gates passed;
+V72 seed-1 replication: C$-$B exactly zero, $n{=}300$} &
+\textcolor{ddiRed}{Scale beyond $n{=}300$} \\[5pt]
+Warm-path serving win & \textcolor{ddiGreen}{V65: 2.05$\times$ TTFT, byte-identical, gate passed;
+V71: trained-contract serving boundary measured, keeps the win (all-hit TTFT up to 5.55$\times$, 0 identity violations, 240 cells)} &
+\textcolor{ddiRed}{Mixed/partial-hit beating baseline} \\[5pt]
 Hit rate / sparsity & \textcolor{ddiPurple}{V59 measured crossover + analytical surface} &
 \textcolor{ddiRed}{Controlled workload$\times$mask sweep at scale} \\
 \bottomrule

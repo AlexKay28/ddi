@@ -39,12 +39,15 @@ EXPECTED_ARTIFACTS = {
     "T14_v69_attribution",
     "T15_v70_gates",
     "T16_v68_anatomy",
+    "T17_v71_boundary",
     "F5",
     "V53_cache_diagnostic",
     "V11_flex_history",
     "V58_cache_qa",
     "V61_timing_grid",
     "V64_timing_recheck",
+    "V71_sweep",
+    "V72_replication",
 }
 GENERATED_FILES = (
     "T1_mask_taxonomy.md",
@@ -69,6 +72,7 @@ GENERATED_FILES = (
     "T14_v69_attribution.tex",
     "T15_v70_gates.tex",
     "T16_v68_anatomy.tex",
+    "T17_v71_boundary.tex",
     "V3_transfer_estimands.tex",
     "F5.tex",
     "V5_doc_quality.tex",
@@ -181,6 +185,7 @@ def load_evidence(path: Path = DEFAULT_EVIDENCE) -> dict[str, Any]:
         "T14_v69_attribution": 3,
         "T15_v70_gates": 5,
         "T16_v68_anatomy": 2,
+        "T17_v71_boundary": 6,
         "F5": 2,
         "V53_cache_diagnostic": 2,
     }.items():
@@ -932,6 +937,48 @@ def _render_t16(evidence: dict[str, Any]) -> str:
     return _table(lines)
 
 
+def _render_t17(evidence: dict[str, Any]) -> str:
+    rows = _rows(evidence["artifacts"], "T17_v71_boundary", 6)
+    lines = [
+        _source_header(evidence, "T17_v71_boundary").rstrip(),
+        r"\begin{tabular}{llrrlrrl}",
+        r"\toprule",
+        r"budget & $L$ & V66 wall $h$ & V71 wall $h$ & shift"
+        r" & V66 TTFT $h$ & V71 TTFT $h$ & shift \\",
+        r"\midrule",
+    ]
+    for i, row in enumerate(rows):
+        budget, L, w66, w71, t66, t71 = row
+        _require(isinstance(L, int) and L in (32, 128, 512), f"T17 L invalid: {L}")
+        _require(budget in ("TTFT", "d=8", "d=16", "d=32", "d=64"),
+                  f"T17 budget invalid: {budget}")
+
+        def fmt(h: Any) -> str:
+            return "none" if h == "none" or h is None else f"{h:g}"
+
+        def shift(old: Any, new: Any) -> str:
+            o = None if old == "none" else old
+            n = None if new == "none" else new
+            if o is None and n is None:
+                return "---"
+            if o is None:
+                return "appears"
+            if n is None:
+                return "lost"
+            if n == o:
+                return "0"
+            return f"{n - o:+g}"
+
+        lines.append(
+            f"{budget} & {L} & {fmt(w66)} & {fmt(w71)} & {shift(w66, w71)} "
+            f"& {fmt(t66)} & {fmt(t71)} & {shift(t66, t71)} \\\\"
+        )
+        if L != 512 and i < len(rows) - 1 and rows[i + 1][1] != L:
+            lines.append(r"\midrule")
+    lines.extend([r"\bottomrule", r"\end{tabular}"])
+    return _table(lines)
+
+
 def _render_f5(evidence: dict[str, Any]) -> str:
     artifact = evidence["artifacts"]["F5"]
     _require(
@@ -994,6 +1041,7 @@ def render(evidence: dict[str, Any]) -> dict[str, str]:
             "T14_v69_attribution.tex": _render_t14(evidence),
             "T15_v70_gates.tex": _render_t15(evidence),
             "T16_v68_anatomy.tex": _render_t16(evidence),
+            "T17_v71_boundary.tex": _render_t17(evidence),
             "V3_transfer_estimands.tex": visuals["V3_transfer_estimands.tex"],
             "F5.tex": _render_f5(evidence),
         }

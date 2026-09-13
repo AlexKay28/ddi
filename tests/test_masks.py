@@ -9,8 +9,6 @@ bug in the fast path cannot be masked by a shared subroutine.
 
 from __future__ import annotations
 
-import math
-
 import pytest
 import torch
 
@@ -163,7 +161,7 @@ def test_bridge_k_endpoints(doc_lengths, query_len, answer_len):
 
 @pytest.mark.parametrize("doc_lengths", [[1], [4], [7]])
 def test_n1_collapses_to_full(doc_lengths):
-    """The Phase 0.5 correctness gate at the mask level: single-doc → indistinguishable from full."""
+    """Phase 0.5 correctness gate: single-doc must be indistinguishable from full."""
     query_len, answer_len = 3, 2
     full = build_mask(doc_lengths, query_len, answer_len, "full")
     for variant in ("ddi_qf", "ddi_strict"):
@@ -252,8 +250,8 @@ def test_to_additive_values_and_dtype():
         assert add.dtype == dtype
         assert add[0, 0].item() == 0.0
         assert add[1, 1].item() == 0.0
-        assert math.isinf(add[0, 1].item()) and add[0, 1].item() < 0
-        assert math.isinf(add[1, 0].item()) and add[1, 0].item() < 0
+        assert add[0, 1].item() <= torch.finfo(dtype).min
+        assert add[1, 0].item() <= torch.finfo(dtype).min
 
 
 def test_to_additive_fully_blocked_row_is_representable_in_bf16():
@@ -261,7 +259,7 @@ def test_to_additive_fully_blocked_row_is_representable_in_bf16():
     allow = torch.zeros((4, 4), dtype=torch.bool)  # nothing allowed
     add = to_additive(allow, dtype=torch.bfloat16)
     assert add.dtype == torch.bfloat16
-    assert torch.isneginf(add).all()
+    assert (add <= torch.finfo(torch.bfloat16).min).all()
     assert not torch.isnan(add).any()
 
 
@@ -276,7 +274,7 @@ def test_to_additive_matches_build_mask():
     add = to_additive(allow, dtype=torch.float32)
     assert add.shape == allow.shape
     assert (add == 0.0).equal(allow)
-    assert torch.isneginf(add).equal(~allow)
+    assert (add <= torch.finfo(torch.float32).min).equal(~allow)
 
 
 # ---------------------------------------------------------------------------
