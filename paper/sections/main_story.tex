@@ -245,6 +245,17 @@ Bidirectional, low-magnitude bf16 perturbation.}
 \label{tab:v68anatomy}
 \end{table}
 
+\begin{figure}[H]
+\centering
+\input{generated/V18_anatomy.tex}
+\caption{V68 divergence anatomy (rubric frozen before inspection). Of the
+22 divergent records: 11 clear semantic changes, 8 near-tie greedy flips,
+3 truncation/stopping artifacts, none ambiguous. Direction: cached
+strictly gains on 4 and strictly loses on 5; position: 9 first-token,
+13 mid-generation.}
+\label{fig:anatomy}
+\end{figure}
+
 \begin{table}[H]
 \centering\footnotesize\input{generated/T10_qa_confirmation.tex}
 \caption{QA non-inferiority under the $-0.02$ floor (paired bootstrap,
@@ -276,6 +287,18 @@ paired bootstrap (10k, seed 47, margin $-0.02$). C$-$B exactly zero; C$-$D
 passes.}
 \label{tab:v70gates}
 \end{table}
+
+\begin{figure}[H]
+\centering
+\input{generated/V16_gate_deltas.tex}
+\caption{Trained-contract quality gates across the three $n{=}300$
+confirmations. The identity gate C$-$B is exactly zero with degenerate CI
+$[0,0]$ on EM and F1 at every station (green diamonds); the no-cache
+deficit C$-$D stays in the $+0.12$--$+0.28$ EM band (blue bars, 95\%
+paired-bootstrap CIs, 10k resamples). Byte-identity is contract-level, not
+seed- or family-specific.}
+\label{fig:gatedeltas}
+\end{figure}
 
 To our knowledge no prior work reports exact byte-identical
 cache-vs-fresh equality with interval support: KVLink
@@ -320,6 +343,19 @@ trained contract (V71). The trained contract shifts the crossover left
 is sharper: reuse only wins near all-hit ($h\geq 0.8$). Short documents
 amortize less.}
 \label{fig:crossover128}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\input{generated/V17_program_timeline.tex}
+\caption{Program arc from diagnostic cache to production trained
+contract. V53: a warm cache that is neither faithful nor fast. V65: the
+serving contract made byte-identical and fast. V70/V72: admissible
+$n{=}300$ confirmation with an exact-zero identity gate, replicated across
+seeds and model families (V72-a/V72-b in Fig.~\ref{fig:gatedeltas}). V71:
+the trained contract keeps the serving win. All numbers come from the
+pinned ledger.}
+\label{fig:timeline}
 \end{figure}
 
 \paragraph{Prefix-cache baseline (V73).}

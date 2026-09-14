@@ -1,0 +1,24 @@
+% V18: anatomy of the 22 divergent cached/fresh confirmation records (V68).
+% Data: results/v68_anatomy_20260910T131036Z/ (pinned v68_anatomy_table, v68_classifications).
+% rows: near_tie_greedy_flip 8, clear_semantic_change 11, truncation_stopping_artifact 3, ambiguous 0.
+% direction: cached strictly gains 4, strictly loses 5; position: first_token 9, mid_generation 13.
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.92\linewidth, height=5.4cm,
+  xbar, bar width=13pt,
+  symbolic y coords={ambiguous, truncation, near-tie flip, semantic change},
+  ytick=data,
+  xtick={0,2,4,6,8,10,12},
+  xlabel={Divergent records (of 22)},
+  xmin=0, xmax=13,
+  yticklabel style={font=\scriptsize},
+  tick label style={font=\scriptsize},
+  label style={font=\small},
+  nodes near coords, nodes near coords align={horizontal},
+  every node near coord/.append style={font=\scriptsize},
+  grid=both, grid style={gray!20},
+]
+\addplot[ddiBlue!60, draw=ddiBlue]
+  coordinates {(0,ambiguous) (3,truncation) (8,near-tie flip) (11,semantic change)};
+\end{axis}
+\end{tikzpicture}

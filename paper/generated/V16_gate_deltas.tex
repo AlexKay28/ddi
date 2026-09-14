@@ -1,0 +1,33 @@
+% V16: trained-contract quality gates across the three n=300 confirmations.
+% Data: results/v70_confirmation_analysis_20260911T152345Z/verdict.json (pinned v70_confirmation_verdict),
+%       results/v72_confirmation_analysis/verdict.json (pinned v72_confirmation_verdict),
+%       results/v72s2_confirmation_analysis/verdict.json (SHA256SUMS in dir).
+% C-B is exactly 0.000 with degenerate CI [0,0] on EM and F1 at every station.
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.95\linewidth, height=6.4cm,
+  ybar, bar width=16pt,
+  symbolic x coords={V70, V72a, V72b},
+  xtick=data,
+  xticklabels={{V70 (Qwen2.5-7B, seed 47)},{V72-a (Qwen2.5-7B, seed 1)},{V72-b (Llama-3.1-8B, seed 47)}},
+  xticklabel style={font=\scriptsize},
+  ylabel={EM delta vs.\ reference},
+  ymin=-0.03, ymax=0.42,
+  enlarge x limits=0.25,
+  legend style={at={(0.02,0.98)}, anchor=north west, font=\scriptsize},
+  grid=both, grid style={gray!20},
+]
+\addplot[ddiGreen, fill=ddiGreen!50, mark=diamond*, mark size=3pt,
+         error bars/.cd, y dir=both, y explicit]
+  coordinates {(V70,0) += (0,0) -= (0,0) (V72a,0) += (0,0) -= (0,0) (V72b,0) += (0,0) -= (0,0)};
+\addlegendentry{C$-$B identity gate (exact $0$)}
+\addplot[ddiBlue, fill=ddiBlue!55,
+         error bars/.cd, y dir=both, y explicit]
+  coordinates {(V70,0.240) += (0,0.060) -= (0,0.063) (V72a,0.277) += (0,0.060) -= (0,0.063) (V72b,0.123) += (0,0.060) -= (0,0.060)};
+\addlegendentry{C$-$D vs no-cache (95\% CI)}
+\node[font=\scriptsize, ddiGreen, anchor=south] at (axis cs:V70,0.012) {$0.000\;[0,0]$};
+\node[font=\scriptsize, ddiBlue, anchor=south] at (axis cs:V70,0.335) {$+0.240$};
+\node[font=\scriptsize, ddiBlue, anchor=south] at (axis cs:V72a,0.372) {$+0.277$};
+\node[font=\scriptsize, ddiBlue, anchor=south] at (axis cs:V72b,0.218) {$+0.123$};
+\end{axis}
+\end{tikzpicture}

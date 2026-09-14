@@ -80,6 +80,16 @@ three-seed study, not independent confidence intervals.
 \input{generated/T7_transfer.tex}
 \end{table}
 
+\paragraph{Cross-family transfer is not free.}
+Applying the identical 8-layer sequential distillation recipe to
+Llama-3.1-8B-Instruct (13.1 GPU-hours, 26{,}217 steps) does \emph{not}
+close the gap: hotpot EM stays at $+0.16$ (0.47 vs 0.31) and musique at
+$+0.18$ (0.33 vs 0.15). The student perplexity plateaus at 1.840 against
+a teacher of 1.580, where the same recipe on Qwen converged to within
+0.007 of the teacher (1.453 vs 1.446). The distillation recipe is
+architecture-sensitive --- the parity claim (C1) is currently supported
+on Qwen2.5-7B only, and closing the gap on Llama is open.
+
 \begin{table}[t]
 \centering\small
 \caption{T8 --- V54 separated transfer estimands on the natural-QA primary
@@ -160,6 +170,27 @@ and $+0.036$ on musique, without a comparison interval.
 \caption{T4 (16L) --- 16-layer-checkpoint finetune EM estimates on 100- and
     500-record evaluations. Each cell is a single-run estimate from one
     checkpoint lineage; no comparison confidence interval is available.}
+\label{tab:t4-16l}
+\IfFileExists{generated/T4_16L.tex}{%
+    \input{generated/T4_16L.tex}%
+}{%
+    \todoreport{T4 16L table}{run 16L eval}%
+}
+\end{table}
+
+On musique, the 8-layer finetune leaves a residual gap (0.13 vs 0.23 EM,
+$\Delta$=+0.10). Doubling the trainable layers to 16 (3.73B params,
+17.97 GPU-hours, building on the 8L checkpoint) narrows the musique gap
+to $\Delta$=+0.04 (0.19 vs 0.23 EM) while maintaining hotpot parity
+(Table~\ref{tab:t4-16l}). The student perplexity (1.453) nearly matches
+the teacher (1.446), and the remaining musique gap is at the resolution
+limit of a 100-record eval.
+
+\begin{table}[t]
+\centering\small
+\caption{T4 (16L) --- 8-layer vs 16-layer finetune comparison (EM), 100
+    records per cell. Doubling capacity narrows the musique gap from
+    +0.10 to +0.04 while preserving hotpot parity.}
 \label{tab:t4-16l}
 \IfFileExists{generated/T4_16L.tex}{%
     \input{generated/T4_16L.tex}%

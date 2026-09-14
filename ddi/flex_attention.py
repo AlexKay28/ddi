@@ -244,6 +244,102 @@ def make_batched_block_mask(
     return block_mask._adjust(T, T) if hasattr(block_mask, "_adjust") else block_mask
 
 
+def make_batched_block_mask(
+    doc_lengths: list[list[int]],
+    query_lens: list[int],
+    variant: str,
+    device: torch.device = _CUDA_DEVICE,
+    block_size: int | tuple[int, int] = 128,
+) -> Any:
+    """Create one padded BlockMask with a distinct DDI layout per batch item."""
+    if len(doc_lengths) != len(query_lens) or not doc_lengths:
+        raise ValueError("doc_lengths and query_lens must be non-empty and have equal length")
+
+    seq_lens = [
+        sum(lengths) + query_len
+        for lengths, query_len in zip(doc_lengths, query_lens, strict=True)
+    ]
+    T = max(seq_lens)
+    B = len(doc_lengths)
+    q_block, kv_block = (
+        (block_size, block_size) if isinstance(block_size, int) else block_size
+    )
+    q_blocks = (T + q_block - 1) // q_block
+    kv_blocks = (T + kv_block - 1) // kv_block
+
+    # -1 denotes padding and -2 denotes a query; document ids are local to each sample.
+    doc_id = torch.full((B, T), -1, dtype=torch.long, device=device)
+    for b, (lengths, query_len) in enumerate(zip(doc_lengths, query_lens, strict=True)):
+        pos = 0
+        for doc, length in enumerate(lengths):
+            doc_id[b, pos : pos + length] = doc
+            pos += length
+        doc_id[b, pos : pos + query_len] = -2
+
+    if variant == "full":
+        def mask_mod(b, h, q_idx, kv_idx):
+            return q_idx >= kv_idx
+    elif variant == "ddi_qf":
+        def mask_mod(b, h, q_idx, kv_idx):
+            q_doc = doc_id[b, q_idx]
+            k_doc = doc_id[b, kv_idx]
+            q_is_query = q_doc == -2
+            k_is_query = k_doc == -2
+            same_doc = (q_doc == k_doc) & (q_doc >= 0) & (q_idx >= kv_idx)
+            q_sees_doc = q_is_query & (k_doc >= 0)
+            q_query_causal = q_is_query & k_is_query & (q_idx >= kv_idx)
+            padding_self = (q_doc == -1) & (k_doc == -1) & (q_idx == kv_idx)
+            return same_doc | q_sees_doc | q_query_causal | padding_self
+    elif variant == "blind":
+        def mask_mod(b, h, q_idx, kv_idx):
+            q_doc = doc_id[b, q_idx]
+            k_doc = doc_id[b, kv_idx]
+            q_is_query = q_doc == -2
+            k_is_query = k_doc == -2
+            same_doc = (q_doc == k_doc) & (q_doc >= 0) & (q_idx >= kv_idx)
+            q_query_causal = q_is_query & k_is_query & (q_idx >= kv_idx)
+            padding_self = (q_doc == -1) & (k_doc == -1) & (q_idx == kv_idx)
+            return same_doc | q_query_causal | padding_self
+    else:
+        raise ValueError(f"flex backend: unknown mask variant {variant!r}")
+
+    kv_num_blocks = torch.zeros((B, 1, q_blocks), dtype=torch.int32, device=device)
+    kv_indices = torch.zeros((B, 1, q_blocks, kv_blocks), dtype=torch.int32, device=device)
+    for b in range(B):
+        segments_by_block = [
+            set(doc_id[b, start : min(start + kv_block, T)].tolist())
+            for start in range(0, T, kv_block)
+        ]
+        for q_block_idx in range(q_blocks):
+            q_start = q_block_idx * q_block
+            q_segments = set(doc_id[b, q_start : min(q_start + q_block, T)].tolist())
+            candidates: list[int] = []
+            for kv_block_idx, kv_segments in enumerate(segments_by_block):
+                if variant == "full":
+                    allow = kv_block_idx * kv_block < q_start + q_block
+                elif -2 in q_segments and variant == "ddi_qf":
+                    allow = True
+                elif -2 in q_segments:
+                    allow = -2 in kv_segments
+                else:
+                    allow = bool((q_segments & kv_segments) - {-2})
+                # Padded rows must retain a diagonal candidate to stay finite.
+                if -1 in q_segments and -1 in kv_segments:
+                    allow = True
+                if allow:
+                    candidates.append(kv_block_idx)
+            kv_num_blocks[b, 0, q_block_idx] = len(candidates)
+            kv_indices[b, 0, q_block_idx, : len(candidates)] = torch.tensor(
+                candidates, dtype=torch.int32, device=device
+            )
+    return BlockMask.from_kv_blocks(
+        kv_num_blocks,
+        kv_indices,
+        BLOCK_SIZE=(q_block, kv_block),
+        mask_mod=mask_mod,
+    )
+
+
 def patch_model_for_flex(model: torch.nn.Module) -> torch.nn.Module:
     """Patch all Qwen2 attention layers to use flex_attention.
 

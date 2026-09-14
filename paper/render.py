@@ -85,6 +85,9 @@ GENERATED_FILES = (
     "V12_amdahl.tex",
     "V14_crossover_chart.tex",
     "V15_crossover_L128.tex",
+    "V16_gate_deltas.tex",
+    "V17_program_timeline.tex",
+    "V18_anatomy.tex",
     "A1_cache_bins.tex",
     "analysis.json",
 )
@@ -1050,7 +1053,13 @@ def render(evidence: dict[str, Any]) -> dict[str, str]:
     )
     rendered.update(visuals)
     # Pre-generated data-driven figures (not from evidence.json artifacts)
-    for name in ("V14_crossover_chart.tex", "V15_crossover_L128.tex"):
+    for name in (
+        "V14_crossover_chart.tex",
+        "V15_crossover_L128.tex",
+        "V16_gate_deltas.tex",
+        "V17_program_timeline.tex",
+        "V18_anatomy.tex",
+    ):
         path = ROOT / "paper" / "generated" / name
         if path.exists():
             rendered[name] = path.read_text(encoding="utf-8")
