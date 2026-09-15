@@ -27,9 +27,9 @@
     ],
     "divergent_repeat_records": 825,
     "repeats_per_cell": 15,
-    "rows": 15,
-    "ttft_crossovers": 10,
-    "wall_crossovers": 8
+    "rows": 9,
+    "ttft_crossovers": 5,
+    "wall_crossovers": 4
   },
   "T14_v69_attribution": {
     "opt3_envelope_within_budget": true,

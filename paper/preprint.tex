@@ -30,6 +30,7 @@
 \usepackage{xcolor}
 \usepackage[hidelinks]{hyperref}
 \usepackage{tikz}
+\usetikzlibrary{matrix}
 \usepackage{pgfplots}
 \usepgfplotslibrary{groupplots}
 \pgfplotsset{compat=1.18}
@@ -107,7 +108,7 @@
         Yandex\\
         \texttt{alexkay28@yandex-team.ru}}
 
-\date{\today}
+\date{September 16, 2026}
 
 \begin{document}
 
@@ -117,29 +118,43 @@
 Retrieval-augmented generation (RAG) repeats document prefill across requests.
 Decoupled Document Inference (DDI) isolates document attention via a
 block-diagonal mask and uses restart positions to make independently computed
-document KVs reusable. Block-Attention~\citep{ma2025blockattention} achieves
-98.7\% TTFT reduction with full-model fine-tuning; this paper asks how far
-lightweight self-distillation goes and what serving boundary remains.
-Two approaches compose: \textbf{sparse cold prefill} reduces attention work on
-cache misses; \textbf{warm KV reuse} loads stored document states and skips
-document prefill. At $N=25,L=512,Q=64$, DDI-QF removes
+document KVs reusable. Block-Attention~\citep{ma2025blockattention} reports a
+98.7\% TTFT reduction by combining full-model fine-tuning, custom sparse
+kernels, and \emph{precomputed/reused} document KVs; this paper asks how far
+lightweight top-8-layer self-distillation goes and what serving boundary
+remains. Two approaches compose: \textbf{sparse cold prefill} reduces
+attention work on cache misses; \textbf{warm KV reuse} loads stored document
+states and skips document prefill. At $N=25,L=512,Q=64$, DDI-QF removes
 95.04\% of causal prefill pairs, but measured dense-SDPA prefill remains near the
-full-causal latency (the 4D additive mask forces SDPA's slow math backend).
+full-causal latency (the profile is consistent with the 4D additive mask
+dispatching SDPA to its slow math backend; dispatch was not kernel-profiled).
 Historical Flex logs report 1.77$\times$ whole-model prefill gain; their older
 mask semantics and failed parity gates prevent treating these as validated
 current-DDI speedups. Natural-QA mask and document-count studies show quality
-losses (HotpotQA EM 0.56$\to$0.30 train-free); matched three-seed self-distillation
-(top-8 layers) does not reach prescribed parity gates. A trained link-token
-contract (V70) then closes the quality gate: on 300 untouched records, cached
-versus fresh generation is \textbf{byte-identical} (C$-$B $=0$, CI $[0,0]$),
-replicated at a second seed (V72). The trained contract's serving boundary
-(V71) keeps the warm-path win: all-hit TTFT up to 5.55$\times$ with zero
-identity violations across 240 cells, winning above hit-fraction crossovers
-($h\geq 0.7$ at $L=512$, $h\geq 0.8$ at $L=128$). The win is scoped:
-mixed-hit traffic remains slower, and the sparse cold path wins only at long
-shapes (1.12--1.29$\times$ at $L=512$). We therefore claim a measured, audited
-warm-path speedup with byte-identical serving after contract training --- not
-yet a quality-preserving general replacement for full causal attention at scale.
+losses (HotpotQA EM 0.56$\to$0.30 train-free); matched three-seed
+self-distillation (top-8 layers) does not reach prescribed parity gates. A
+canonical persisted-cache contract then makes cached execution coincide with
+fresh independent execution: identical asserted K/V tensors through the same
+greedy callable and exactly equal EM/F1 on all $n{=}300$ confirmation records
+--- at every station ($k{=}5$ seed 47, $k{=}0$ seed 1, $k{=}5$
+Llama-3.1-8B), an execution-fidelity property that does not depend on
+link-token training. The paired-bootstrap interval of an all-zero difference
+is the degenerate $[0,0]$ and is reported as such. The trained contract's
+serving boundary (V71), measured against the untrained-restart monolithic
+reference, keeps the warm-path win: all-hit TTFT up to 5.55$\times$ (wall at
+decode $d{=}1$ up to 6.55$\times$) with zero divergent decodes across 240
+grid configurations (15 repeats each); smallest tested winning
+configurations reach $h_{\mathrm{eff}}{=}$hit\_count$/N$ of 0.6 (wall) and
+0.7 (TTFT) at $L{=}512$ and 0.9/1.0 at $L{=}128$ --- per-shape grid
+outcomes, not universal thresholds. An exact-prefix baseline comparison was
+withdrawn after its cache-hit branch was found to never skip prefill. The
+win is scoped: mixed-hit traffic remains slower, the sparse cold path wins
+only at long shapes (1.12--1.29$\times$ at $L{=}512$), no original-model QA
+reference is measured at $n{=}300$, and the confirmation stations reuse the
+same frozen records. We therefore claim a measured, audited warm-path
+speedup with exact cached-vs-fresh execution identity --- not a
+quality-preservation result against the original model at this scale, and
+not yet a general replacement for full causal attention at scale.
 \end{abstract}
 
 % ---------------------------------------------------------------------

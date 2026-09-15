@@ -259,93 +259,93 @@
       "rows": [
         [
           32,
-          "TTFT-only (d=1)",
+          2,
+          null,
+          null,
+          null,
+          null,
           null,
           null
         ],
         [
           32,
-          "d=8",
+          5,
+          null,
+          null,
+          null,
+          null,
           null,
           null
         ],
         [
           32,
-          "d=16",
+          10,
           null,
-          null
-        ],
-        [
-          32,
-          "d=32",
           null,
-          null
-        ],
-        [
-          32,
-          "d=64",
+          null,
+          null,
           null,
           null
         ],
         [
           128,
-          "TTFT-only (d=1)",
+          2,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          128,
+          5,
+          null,
+          null,
+          null,
+          null,
+          null,
+          1.0
+        ],
+        [
+          128,
+          10,
           1.0,
-          0.9
-        ],
-        [
-          128,
-          "d=8",
           1.0,
-          0.9
-        ],
-        [
-          128,
-          "d=16",
           1.0,
-          0.9
-        ],
-        [
-          128,
-          "d=32",
           null,
-          0.9
-        ],
-        [
-          128,
-          "d=64",
           null,
-          0.9
+          1.0
         ],
         [
           512,
-          "TTFT-only (d=1)",
-          0.7,
-          0.7
+          2,
+          1.0,
+          1.0,
+          null,
+          null,
+          null,
+          1.0
         ],
         [
           512,
-          "d=8",
-          0.7,
-          0.7
-        ],
-        [
-          512,
-          "d=16",
+          5,
           0.8,
-          0.7
+          0.8,
+          1.0,
+          1.0,
+          1.0,
+          0.8
         ],
         [
           512,
-          "d=32",
+          10,
           0.8,
-          0.7
-        ],
-        [
-          512,
-          "d=64",
           0.8,
-          0.7
+          0.8,
+          0.8,
+          0.8,
+          0.8
         ]
       ],
       "sources": [
@@ -355,6 +355,81 @@
         "v66_boundary_scoping_sentence",
         "v66_boundary_manifest",
         "v66_boundary_prereg"
+      ],
+      "value_semantics": "Cells are h_eff = hit_count/N of the smallest tested winning configuration for that (L, N, budget) under the frozen materiality rule (win iff bootstrap CI low > 1.05); null = no winning configuration in the frozen grid. Nominal grid labels are kept per row in 'nominal' and must not be read as universal thresholds.",
+      "nominal": [
+        [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          null,
+          null,
+          null,
+          null,
+          null,
+          5.0
+        ],
+        [
+          10.0,
+          10.0,
+          10.0,
+          null,
+          null,
+          10.0
+        ],
+        [
+          2.0,
+          2.0,
+          null,
+          null,
+          null,
+          2.0
+        ],
+        [
+          4.0,
+          4.0,
+          5.0,
+          5.0,
+          5.0,
+          4.0
+        ],
+        [
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0,
+          8.0
+        ]
       ]
     },
     "T14_v69_attribution": {
@@ -528,133 +603,106 @@
     },
     "T17_v71_boundary": {
       "data_role": "measured",
-      "data_role_note": "V66\u2192V71 boundary diff on the frozen V66 development grid; same materiality rule, same arm-A baseline; 240 cells, 15 repeats, zero identity violations.",
+      "data_role_note": "V66→V71 boundary diff on the frozen V66 development grid; same materiality rule, same arm-A baseline; 240 cells, 15 repeats, zero identity violations.",
       "rows": [
         [
-          "TTFT",
           32,
-          "none",
-          "none",
-          "none",
-          "none"
+          2,
+          null,
+          null,
+          null,
+          null
         ],
         [
-          "d=8",
           32,
-          "none",
-          "none",
-          "none",
-          "none"
+          5,
+          null,
+          null,
+          null,
+          null
         ],
         [
-          "d=16",
           32,
-          "none",
-          "none",
-          "none",
-          "none"
+          10,
+          null,
+          null,
+          null,
+          null
         ],
         [
-          "d=32",
-          32,
-          "none",
-          "none",
-          "none",
-          "none"
-        ],
-        [
-          "d=64",
-          32,
-          "none",
-          "none",
-          "none",
-          "none"
-        ],
-        [
-          "TTFT",
           128,
-          "none",
-          "none",
-          "none",
-          "none"
+          2,
+          null,
+          1.0,
+          null,
+          1.0
         ],
         [
-          "d=8",
           128,
+          5,
+          null,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          128,
+          10,
           1.0,
           0.9,
-          0.9,
-          0.8
-        ],
-        [
-          "d=16",
-          128,
           1.0,
-          0.9,
-          0.9,
-          0.8
+          1.0
         ],
         [
-          "d=32",
-          128,
-          "none",
+          512,
+          2,
           1.0,
-          0.9,
+          1.0,
+          1.0,
+          1.0
+        ],
+        [
+          512,
+          5,
+          0.8,
+          0.8,
+          0.8,
           0.8
         ],
         [
-          "d=64",
-          128,
-          "none",
-          "none",
-          0.9,
-          0.8
-        ],
-        [
-          "TTFT",
           512,
-          "none",
-          "none",
-          "none",
-          "none"
-        ],
-        [
-          "d=8",
-          512,
-          0.7,
-          0.6,
-          0.7,
-          0.7
-        ],
-        [
-          "d=16",
-          512,
+          10,
           0.8,
           0.6,
-          0.7,
-          0.7
-        ],
-        [
-          "d=32",
-          512,
           0.8,
-          0.7,
-          0.7,
-          0.7
-        ],
-        [
-          "d=64",
-          512,
-          0.8,
-          0.7,
-          0.7,
           0.7
         ]
       ],
       "sources": [
         "v71_sweep_result",
         "v71_summary"
-      ]
+      ],
+      "value_semantics": "Comparative serving boundary per (L, N): [L, N, V66 wall d=1, V71 wall d=1, V66 TTFT, V71 TTFT]. Every value is h_eff = hit_count/N of the smallest tested winning configuration under the frozen materiality rule (win iff bootstrap CI low > 1.05); null = none in the frozen grid. V66 columns come from the pinned crossover_table.md; V71 columns from v71 result.json per-cell A/CP verdicts (min over N equals the official summary crossover, cross-checked). These are smallest tested winning configurations on the frozen development grid, not universal thresholds.",
+      "v66_min_over_n": {
+        "32|1": null,
+        "32|8": null,
+        "32|16": null,
+        "32|32": null,
+        "32|64": null,
+        "32|ttft": null,
+        "128|1": 1.0,
+        "128|8": 1.0,
+        "128|16": 1.0,
+        "128|32": null,
+        "128|64": null,
+        "128|ttft": 1.0,
+        "512|1": 0.8,
+        "512|8": 0.8,
+        "512|16": 0.8,
+        "512|32": 0.8,
+        "512|64": 0.8,
+        "512|ttft": 0.8
+      }
     },
     "T1_mask_taxonomy": {
       "rows": [
@@ -1352,6 +1400,731 @@
         "v72_prereg"
       ],
       "status": "seed1_replication_exact_zero"
+    },
+    "V14_v71_crossover_L512": {
+      "sources": [
+        "v71_sweep_result",
+        "v66_boundary_crossover_table"
+      ],
+      "note": "Crossover chart at L=512. Rows [contract, N, h_eff, hit_count, nominal_h, wall_d1_ratio, ttft_ratio]. V71: A/CP paired ratio of medians at decode d=1 (wall) and strict TTFT (ttft_ratio) from v71 result.json budgets['1']. V66: wall d=1 A/B and TTFT A/B point estimates from crossover_table.md. h_eff = hit_count/N (actual cached fraction); nominal_h is the grid label (None for V71 rows: the sweep realizes hit counts directly).",
+      "rows": [
+        [
+          "V66",
+          2,
+          0.0,
+          0,
+          0.0,
+          0.334,
+          0.351
+        ],
+        [
+          "V66",
+          2,
+          0.5,
+          1,
+          1.0,
+          0.524,
+          0.587
+        ],
+        [
+          "V66",
+          2,
+          1.0,
+          2,
+          2.0,
+          1.323,
+          2.06
+        ],
+        [
+          "V66",
+          5,
+          0.0,
+          0,
+          0.0,
+          0.369,
+          0.368
+        ],
+        [
+          "V66",
+          5,
+          0.2,
+          1,
+          1.0,
+          0.419,
+          0.421
+        ],
+        [
+          "V66",
+          5,
+          0.6,
+          3,
+          3.0,
+          0.704,
+          0.751
+        ],
+        [
+          "V66",
+          5,
+          0.8,
+          4,
+          4.0,
+          1.109,
+          1.201
+        ],
+        [
+          "V66",
+          5,
+          1.0,
+          5,
+          5.0,
+          2.417,
+          3.413
+        ],
+        [
+          "V66",
+          10,
+          0.0,
+          0,
+          0.0,
+          0.458,
+          0.424
+        ],
+        [
+          "V66",
+          10,
+          0.3,
+          3,
+          3.0,
+          0.559,
+          0.541
+        ],
+        [
+          "V66",
+          10,
+          0.5,
+          5,
+          5.0,
+          0.737,
+          0.724
+        ],
+        [
+          "V66",
+          10,
+          0.6,
+          6,
+          6.0,
+          0.838,
+          0.864
+        ],
+        [
+          "V66",
+          10,
+          0.7,
+          7,
+          7.0,
+          1.043,
+          1.055
+        ],
+        [
+          "V66",
+          10,
+          0.8,
+          8,
+          8.0,
+          1.236,
+          1.325
+        ],
+        [
+          "V66",
+          10,
+          0.9,
+          9,
+          9.0,
+          1.692,
+          2.032
+        ],
+        [
+          "V66",
+          10,
+          1.0,
+          10,
+          10.0,
+          2.901,
+          4.281
+        ],
+        [
+          "V71",
+          2,
+          0.0,
+          0,
+          null,
+          0.397,
+          0.38
+        ],
+        [
+          "V71",
+          2,
+          0.5,
+          1,
+          null,
+          0.685,
+          0.654
+        ],
+        [
+          "V71",
+          2,
+          1.0,
+          2,
+          null,
+          2.593,
+          2.537
+        ],
+        [
+          "V71",
+          5,
+          0.0,
+          0,
+          null,
+          0.422,
+          0.384
+        ],
+        [
+          "V71",
+          5,
+          0.2,
+          1,
+          null,
+          0.535,
+          0.469
+        ],
+        [
+          "V71",
+          5,
+          0.6,
+          3,
+          null,
+          0.942,
+          0.83
+        ],
+        [
+          "V71",
+          5,
+          0.8,
+          4,
+          null,
+          1.476,
+          1.379
+        ],
+        [
+          "V71",
+          5,
+          1.0,
+          5,
+          null,
+          4.508,
+          4.033
+        ],
+        [
+          "V71",
+          10,
+          0.0,
+          0,
+          null,
+          0.494,
+          0.424
+        ],
+        [
+          "V71",
+          10,
+          0.3,
+          3,
+          null,
+          0.699,
+          0.611
+        ],
+        [
+          "V71",
+          10,
+          0.5,
+          5,
+          null,
+          0.919,
+          0.803
+        ],
+        [
+          "V71",
+          10,
+          0.6,
+          6,
+          null,
+          1.097,
+          0.963
+        ],
+        [
+          "V71",
+          10,
+          0.7,
+          7,
+          null,
+          1.37,
+          1.204
+        ],
+        [
+          "V71",
+          10,
+          0.8,
+          8,
+          null,
+          1.916,
+          1.684
+        ],
+        [
+          "V71",
+          10,
+          0.9,
+          9,
+          null,
+          2.943,
+          2.534
+        ],
+        [
+          "V71",
+          10,
+          1.0,
+          10,
+          null,
+          6.55,
+          5.547
+        ]
+      ]
+    },
+    "V15_v71_crossover_L128": {
+      "sources": [
+        "v71_sweep_result",
+        "v66_boundary_crossover_table"
+      ],
+      "note": "Crossover chart at L=128. Rows [contract, N, h_eff, hit_count, nominal_h, wall_d1_ratio, ttft_ratio]. V71: A/CP paired ratio of medians at decode d=1 (wall) and strict TTFT (ttft_ratio) from v71 result.json budgets['1']. V66: wall d=1 A/B and TTFT A/B point estimates from crossover_table.md. h_eff = hit_count/N (actual cached fraction); nominal_h is the grid label (None for V71 rows: the sweep realizes hit counts directly).",
+      "rows": [
+        [
+          "V66",
+          2,
+          0.0,
+          0,
+          0.0,
+          0.211,
+          0.24
+        ],
+        [
+          "V66",
+          2,
+          0.5,
+          1,
+          1.0,
+          0.3,
+          0.361
+        ],
+        [
+          "V66",
+          2,
+          1.0,
+          2,
+          2.0,
+          0.587,
+          0.903
+        ],
+        [
+          "V66",
+          5,
+          0.0,
+          0,
+          0.0,
+          0.19,
+          0.196
+        ],
+        [
+          "V66",
+          5,
+          0.2,
+          1,
+          1.0,
+          0.217,
+          0.229
+        ],
+        [
+          "V66",
+          5,
+          0.6,
+          3,
+          3.0,
+          0.347,
+          0.384
+        ],
+        [
+          "V66",
+          5,
+          0.8,
+          4,
+          4.0,
+          0.482,
+          0.583
+        ],
+        [
+          "V66",
+          5,
+          1.0,
+          5,
+          5.0,
+          0.938,
+          1.383
+        ],
+        [
+          "V66",
+          10,
+          0.0,
+          0,
+          0.0,
+          0.191,
+          0.194
+        ],
+        [
+          "V66",
+          10,
+          0.3,
+          3,
+          3.0,
+          0.244,
+          0.252
+        ],
+        [
+          "V66",
+          10,
+          0.5,
+          5,
+          5.0,
+          0.32,
+          0.336
+        ],
+        [
+          "V66",
+          10,
+          0.6,
+          6,
+          6.0,
+          0.384,
+          0.409
+        ],
+        [
+          "V66",
+          10,
+          0.7,
+          7,
+          7.0,
+          0.45,
+          0.494
+        ],
+        [
+          "V66",
+          10,
+          0.8,
+          8,
+          8.0,
+          0.579,
+          0.656
+        ],
+        [
+          "V66",
+          10,
+          0.9,
+          9,
+          9.0,
+          0.835,
+          0.99
+        ],
+        [
+          "V66",
+          10,
+          1.0,
+          10,
+          10.0,
+          1.386,
+          1.967
+        ],
+        [
+          "V71",
+          2,
+          0.0,
+          0,
+          null,
+          0.294,
+          0.284
+        ],
+        [
+          "V71",
+          2,
+          0.5,
+          1,
+          null,
+          0.463,
+          0.448
+        ],
+        [
+          "V71",
+          2,
+          1.0,
+          2,
+          null,
+          1.133,
+          1.096
+        ],
+        [
+          "V71",
+          5,
+          0.0,
+          0,
+          null,
+          0.233,
+          0.229
+        ],
+        [
+          "V71",
+          5,
+          0.2,
+          1,
+          null,
+          0.271,
+          0.267
+        ],
+        [
+          "V71",
+          5,
+          0.6,
+          3,
+          null,
+          0.459,
+          0.445
+        ],
+        [
+          "V71",
+          5,
+          0.8,
+          4,
+          null,
+          0.767,
+          0.736
+        ],
+        [
+          "V71",
+          5,
+          1.0,
+          5,
+          null,
+          1.74,
+          1.668
+        ],
+        [
+          "V71",
+          10,
+          0.0,
+          0,
+          null,
+          0.218,
+          0.207
+        ],
+        [
+          "V71",
+          10,
+          0.3,
+          3,
+          null,
+          0.291,
+          0.282
+        ],
+        [
+          "V71",
+          10,
+          0.5,
+          5,
+          null,
+          0.397,
+          0.382
+        ],
+        [
+          "V71",
+          10,
+          0.6,
+          6,
+          null,
+          0.465,
+          0.447
+        ],
+        [
+          "V71",
+          10,
+          0.7,
+          7,
+          null,
+          0.578,
+          0.556
+        ],
+        [
+          "V71",
+          10,
+          0.8,
+          8,
+          null,
+          0.767,
+          0.735
+        ],
+        [
+          "V71",
+          10,
+          0.9,
+          9,
+          null,
+          1.08,
+          1.032
+        ],
+        [
+          "V71",
+          10,
+          1.0,
+          10,
+          null,
+          2.13,
+          2.0
+        ]
+      ]
+    },
+    "V16_gate_deltas": {
+      "sources": [
+        "v70_confirmation_verdict",
+        "v72_confirmation_verdict",
+        "v72s2_confirmation_verdict"
+      ],
+      "note": "Rows [station, family, seed, k, cb_em, cb_lo, cb_hi, cd_em, cd_lo, cd_hi, n] from verdict.json gates C-B/C-D EM metrics (paired percentile bootstrap, 10k resamples, seed 47). C-B is exactly 0 with degenerate CI [0,0] at every station: the all-zero paired differences make every resample zero, so the interval carries no information beyond the point mass (VIBEQUEUE-94).",
+      "rows": [
+        [
+          "V70",
+          "Qwen2.5-7B",
+          47,
+          5,
+          0.0,
+          0.0,
+          0.0,
+          0.24,
+          0.177,
+          0.3,
+          300
+        ],
+        [
+          "V72-a",
+          "Qwen2.5-7B",
+          1,
+          0,
+          0.0,
+          0.0,
+          0.0,
+          0.277,
+          0.213,
+          0.337,
+          300
+        ],
+        [
+          "V72-b",
+          "Llama-3.1-8B",
+          47,
+          5,
+          0.0,
+          0.0,
+          0.0,
+          0.123,
+          0.063,
+          0.183,
+          300
+        ]
+      ]
+    },
+    "V17_program_timeline": {
+      "sources": [
+        "cache_v53_summary",
+        "v65_combined_result",
+        "v70_confirmation_verdict",
+        "v71_summary",
+        "v71_sweep_result"
+      ],
+      "note": "Rows [station, field, value]. V53 hit rate and cache/fresh wall ratio from V53_cache_diagnostic artifact fields (sources cache_v53_*); divergent greedy streams 19/150. V65 all-hit speedup = 1/(benchmark C/A wall ratio 0.48854) and byte_identical_ac from T9_v65_serving artifact. V70 C-B EM from T15_v70_gates arm_means (C-B = 0.0 exactly). V71 all-hit TTFT ratio (L512_N10_H10_D1 budgets['1'].ttft_ratio), identity_cp_bp zero divergent repeat records over 48 blocks, 240 grid configurations, 15 repeats.",
+      "rows": [
+        [
+          "V53",
+          "hit_rate",
+          0.945
+        ],
+        [
+          "V53",
+          "cache_over_fresh_wall",
+          1.193
+        ],
+        [
+          "V53",
+          "divergent_streams",
+          19
+        ],
+        [
+          "V53",
+          "measured_streams",
+          150
+        ],
+        [
+          "V65",
+          "allhit_speedup_vs_monolithic",
+          2.047
+        ],
+        [
+          "V65",
+          "byte_identical_pairs",
+          24
+        ],
+        [
+          "V65",
+          "byte_identical_total",
+          24
+        ],
+        [
+          "V70",
+          "cb_em",
+          0.0
+        ],
+        [
+          "V70",
+          "n_records",
+          300
+        ],
+        [
+          "V71",
+          "allhit_ttft_speedup_L512_N10",
+          5.547
+        ],
+        [
+          "V71",
+          "identity_violations",
+          0
+        ],
+        [
+          "V71",
+          "identity_blocks_checked",
+          48
+        ],
+        [
+          "V71",
+          "grid_cells",
+          240
+        ],
+        [
+          "V71",
+          "repeats_per_cell",
+          15
+        ]
+      ]
     }
   },
   "schema_version": 1,
@@ -1721,6 +2494,12 @@
       "path": "experiments/v72_preregistration.json",
       "required": true,
       "sha256": "baa0bbbb01a782fbc006fc438868933eb2a4393debacef62fd0d6b15f9afd88d"
+    },
+    "v72s2_confirmation_verdict": {
+      "path": "results/v72s2_confirmation_analysis/verdict.json",
+      "sha256": "d398b260993d35337218c152d60ba4a04739cb6176320f3ce1d913eb96526ad4",
+      "bytes": 21927,
+      "required": true
     }
   }
 }

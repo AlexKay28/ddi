@@ -27,7 +27,7 @@ def source(evidence, name, root=ROOT):
         raise ValueError(f"Source hash mismatch: {spec['path']}")
     if spec["path"].endswith(".jsonl"):
         return [json.loads(line) for line in data.splitlines()]
-    if spec["path"].endswith(".log"):
+    if spec["path"].endswith((".log", ".md")):
         return data.decode("utf-8")
     return json.loads(data)
 
@@ -515,47 +515,75 @@ def reference_artifact_analysis(evidence, root=ROOT):
 
 
 def v66_boundary_analysis(evidence, root=ROOT):
-    """Verify T13 rows against the pinned V66 fragment and boundary summary."""
+    """Verify T13 per-(L, N) h_eff rows against the pinned V66 crossover table."""
     artifact = evidence["artifacts"]["T13_v66_boundary"]
     if artifact["data_role"] != "development":
         raise ValueError("T13_v66_boundary must remain development-role evidence")
-    fragment = source(evidence, "v66_boundary_t9_followup", root)
+    table_text = source(evidence, "v66_boundary_crossover_table", root)
     summary = source(evidence, "v66_boundary_summary", root)
-    if fragment["schema_version"] != "v66_boundary_t9_followup_v1":
-        raise ValueError("V66 fragment schema mismatch")
+    if not isinstance(table_text, str) or "smallest nominal h in the frozen grid" not in table_text:
+        raise ValueError("V66 crossover table source is invalid")
     if summary["schema_version"] != "v66_boundary_summary_v1":
         raise ValueError("V66 boundary summary schema mismatch")
-    expected = [
-        [row["L"], row["decode_budget"], row["crossover_h_wall"], row["crossover_h_ttft"]]
-        for row in fragment["rows"]
-    ]
+
+    block_re = re.compile(r"## L = (\d+), N = (\d+)\n\n(.*?)\n\n", re.S)
+    row_re = re.compile(
+        r"^\| [^|]+ \| (?P<hits>\d+) \| (?P<heff>\d+(?:\.\d+)?) \| "
+        r"(?P<w1>[0-9.]+) \[(?P<w1lo>[0-9.]+), (?P<w1hi>[0-9.]+)\] \| "
+        r"(?P<w8>[0-9.]+) \[(?P<w8lo>[0-9.]+), (?P<w8hi>[0-9.]+)\] \| "
+        r"(?P<w16>[0-9.]+) \[(?P<w16lo>[0-9.]+), (?P<w16hi>[0-9.]+)\] \| "
+        r"(?P<w32>[0-9.]+) \[(?P<w32lo>[0-9.]+), (?P<w32hi>[0-9.]+)\] \| "
+        r"(?P<w64>[0-9.]+) \[(?P<w64lo>[0-9.]+), (?P<w64hi>[0-9.]+)\] \| "
+        r"(?P<ttft>[0-9.]+) \[(?P<ttftlo>[0-9.]+), (?P<ttfthi>[0-9.]+)\] \| "
+        r"(?P<ttftv>\w+) \|",
+        re.M,
+    )
+    expected: dict[tuple, list] = {}
+    nominal: dict[tuple, list] = {}
+    for block in block_re.finditer(table_text):
+        L, N = int(block.group(1)), int(block.group(2))
+        best = {d: None for d in ("1", "8", "16", "32", "64")}
+        best_nom = {d: None for d in best}
+        best_ttft = None
+        best_ttft_nom = None
+        for row in row_re.finditer(block.group(3)):
+            hits, heff = int(row["hits"]), float(row["heff"])
+            for d in ("1", "8", "16", "32", "64"):
+                # frozen materiality rule: wall win iff paired CI low > 1.05
+                if best[d] is None and float(row[f"w{d}lo"]) > 1.05:
+                    best[d] = heff
+                    best_nom[d] = hits
+            if best_ttft is None and row["ttftv"] == "win":
+                best_ttft = heff
+                best_ttft_nom = hits
+        expected[(L, N)] = [best[d] for d in ("1", "8", "16", "32", "64")] + [best_ttft]
+        nominal[(L, N)] = [best_nom[d] for d in ("1", "8", "16", "32", "64")] + [best_ttft_nom]
+
     rows = artifact["rows"]
-    if len(rows) != 15 or len(expected) != 15:
-        raise ValueError("T13_v66_boundary must hold the 15-cell length x budget grid")
+    if len(rows) != 9 or len(expected) != 9:
+        raise ValueError("T13_v66_boundary must hold the 9-cell L x N grid")
     wall_crossovers = ttft_crossovers = 0
-    for row, want in zip(rows, expected, strict=True):
-        context = f"T13_v66_boundary (L={row[0]}, {row[1]})"
-        if row[0] != want[0] or row[1] != want[1]:
-            raise ValueError(f"{context}: pinned label does not match artifact")
-        for observed, wanted, label in (
-            (row[2], want[2], "wall crossover"),
-            (row[3], want[3], "TTFT crossover"),
-        ):
-            if (observed is None) != (wanted is None):
-                raise ValueError(f"{context}: pinned {label} does not match artifact")
-            if wanted is not None:
-                _pinned_matches(observed, wanted, f"{context} {label}")
-        block = summary["crossover"][f"L{row[0]}|{row[1]}"]
-        for observed, wanted, label in (
-            (row[2], block["wall_crossover_h"], "wall crossover"),
-            (row[3], block["ttft_crossover_h"], "TTFT crossover"),
-        ):
-            if (observed is None) != (wanted is None):
-                raise ValueError(f"{context}: summary {label} does not match artifact")
-            if wanted is not None:
-                _pinned_matches(observed, wanted, f"{context} summary {label}")
-        wall_crossovers += row[2] is not None
-        ttft_crossovers += row[3] is not None
+    for row in rows:
+        L, N = row[0], row[1]
+        context = f"T13_v66_boundary (L={L}, N={N})"
+        want = expected.get((L, N))
+        if want is None:
+            raise ValueError(f"{context}: no pinned block for this shape")
+        observed = row[2:]
+        for idx, (obs, was) in enumerate(zip(observed, want, strict=True)):
+            if (obs is None) != (was is None):
+                raise ValueError(f"{context} budget {idx}: pinned h_eff does not match table")
+            if was is not None:
+                _pinned_matches(obs, was, f"{context} budget {idx} h_eff")
+        wall_crossovers += observed[0] is not None
+        ttft_crossovers += observed[5] is not None
+    stored_nominal = artifact.get("nominal")
+    if not isinstance(stored_nominal, list) or len(stored_nominal) != 9:
+        raise ValueError("T13_v66_boundary must carry per-row nominal grid labels")
+    for row, want in zip(rows, stored_nominal, strict=True):
+        got = nominal[(row[0], row[1])]
+        if want != got:
+            raise ValueError(f"T13_v66_boundary nominal labels mismatch for (L={row[0]}, N={row[1]})")
     if artifact["repeats_per_cell"] != summary["grid_executed"]["repeats_used"]:
         raise ValueError("T13_v66_boundary repeats-per-cell mismatch")
     identity = summary["identity"]
@@ -1042,7 +1070,9 @@ Hit rate / sparsity & \textcolor{ddiPurple}{V59 measured crossover + analytical 
             "",
         ]
     )
-    out["A1_cache_bins.tex"] = "\n".join([*table, r"\bottomrule", r"\end{tabular}", ""])
+    out["A1_cache_bins.tex"] = "\n".join(
+        [r"\resizebox{\linewidth}{!}{%", *table, r"\bottomrule", r"\end{tabular}}", ""]
+    )
     out["analysis.json"] = (
         json.dumps(
             {

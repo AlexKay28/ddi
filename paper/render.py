@@ -48,6 +48,10 @@ EXPECTED_ARTIFACTS = {
     "V64_timing_recheck",
     "V71_sweep",
     "V72_replication",
+    "V14_v71_crossover_L512",
+    "V15_v71_crossover_L128",
+    "V16_gate_deltas",
+    "V17_program_timeline",
 }
 GENERATED_FILES = (
     "T1_mask_taxonomy.md",
@@ -186,7 +190,7 @@ def load_evidence(path: Path = DEFAULT_EVIDENCE) -> dict[str, Any]:
         "T10_qa_confirmation": 6,
         "T11_v59_crossover": 8,
         "T12_v57_matched": 6,
-        "T13_v66_boundary": 4,
+        "T13_v66_boundary": 8,
         "T14_v69_attribution": 3,
         "T15_v70_gates": 5,
         "T16_v68_anatomy": 2,
@@ -663,7 +667,7 @@ def _render_t12(evidence: dict[str, Any]) -> str:
 
 def _render_t13(evidence: dict[str, Any]) -> str:
     artifact = evidence["artifacts"]["T13_v66_boundary"]
-    rows = _rows(evidence["artifacts"], "T13_v66_boundary", 4)
+    rows = _rows(evidence["artifacts"], "T13_v66_boundary", 8)
     identical = artifact["byte_identical_repeats"]
     _require(
         isinstance(identical, list) and len(identical) == 2,
@@ -686,40 +690,58 @@ def _render_t13(evidence: dict[str, Any]) -> str:
         "T13_v66_boundary.all_hit_wall_dilution is invalid",
     )
     divergent = identical[1] - identical[0]
+    budgets = ("d=1", "d=8", "d=16", "d=32", "d=64", "TTFT")
     lines = [
         _source_header(evidence, "T13_v66_boundary").rstrip(),
-        r"\begin{tabular}{llr}",
+        r"\begin{tabular}{llrrrrrr}",
         r"\toprule",
-        r"Document length & Decode budget & Crossover hit fraction $h$ (wall / TTFT) \\",
+        r"& & \multicolumn{5}{l}{smallest winning $h_{\mathrm{eff}}$ (wall)} & "
+        r"smallest winning \\",
+        r"$L$ & $N$ & d=1 & d=8 & d=16 & d=32 & d=64 & TTFT $h_{\mathrm{eff}}$ \\",
         r"\midrule",
     ]
-    for length, budget, wall, ttft in rows:
-        _require(
-            (wall is None or _finite(wall)) and (ttft is None or _finite(ttft)),
-            f"T13_v66_boundary crossover is invalid for (L={length}, {budget})",
-        )
-        wall_text = "none in grid" if wall is None else rf"${wall:g}$"
-        ttft_text = "none in grid" if ttft is None else rf"${ttft:g}$"
-        lines.append(f"L={length} & {_tex_name(budget)} & {wall_text} / {ttft_text} " + r"\\")
+    prev_l = None
+    for row in rows:
+        length, n_docs = row[0], row[1]
+        _require(isinstance(length, int) and length in (32, 128, 512), f"T13 L invalid: {length}")
+        _require(isinstance(n_docs, int) and n_docs in (2, 5, 10), f"T13 N invalid: {n_docs}")
+        cells = row[2:]
+        rendered = []
+        for value in cells:
+            _require(value is None or _finite(value), f"T13 invalid h_eff: {value}")
+            rendered.append("---" if value is None else rf"${value:g}$")
+        if prev_l is not None and length != prev_l:
+            lines.append(r"\midrule")
+        prev_l = length
+        lines.append(f"L={length} & {n_docs} & " + " & ".join(rendered) + r" \\")
     lines.append(r"\midrule")
     lines.append(
-        r"\multicolumn{3}{l}{Development data (frozen V62 split, seed 47, single seed): "
-        rf"outputs byte-identical on {identical[0]}/{identical[1]} timed repeats.}} \\"
+        r"\multicolumn{8}{p{0.97\linewidth}}{\footnotesize Cells are $h_{\mathrm{eff}}$"
+        r"{=}hit\_count/$N$ of the \emph{smallest tested winning configuration} for that "
+        r"shape under the frozen materiality rule (win iff bootstrap CI low${}>1.05$); "
+        r"---{} = none in the frozen grid. These are grid-specific boundaries, not "
+        r"universal thresholds.} \\"
     )
     lines.append(
-        rf"\multicolumn{{3}}{{l}}{{Headline all-hit TTFT speedup "
-        rf"({_tex_name(headline['context'])}): "
-        rf"${headline['point']:.2f}\;[{headline['ci'][0]:.2f}, {headline['ci'][1]:.2f}]$; "
-        rf"the all-hit wall speedup dilutes from ${dilution['d1']:.2f}\times$ (d=1) "
-        rf"to ${dilution['d64']:.2f}\times$ (d=64).}} \\"
+        r"\multicolumn{8}{p{0.97\linewidth}}{\footnotesize Development data (frozen V62 "
+        rf"split, seed 47, single seed): outputs byte-identical on {identical[0]}/{identical[1]}"
+        r" timed repeats.} \\"
     )
     lines.append(
-        rf"\multicolumn{{3}}{{l}}{{The {divergent} divergent repeats are bf16 "
+        r"\multicolumn{8}{p{0.97\linewidth}}{\footnotesize Headline all-hit TTFT speedup "
+        rf"({_tex_name(headline['context'])}): ${headline['point']:.2f}\,"
+        rf"[{headline['ci'][0]:.2f}, {headline['ci'][1]:.2f}]$; the all-hit wall speedup "
+        rf"dilutes from ${dilution['d1']:.2f}\times$ (d=1) to ${dilution['d64']:.2f}\times$"
+        r" (d=64).} \\"
+    )
+    lines.append(
+        r"\multicolumn{8}{p{0.97\linewidth}}{\footnotesize The "
+        rf"{divergent} divergent repeats are bf16 "
         r"reduction-order flips deeper in the trajectory; the first decoded token is "
         r"always identical.} \\"
     )
     lines.extend([r"\bottomrule", r"\end{tabular}"])
-    return _table(lines)
+    return _table([lines[0], r"\resizebox{\linewidth}{!}{%"] + lines[1:] + [r"}"])
 
 
 def _render_t14(evidence: dict[str, Any]) -> str:
@@ -804,7 +826,7 @@ def _render_t14(evidence: dict[str, Any]) -> str:
         rf"{cold_b:.2f} ms (B/old-B {b_over_oldb:.4f}).}} \\"
     )
     lines.extend([r"\bottomrule", r"\end{tabular}"])
-    return _table(lines)
+    return _table([lines[0], r"\resizebox{\linewidth}{!}{%"] + lines[1:] + [r"}"])
 
 
 def _render_t15(evidence: dict[str, Any]) -> str:
@@ -939,49 +961,48 @@ def _render_t16(evidence: dict[str, Any]) -> str:
         r"records; no rate or causal claims.} \\"
     )
     lines.extend([r"\bottomrule", r"\end{tabular}"])
-    return _table(lines)
+    return _table([lines[0], r"\resizebox{\linewidth}{!}{%"] + lines[1:] + [r"}"])
 
 
 def _render_t17(evidence: dict[str, Any]) -> str:
     rows = _rows(evidence["artifacts"], "T17_v71_boundary", 6)
     lines = [
         _source_header(evidence, "T17_v71_boundary").rstrip(),
-        r"\begin{tabular}{llrrlrrl}",
+        r"\begin{tabular}{llrrrr}",
         r"\toprule",
-        r"budget & $L$ & V66 wall $h$ & V71 wall $h$ & shift"
-        r" & V66 TTFT $h$ & V71 TTFT $h$ & shift \\",
+        r"& & \multicolumn{2}{l}{smallest winning $h_{\mathrm{eff}}$ (wall d=1)}"
+        r" & \multicolumn{2}{l}{smallest winning $h_{\mathrm{eff}}$ (TTFT)} \\",
+        r"\cmidrule(lr){3-4}\cmidrule(lr){5-6}",
+        r"$L$ & $N$ & V66 & V71 & V66 & V71 \\",
         r"\midrule",
     ]
+
+    def fmt(value: Any) -> str:
+        _require(value is None or _finite(value), f"T17 invalid h_eff: {value}")
+        return "---" if value is None else rf"${value:g}$"
+
+    prev_l = None
     for i, row in enumerate(rows):
-        budget, L, w66, w71, t66, t71 = row
+        L, n_docs, w66, w71, t66, t71 = row
         _require(isinstance(L, int) and L in (32, 128, 512), f"T17 L invalid: {L}")
-        _require(budget in ("TTFT", "d=8", "d=16", "d=32", "d=64"),
-                  f"T17 budget invalid: {budget}")
-
-        def fmt(h: Any) -> str:
-            return "none" if h == "none" or h is None else f"{h:g}"
-
-        def shift(old: Any, new: Any) -> str:
-            o = None if old == "none" else old
-            n = None if new == "none" else new
-            if o is None and n is None:
-                return "---"
-            if o is None:
-                return "appears"
-            if n is None:
-                return "lost"
-            if n == o:
-                return "0"
-            return f"{n - o:+g}"
-
-        lines.append(
-            f"{budget} & {L} & {fmt(w66)} & {fmt(w71)} & {shift(w66, w71)} "
-            f"& {fmt(t66)} & {fmt(t71)} & {shift(t66, t71)} \\\\"
-        )
-        if L != 512 and i < len(rows) - 1 and rows[i + 1][1] != L:
+        _require(isinstance(n_docs, int) and n_docs in (2, 5, 10), f"T17 N invalid: {n_docs}")
+        if prev_l is not None and L != prev_l:
             lines.append(r"\midrule")
+        prev_l = L
+        lines.append(
+            f"L={L} & {n_docs} & {fmt(w66)} & {fmt(w71)} & {fmt(t66)} & {fmt(t71)} \\\\"
+        )
+    lines.append(r"\midrule")
+    lines.append(
+        r"\multicolumn{6}{p{0.97\linewidth}}{\footnotesize Every value is "
+        r"$h_{\mathrm{eff}}$=hit\_count/$N$ of the smallest tested winning configuration "
+        r"on the frozen development grid (win iff bootstrap CI low${}>1.05$); ---{} = none "
+        r"in the grid. Grid-specific boundaries, not universal thresholds. V66 columns "
+        r"from the pinned V66 crossover table; V71 columns from the pinned V71 sweep "
+        r"verdicts (A/CP, untrained-restart reference A).} \\"
+    )
     lines.extend([r"\bottomrule", r"\end{tabular}"])
-    return _table(lines)
+    return _table([lines[0], r"\resizebox{\linewidth}{!}{%"] + lines[1:] + [r"}"])
 
 
 def _render_f5(evidence: dict[str, Any]) -> str:
@@ -1021,6 +1042,297 @@ def _render_f5(evidence: dict[str, Any]) -> str:
     return _table(lines)
 
 
+_SERIES_COLORS = {2: "ddiBlue", 5: "ddiGreen", 10: "ddiGold"}
+_N_LABEL = {2: r"$N{=}2$", 5: r"$N{=}5$", 10: r"$N{=}10$"}
+
+
+def _crossover_panel(
+    evidence: dict[str, Any],
+    artifact_name: str,
+    *,
+    ymax: float,
+) -> str:
+    """Two-panel crossover chart (wall d=1 | TTFT) from pinned per-cell ratios."""
+    rows = _rows(evidence["artifacts"], artifact_name, 7)
+    series: dict[tuple[str, int], list[tuple[float, float, float]]] = {}
+    for contract, n_docs, h_eff, hit_count, nominal, wall, ttft in rows:
+        _require(
+            contract in ("V66", "V71") and n_docs in (2, 5, 10),
+            f"{artifact_name} series invalid: {contract}, {n_docs}",
+        )
+        _require(
+            _finite(h_eff, wall, ttft) and 0.0 <= h_eff <= 1.0,
+            f"{artifact_name} values invalid for {contract} N={n_docs}",
+        )
+        series.setdefault((contract, n_docs), []).append((h_eff, wall, ttft))
+    for key, points in series.items():
+        points.sort()
+        h_effs = [p[0] for p in points]
+        _require(len(set(h_effs)) == len(h_effs), f"{artifact_name} duplicate x for {key}")
+
+    def coords(contract: str, n_docs: int, column: int) -> str:
+        return " ".join(
+            f"({p[0]:g},{p[column]:g})" for p in series[(contract, n_docs)]
+        )
+
+    lines = [_source_header(evidence, artifact_name).rstrip(), r"\begin{tikzpicture}", r"\begin{groupplot}["]
+    lines.append(
+        r"  group style={group size=2 by 1, horizontal sep=1.5cm},"
+        r"  width=0.46\linewidth, height=5.8cm,"
+        r"  xlabel={$h_{\mathrm{eff}}$ = hit\_count/$N$ (actual cached fraction)},"
+        r"  xmin=0, xmax=1.05, ymin=0,"
+        rf"  ymax={ymax:g},"
+        r"  grid=both, grid style={gray!20},"
+        r"  title style={font=\small},"
+        r"  tick label style={font=\scriptsize}, label style={font=\small},"
+        r"]"
+    )
+    titles = ("A/CP wall speedup, decode $d{=}1$", "A/CP TTFT speedup")
+    for panel, (title, idx) in enumerate(zip(titles, (1, 2))):
+        head = r"\nextgroupplot[title={" + title + r"}]"
+        if panel == 0:
+            head += (
+                r"\legend{"
+                + ",".join(
+                    f"{{V66 {_N_LABEL[n]}}}" for n in (2, 5, 10)
+                )
+                + "}"
+            )
+        lines.append(head)
+        lines.append(r"\addplot[gray, dashed, no marks, domain=0:1.05] {1};")
+        for n_docs in (2, 5, 10):
+            color = _SERIES_COLORS[n_docs]
+            lines.append(
+                rf"\addplot[{color}, dashed, mark=*, mark size=1.5pt,"
+                rf" mark options={{solid}}, forget plot] coordinates"
+                rf" {{{coords('V66', n_docs, idx)}}};"
+            )
+            lines.append(
+                rf"\addplot[{color}, solid, mark=square*, mark size=1.5pt,"
+                rf" mark options={{solid}}, forget plot] coordinates"
+                rf" {{{coords('V71', n_docs, idx)}}};"
+            )
+    lines.append(r"\end{groupplot}")
+    # one shared legend matrix under the panels
+    lines.append(
+        r"\matrix [draw=none, anchor=north, font=\scriptsize,"
+        r" matrix of nodes, nodes={anchor=west}, row sep=1pt,"
+        r" column sep=10pt] at (current bounding box.south) {"
+    )
+    legend_cells = []
+    for n_docs in (2, 5, 10):
+        color = _SERIES_COLORS[n_docs]
+        legend_cells.append(
+            rf"\tikz\draw[{color},dashed] (0,0) -- (0.35,0); V66 {_N_LABEL[n_docs]} & "
+            rf"\tikz\draw[{color},solid] (0,0) -- (0.35,0); V71 {_N_LABEL[n_docs]}"
+        )
+    lines.append(" \\\\\n".join(legend_cells) + r" \\};")
+    lines.append(r"\end{tikzpicture}")
+    return "\n".join(lines) + "\n"
+
+
+def _render_v14(evidence: dict[str, Any]) -> str:
+    return _crossover_panel(evidence, "V14_v71_crossover_L512", ymax=7.0)
+
+
+def _render_v15(evidence: dict[str, Any]) -> str:
+    return _crossover_panel(evidence, "V15_v71_crossover_L128", ymax=3.0)
+
+
+def _render_v16(evidence: dict[str, Any]) -> str:
+    rows = _rows(evidence["artifacts"], "V16_gate_deltas", 11)
+    stations = []
+    for row in rows:
+        station, family, seed, k = row[0], row[1], row[2], row[3]
+        cb, cb_lo, cb_hi, cd, cd_lo, cd_hi, n = row[4:11]
+        _require(
+            _finite(cb, cb_lo, cb_hi, cd, cd_lo, cd_hi) and n == 300,
+            f"V16_gate_deltas values invalid for {station}",
+        )
+        _require(
+            cb == 0.0 and cb_lo == 0.0 and cb_hi == 0.0,
+            f"V16_gate_deltas: C-B is not exact zero for {station}",
+        )
+        stations.append(
+            {
+                "coord": station,
+                "label": f"{station} ({family}, seed {seed}, k={k})",
+                "cb": cb,
+                "cb_lo": cb_lo,
+                "cb_hi": cb_hi,
+                "cd": cd,
+                "cd_lo": cd_lo,
+                "cd_hi": cd_hi,
+            }
+        )
+    names = [s["coord"] for s in stations]
+
+    def ci(s: dict, prefix: str) -> str:
+        return (
+            f"({s['coord']},{s[prefix]:g}) += (0,{s[prefix + '_hi'] - s[prefix]:g})"
+            f" -= (0,{s[prefix] - s[prefix + '_lo']:g})"
+        )
+
+    lines = [
+        _source_header(evidence, "V16_gate_deltas").rstrip(),
+        r"% V16: trained-contract quality gates across the three n=300 confirmations.",
+        r"% C-B is exactly 0.000 with degenerate CI [0,0] at every station: the",
+        r"% all-zero paired differences make every bootstrap resample zero, so the",
+        r"% interval carries no information beyond the point mass (VIBEQUEUE-94).",
+        r"\begin{tikzpicture}",
+        r"\begin{axis}[",
+        r"  width=0.95\linewidth, height=6.4cm,",
+        r"  ybar, bar width=16pt,",
+        rf"  symbolic x coords={{{','.join(names)}}},",
+        r"  xtick=data,",
+        r"  xticklabels={" + ",".join("{" + s["label"] + "}" for s in stations) + "},",
+        r"  xticklabel style={font=\scriptsize},",
+        r"  ylabel={EM delta vs.\ reference},",
+        r"  ymin=-0.03, ymax=0.42, enlarge x limits=0.25,",
+        r"  legend style={at={(0.02,0.98)}, anchor=north west, font=\scriptsize},",
+        r"  grid=both, grid style={gray!20},",
+        r"]",
+        r"\addplot[ddiGreen, fill=ddiGreen!50, mark=diamond*, mark size=3pt,"
+        r"         error bars/.cd, y dir=both, y explicit]",
+        "  coordinates {" + " ".join(ci(s, "cb") for s in stations) + "};",
+        r"\addlegendentry{C$-$B identity gate (exact $0$, degenerate CI)}",
+        r"\addplot[ddiBlue, fill=ddiBlue!55,",
+        r"         error bars/.cd, y dir=both, y explicit]",
+        "  coordinates {" + " ".join(ci(s, "cd") for s in stations) + "};",
+        r"\addlegendentry{C$-$D vs no-cache reference (95\% CI)}",
+    ]
+    for s in stations:
+        lines.append(
+            rf"\node[font=\scriptsize, ddiGreen, anchor=south] at (axis cs:{s['coord']},0.012)"
+            rf" {{$0.000\;[0,0]$}};"
+        )
+        lines.append(
+            rf"\node[font=\scriptsize, ddiBlue, anchor=south] at (axis cs:{s['coord']},"
+            rf"{s['cd_hi'] + 0.055:g}) {{$+{s['cd']:.3f}$}};"
+        )
+    lines.extend([r"\end{axis}", r"\end{tikzpicture}"])
+    return "\n".join(lines) + "\n"
+
+
+def _render_v17(evidence: dict[str, Any]) -> str:
+    rows = _rows(evidence["artifacts"], "V17_program_timeline", 3)
+    values = {row[1]: row[2] for row in rows}
+    expected = {
+        "hit_rate",
+        "cache_over_fresh_wall",
+        "divergent_streams",
+        "measured_streams",
+        "allhit_speedup_vs_monolithic",
+        "byte_identical_pairs",
+        "byte_identical_total",
+        "cb_em",
+        "n_records",
+        "allhit_ttft_speedup_L512_N10",
+        "identity_violations",
+        "identity_blocks_checked",
+        "grid_cells",
+        "repeats_per_cell",
+    }
+    _require(set(values) == expected, f"V17_program_timeline fields mismatch: {sorted(values)}")
+    _require(
+        values["cb_em"] == 0.0
+        and values["byte_identical_pairs"] == values["byte_identical_total"]
+        and values["identity_violations"] == 0
+        and values["grid_cells"] == 240,
+        "V17_program_timeline anchor values drifted",
+    )
+    lines = [
+        _source_header(evidence, "V17_program_timeline").rstrip(),
+        r"% V17: program arc from diagnostic cache to production trained contract.",
+        r"% All displayed values come from the pinned V17_program_timeline ledger rows.",
+        r"\begin{tikzpicture}[font=\scriptsize]",
+        r"  \draw[gray, thick, ->] (0,0) -- (13.4,0);",
+        r"  \node[circle, fill=ddiRed,   inner sep=2.4pt] (v53) at (1.6,0) {};",
+        r"  \node[circle, fill=ddiGold,  inner sep=2.4pt] (v65) at (5.2,0) {};",
+        r"  \node[circle, fill=ddiGreen, inner sep=2.4pt] (v70) at (8.8,0) {};",
+        r"  \node[circle, fill=ddiBlue,  inner sep=2.4pt] (v71) at (12.0,0) {};",
+        r"  \node[font=\tiny, gray, anchor=south] at (1.6,0.10) {Sep 7};",
+        r"  \node[font=\tiny, gray, anchor=south] at (5.2,0.10) {Sep 10};",
+        r"  \node[font=\tiny, gray, anchor=south] at (8.8,0.10) {Sep 11};",
+        r"  \node[font=\tiny, gray, anchor=south] at (12.0,0.10) {Sep 12};",
+        r"  \node[draw=gray!40, fill=gray!5, rounded corners, align=left, anchor=north, text width=3.9cm]",
+        r"    at (1.6,-0.35)",
+        rf"    {{\textbf{{V53}} diagnostic cache:\\ {values['hit_rate'] * 100:.1f}\% hits but"
+        rf" ${values['cache_over_fresh_wall']:.2f}\times$",
+        rf"     \emph{{slower}} than fresh\\ [1pt] and greedy decodes diverge on"
+        rf" {values['divergent_streams']}/{values['measured_streams']} measured streams}};",
+        r"  \node[draw=gray!40, fill=gray!5, rounded corners, align=left, anchor=south, text width=3.9cm]",
+        r"    at (5.2,0.35)",
+        r"    {\textbf{V65} serving contract fixed:\\ byte-identical"
+        rf" {values['byte_identical_pairs']:.0f}/{values['byte_identical_total']:.0f};\\",
+        rf"     all-hit ${values['allhit_speedup_vs_monolithic']:.2f}\times$ faster than"
+        r" monolithic};",
+        r"  \node[draw=gray!40, fill=gray!5, rounded corners, align=left, anchor=north, text width=4.1cm]",
+        r"    at (8.8,-0.35)",
+        r"    {\textbf{V70} admissible confirmation ($n{=}$"
+        rf"{values['n_records']:.0f}$)$:\\",
+        rf"     C$-$B $={values['cb_em']:.3f}$ $[0,0]$ on EM and F1;\\ both preregistered"
+        r" gates PASS};",
+        r"  \node[draw=gray!40, fill=gray!5, rounded corners, align=left, anchor=south, text width=3.4cm]",
+        r"    at (12.0,0.35)",
+        r"    {\textbf{V71} trained contract:\\ all-hit TTFT up to"
+        rf" ${values['allhit_ttft_speedup_L512_N10']:.2f}\times$;\\",
+        r"     zero identity violations in"
+        rf" {values['grid_cells']:.0f} configurations"
+        rf" ({values['repeats_per_cell']:.0f} repeats)}};",
+        r"\end{tikzpicture}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def _render_v18(evidence: dict[str, Any]) -> str:
+    artifact = evidence["artifacts"]["T16_v68_anatomy"]
+    rows = _rows(evidence["artifacts"], "T16_v68_anatomy", 2)
+    labels = {
+        "near_tie_greedy_flip": "near-tie flip",
+        "clear_semantic_change": "semantic change",
+        "truncation_stopping_artifact": "truncation artifact",
+        "ambiguous": "ambiguous",
+    }
+    counts = {row[0]: row[1] for row in rows}
+    _require(set(counts) == set(labels), f"T16_v68_anatomy categories mismatch: {sorted(counts)}")
+    total = sum(counts.values())
+    _require(
+        total == artifact["n_divergent"] == 22,
+        f"T16_v68_anatomy total {total} != n_divergent {artifact['n_divergent']}",
+    )
+    order = ["ambiguous", "truncation_stopping_artifact", "near_tie_greedy_flip",
+             "clear_semantic_change"]
+    lines = [
+        _source_header(evidence, "T16_v68_anatomy").rstrip(),
+        r"% V18: anatomy of the 22 divergent cached/fresh confirmation records (V68).",
+        r"% Counts from the pinned T16_v68_anatomy ledger artifact.",
+        r"\begin{tikzpicture}",
+        r"\begin{axis}[",
+        r"  width=0.92\linewidth, height=5.4cm,",
+        r"  xbar, bar width=13pt,",
+        rf"  symbolic y coords={{{','.join(labels[c] for c in order)}}},",
+        r"  ytick=data,",
+        r"  xtick={0,2,4,6,8,10,12},",
+        r"  xlabel={{Divergent records (of 22)}},",
+        r"  xmin=0, xmax=13,",
+        r"  yticklabel style={font=\scriptsize},",
+        r"  tick label style={font=\scriptsize},",
+        r"  label style={font=\small},",
+        r"  nodes near coords, nodes near coords align={horizontal},",
+        r"  every node near coord/.append style={font=\scriptsize},",
+        r"  grid=both, grid style={gray!20},",
+        r"]",
+        r"\addplot[ddiBlue!60, draw=ddiBlue]",
+        "  coordinates {"
+        + " ".join(f"({counts[c]},{labels[c]})" for c in order)
+        + "};",
+        r"\end{axis}",
+        r"\end{tikzpicture}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def render(evidence: dict[str, Any]) -> dict[str, str]:
     rendered = _render_t1(evidence)
     visuals = render_visuals(evidence)
@@ -1052,17 +1364,15 @@ def render(evidence: dict[str, Any]) -> dict[str, str]:
         }
     )
     rendered.update(visuals)
-    # Pre-generated data-driven figures (not from evidence.json artifacts)
-    for name in (
-        "V14_crossover_chart.tex",
-        "V15_crossover_L128.tex",
-        "V16_gate_deltas.tex",
-        "V17_program_timeline.tex",
-        "V18_anatomy.tex",
-    ):
-        path = ROOT / "paper" / "generated" / name
-        if path.exists():
-            rendered[name] = path.read_text(encoding="utf-8")
+    rendered.update(
+        {
+            "V14_crossover_chart.tex": _render_v14(evidence),
+            "V15_crossover_L128.tex": _render_v15(evidence),
+            "V16_gate_deltas.tex": _render_v16(evidence),
+            "V17_program_timeline.tex": _render_v17(evidence),
+            "V18_anatomy.tex": _render_v18(evidence),
+        }
+    )
     _require(set(rendered) == set(GENERATED_FILES), "renderer output set is incomplete")
     return rendered
 

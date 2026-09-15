@@ -447,13 +447,17 @@ def test_v66_crossover_table_is_rendered_from_the_pinned_boundary() -> None:
         "825",
         "2.90",
         "1.22",
-        "none in grid",
+        "smallest tested winning configuration",
         "bf16 reduction-order",
         "first decoded token is always identical",
         "sha256=3a4752465fe6cf0ec7b326e1a6f7108b5401dad588792188bf331f70b5a4a215",
         "sha256=b6654e8e88b24b18d8076a388a9c72ed8a5ef3d1049cb382ed201fa5017afe3b",
     ):
         assert needle in t13
+    # VIBEQUEUE-91: cells are actual hit fractions h_eff = hit_count/N
+    assert "$h_{\\mathrm{eff}}$" in t13
+    for value in ("0.8", "1", "---"):
+        assert value in t13
 
 
 def test_v66_headline_and_dilution_match_the_pinned_crossover_table() -> None:
@@ -633,7 +637,7 @@ def test_v68_anatomy_counts_match_the_pinned_classifications() -> None:
     ("T10_qa_confirmation", 6),
     ("T11_v59_crossover", 8),
     ("T12_v57_matched", 6),
-    ("T13_v66_boundary", 4),
+    ("T13_v66_boundary", 8),
     ("T14_v69_attribution", 3),
     ("T15_v70_gates", 5),
     ("T16_v68_anatomy", 2),
@@ -675,3 +679,69 @@ def test_new_table_mutations_fail_against_pinned_artifacts(
 
     with pytest.raises(ValueError, match=match):
         render(evidence)
+
+
+# ---------------------------------------------------------------------------
+# VIBEQUEUE-92: every plotted value in V14-V18 is rendered from the pinned
+# ledger, so --check detects drift in plotted numbers (no self-comparison).
+# ---------------------------------------------------------------------------
+
+
+def test_v14_v15_plot_pinned_wall_and_ttft_series() -> None:
+    evidence = load_evidence()
+    for artifact, name, ymax in (
+        ("V14_v71_crossover_L512", "V14_crossover_chart.tex", "ymax=7"),
+        ("V15_v71_crossover_L128", "V15_crossover_L128.tex", "ymax=3"),
+    ):
+        rows = evidence["artifacts"][artifact]["rows"]
+        figure = render(evidence)[name]
+        assert ymax in figure
+        assert "A/CP wall speedup" in figure and "A/CP TTFT speedup" in figure
+        # headline cell: trained contract, N=10, all hits
+        headline = next(r for r in rows if r[0] == "V71" and r[1] == 10 and r[2] == 1.0)
+        assert f"(1,{headline[5]:g})" in figure  # wall d=1
+        assert f"(1,{headline[6]:g})" in figure  # TTFT
+    # pinned L512 TTFT headline is 5.547, not the old unpinned 6.558 wall value
+    v14 = render(evidence)["V14_crossover_chart.tex"]
+    assert "(1,5.547)" in v14 and "(1,6.55)" in v14
+    assert "6.558" not in v14
+
+
+def test_v17_values_come_from_the_pinned_timeline_rows() -> None:
+    evidence = load_evidence()
+    values = {r[1]: r[2] for r in evidence["artifacts"]["V17_program_timeline"]["rows"]}
+    figure = render(evidence)["V17_program_timeline.tex"]
+    assert f"{values['hit_rate'] * 100:.1f}" in figure
+    assert f"{values['cache_over_fresh_wall']:.2f}" in figure
+    assert f"{values['allhit_speedup_vs_monolithic']:.2f}" in figure
+    assert f"{values['allhit_ttft_speedup_L512_N10']:.2f}" in figure
+
+
+def test_v16_rejects_nonzero_identity_gate() -> None:
+    evidence = copy.deepcopy(load_evidence())
+    evidence["artifacts"]["V16_gate_deltas"]["rows"][0][4] = 0.001
+
+    with pytest.raises(ValueError, match="not exact zero"):
+        render(evidence)
+
+
+def test_t17_reports_ttft_crossovers_missing_before() -> None:
+    # VIBEQUEUE-92: the old table recorded 'none' for every V71 TTFT row even
+    # though the pinned summary records crossovers at L=128 and L=512.
+    t17 = render(load_evidence())["T17_v71_boundary.tex"]
+    assert "V66 & V71 & V66 & V71" in t17
+    for value in ("0.8", "0.7", "0.9"):
+        assert value in t17
+
+
+def test_mutated_plotted_number_breaks_check(tmp_path: Path) -> None:
+    evidence = json.loads(DEFAULT_EVIDENCE.read_text(encoding="utf-8"))
+    evidence["artifacts"]["V17_program_timeline"]["rows"][9][2] = 9.99
+    path = tmp_path / "evidence.json"
+    path.write_text(json.dumps(evidence), encoding="utf-8")
+
+    rendered = render(json.loads(path.read_text(encoding="utf-8")))
+    from paper.render import write_or_check
+
+    with pytest.raises(EvidenceError, match="stale"):
+        write_or_check(rendered, DEFAULT_OUTPUT, check=True)
