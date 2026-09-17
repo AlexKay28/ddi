@@ -126,8 +126,10 @@ remains. Two approaches compose: \textbf{sparse cold prefill} reduces
 attention work on cache misses; \textbf{warm KV reuse} loads stored document
 states and skips document prefill. At $N=25,L=512,Q=64$, DDI-QF removes
 95.04\% of causal prefill pairs, but measured dense-SDPA prefill remains near the
-full-causal latency (the profile is consistent with the 4D additive mask
-dispatching SDPA to its slow math backend; dispatch was not kernel-profiled).
+full-causal latency. The mechanism is measured (V101): a 4D additive mask
+trades SDPA's flash kernel for its memory-efficient kernel, which reads the
+full bias and leaves block-sparsity unexploited ($\sim$1.5$\times$ slower
+than the 2D path, identical for full-causal and 95\%-sparse masks).
 Historical Flex logs report 1.77$\times$ whole-model prefill gain; their older
 mask semantics and failed parity gates prevent treating these as validated
 current-DDI speedups. Natural-QA mask and document-count studies show quality
@@ -139,22 +141,31 @@ greedy callable and exactly equal EM/F1 on all $n{=}300$ confirmation records
 --- at every station ($k{=}5$ seed 47, $k{=}0$ seed 1, $k{=}5$
 Llama-3.1-8B), an execution-fidelity property that does not depend on
 link-token training. The paired-bootstrap interval of an all-zero difference
-is the degenerate $[0,0]$ and is reported as such. The trained contract's
-serving boundary (V71), measured against the untrained-restart monolithic
-reference, keeps the warm-path win: all-hit TTFT up to 5.55$\times$ (wall at
-decode $d{=}1$ up to 6.55$\times$) with zero divergent decodes across 240
-grid configurations (15 repeats each); smallest tested winning
-configurations reach $h_{\mathrm{eff}}{=}$hit\_count$/N$ of 0.6 (wall) and
-0.7 (TTFT) at $L{=}512$ and 0.9/1.0 at $L{=}128$ --- per-shape grid
-outcomes, not universal thresholds. An exact-prefix baseline comparison was
-withdrawn after its cache-hit branch was found to never skip prefill. The
-win is scoped: mixed-hit traffic remains slower, the sparse cold path wins
-only at long shapes (1.12--1.29$\times$ at $L{=}512$), no original-model QA
-reference is measured at $n{=}300$, and the confirmation stations reuse the
-same frozen records. We therefore claim a measured, audited warm-path
-speedup with exact cached-vs-fresh execution identity --- not a
-quality-preservation result against the original model at this scale, and
-not yet a general replacement for full causal attention at scale.
+is the degenerate $[0,0]$ and is reported as such. Two costs are measured
+rather than assumed: the cached contract sits $-0.130$ EM (95\% CI
+$[-0.187,-0.073]$) below the original model under matched full-causal
+inference (V109), so quality preservation against the original model is
+explicitly not claimed; and the V70 D-arm collapse is a mixed-execution
+effect --- a full-causal mask on the restart/link layout --- while either
+pure execution mode lands near the contract's quality (V110). The trained
+contract's serving boundary (V71), measured against the untrained-restart
+monolithic reference, keeps the warm-path win: all-hit TTFT up to
+5.55$\times$ (wall at decode $d{=}1$ up to 6.55$\times$) with zero divergent
+decodes across 240 grid configurations (15 repeats each); smallest tested
+winning configurations reach $h_{\mathrm{eff}}{=}$hit\_count$/N$ of 0.6
+(wall) and 0.7 (TTFT) at $L{=}512$ and 0.9/1.0 at $L{=}128$ --- per-shape
+grid outcomes, not universal thresholds. An exact-prefix baseline, first
+withdrawn for a nonfunctional hit branch, was rebuilt genuinely (V112): it
+wins fixed-order traffic ($12.2\times$ prefill, $8.5\times$ TTFT), degrades
+exactly to monolithic under document reordering, and reproduces monolithic
+outputs on 90\% of hits --- while DDI's content-addressed cache is the only
+path that is order-independent and byte-identical.
+The win is further scoped: mixed-hit traffic remains slower, the sparse cold
+path wins only at long shapes (1.12--1.29$\times$ at $L{=}512$), and the
+confirmation stations reuse the same frozen records. We therefore claim a
+measured, audited warm-path speedup with exact cached-vs-fresh execution
+identity --- not a quality-preservation result against the original model,
+and not yet a general replacement for full causal attention at scale.
 \end{abstract}
 
 % ---------------------------------------------------------------------

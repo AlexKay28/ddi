@@ -2125,6 +2125,121 @@
           15
         ]
       ]
+    },
+    "T18_v109_v110_arms": {
+      "sources": [
+        "v109_v110_summary"
+      ],
+      "note": "Rows [arm, EM, F1, C-EM minus arm, CI low, CI high], n=300 frozen confirmation300 records, greedy 64, bf16 eager, torch 2.13.0+cu126, A100 80GB. base-std = original hub Qwen2.5-7B-Instruct, plain stream, sequential positions, full-causal (V109). k5-* arms run the trained results/v70_arms_valid_seed47/checkpoint_k5 (aggregate pin in the source). k5-d-replica is the pinned V70 D construction (replication anchor; drifted from pinned D EM 0.1833 to 0.1967 across runtime stacks - deviation recorded in experiments/v110_preregistration.md Amendment 1). Paired bootstrap 10k, seed 47 vs the pinned V70 C arm.",
+      "rows": [
+        [
+          "base-std",
+          0.5533,
+          0.6928,
+          0.13,
+          0.0733,
+          0.1867
+        ],
+        [
+          "k5-std",
+          0.4533,
+          0.6011,
+          0.03,
+          -0.0267,
+          0.0867
+        ],
+        [
+          "k5-iso-seq",
+          0.4833,
+          0.5968,
+          0.06,
+          0.02,
+          0.1
+        ],
+        [
+          "k5-d-replica",
+          0.1967,
+          0.2865,
+          -0.2267,
+          -0.29,
+          -0.1633
+        ]
+      ]
+    },
+    "T19_sdpa_dispatch": {
+      "sources": [
+        "v101_sdpa_summary"
+      ],
+      "note": "Rows [mask case, dispatched kernel family, wall s per forward]. Shape N=25, L=512, Q=64 (total 12,809 tokens; 95.86% causal-pair sparsity), bf16, torch 2.13.0+cu126, A100 80GB, 3 warmup + 10 timed forwards under torch.profiler (CUDA activity). The 2D causal path dispatches SDPA flash; both 4D additive masks dispatch the SDPA memory-efficient cutlass kernel - block-sparsity is invisible to it either way.",
+      "rows": [
+        [
+          "2d_causal_hf_default",
+          "sdpa_flash",
+          1.889
+        ],
+        [
+          "4d_additive_full_causal",
+          "sdpa_mem_efficient",
+          2.829
+        ],
+        [
+          "4d_additive_ddi_qf",
+          "sdpa_mem_efficient",
+          2.869
+        ]
+      ],
+      "pair_sparsity": 0.9585771348197614
+    },
+    "T20_prefix_cache_redo": {
+      "sources": [
+        "v112_prefix_summary"
+      ],
+      "note": "Rows [arm, median prefill ms, median TTFT ms, median total ms]. Genuine exact-prefix KV cache (VIBEQUEUE-114): hits load stored document-prefix K/V tensors and prefill only the query tail (instrumented: only query tokens forwarded on hits, G2); first miss is byte-identical to monolithic (G1). 20 dev requests (5x500-token docs, fixed doc order) x 3 repeats, greedy 16, bf16 eager, untrained restart checkpoint (V66 pin). Prefix keys are ORDERED document tuples, so per-request shuffles miss every time while the DDI canonical cache (order-independent content keys) keeps its win (G5). Hit outputs match monolithic on 90% of requests (bf16 reduction-order divergence across shapes; preregistered as measured-not-gated) - DDI's canonical exact identity remains the contrast.",
+      "rows": [
+        [
+          "monolithic",
+          664.9,
+          695.9,
+          868.5
+        ],
+        [
+          "prefix-fixed",
+          54.3,
+          81.9,
+          222.4
+        ],
+        [
+          "prefix-reordered",
+          665.3,
+          694.7,
+          839.0
+        ],
+        [
+          "ddi-fixed",
+          null,
+          null,
+          771.2
+        ],
+        [
+          "ddi-reordered",
+          null,
+          null,
+          773.3
+        ]
+      ],
+      "gates": {
+        "G1_first_request_identical": true,
+        "G2_hit_forwards_query_only": true,
+        "G4_prefix_fixed_under_half_mono": true,
+        "G5a_prefix_reordered_no_win": true,
+        "G5b_ddi_reordered_total_under_mono_total": true,
+        "prefix_hit_output_match_fraction_vs_mono": 0.9
+      },
+      "prefix_cache": {
+        "hits": 57,
+        "misses": 3,
+        "hit_prefill_tokens_only": 4674
+      }
     }
   },
   "schema_version": 1,
@@ -2499,6 +2614,24 @@
       "path": "results/v72s2_confirmation_analysis/verdict.json",
       "sha256": "d398b260993d35337218c152d60ba4a04739cb6176320f3ce1d913eb96526ad4",
       "bytes": 21927,
+      "required": true
+    },
+    "v109_v110_summary": {
+      "path": "results/v109_v110_20260915T211622Z/summary.json",
+      "sha256": "c52ee1ccd6d0a2cbdc0accddb0fc6b8bb8dac3fda402e25a87baf537ee71b340",
+      "bytes": 3895,
+      "required": true
+    },
+    "v101_sdpa_summary": {
+      "path": "results/v101_sdpa_dispatch_20260915T212816Z/summary.json",
+      "sha256": "33eaf37cbc4781fcced6b35c18598ecf81e3f071fc511673b6a45df0fa23a7e2",
+      "bytes": 1387,
+      "required": true
+    },
+    "v112_prefix_summary": {
+      "path": "results/v112_prefix_cache_redo_20260917T100727Z/summary.json",
+      "sha256": "e9592e47dfd73827ee7054e25310b202de107f76ab304660e4cead22eadf023b",
+      "bytes": 1742,
       "required": true
     }
   }

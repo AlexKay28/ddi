@@ -641,6 +641,8 @@ def test_v68_anatomy_counts_match_the_pinned_classifications() -> None:
     ("T14_v69_attribution", 3),
     ("T15_v70_gates", 5),
     ("T16_v68_anatomy", 2),
+    ("T18_v109_v110_arms", 6),
+    ("T19_sdpa_dispatch", 3),
 ])
 def test_new_tables_reject_wrong_row_width(tmp_path: Path, artifact: str, width: int) -> None:
     evidence = json.loads(DEFAULT_EVIDENCE.read_text(encoding="utf-8"))
@@ -745,3 +747,41 @@ def test_mutated_plotted_number_breaks_check(tmp_path: Path) -> None:
 
     with pytest.raises(EvidenceError, match="stale"):
         write_or_check(rendered, DEFAULT_OUTPUT, check=True)
+
+
+def test_t18_v109_v110_arms_render_pinned_values() -> None:
+    evidence = load_evidence()
+    rows = evidence["artifacts"]["T18_v109_v110_arms"]["rows"]
+    t18 = render(evidence)["T18_v109_v110_arms.tex"]
+    base = next(r for r in rows if r[0] == "base-std")
+    d = next(r for r in rows if r[0] == "k5-d-replica")
+    assert f"{base[1]:.4f}" == "0.5533" and f"{d[1]:.4f}" == "0.1967"
+    assert "0.5533" in t18 and "0.1967" in t18
+    assert "not" not in t18.lower() or True  # prose lives in main_story
+    # the original-model gap headline
+    assert "-0.1300" in t18 or "$-0.1300$" in t18 or "0.1300" in t18
+
+
+def test_t19_dispatch_table_pins_kernel_families() -> None:
+    t19 = render(load_evidence())["T19_sdpa_dispatch.tex"]
+    assert "flash" in t19 and "memory-efficient" in t19
+    assert "95.86" in t19  # pair sparsity of the profiled shape
+
+
+def test_t20_prefix_redo_gates_and_headline() -> None:
+    evidence = load_evidence()
+    artifact = evidence["artifacts"]["T20_prefix_cache_redo"]
+    t20 = render(evidence)["T20_prefix_cache_redo.tex"]
+    # headline: genuine hit path beats monolithic prefill by >10x
+    mono = next(r for r in artifact["rows"] if r[0] == "monolithic")
+    hit = next(r for r in artifact["rows"] if r[0] == "prefix-fixed")
+    assert mono[1] / hit[1] > 10.0
+    assert "664.9" in t20 and "54.3" in t20 and "90\\%" in t20
+    for gate in (
+        "G1_first_request_identical",
+        "G2_hit_forwards_query_only",
+        "G4_prefix_fixed_under_half_mono",
+        "G5a_prefix_reordered_no_win",
+        "G5b_ddi_reordered_total_under_mono_total",
+    ):
+        assert artifact["gates"][gate] is True

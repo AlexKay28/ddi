@@ -28,20 +28,27 @@ wall speedup at decode $d{=}1$ reaches $6.55\times$ ($L{=}512$, $N{=}10$),
 across 240 grid configurations at 15 timed repeats each, with zero identity
 violations (V71).
 \item The 95\%-sparsity $\to$ 0\%-speedup gap under SDPA is an
-\textbf{implementation property} (dispatch consistent with the slow math
-backend under 4D additive masks; observed in timings, not kernel-profiled),
-not a mask limitation. Block-Attention's 98.7\% TTFT reduction combines a
-custom kernel with \emph{precomputed/reused} document KVs and therefore does
-not by itself demonstrate that a sparse cold-prefill kernel closes the gap.
-\item Training only isolation masks makes full-causal execution
-\textbf{out-of-distribution} for the trained weights --- a characterization,
-not a causal attribution: the D arm differs from B/C in checkpoint, mask, and
-position treatment simultaneously, and we do not separate those effects.
-\item \textbf{A withdrawn baseline, with root cause.} Our exact-prefix
-baseline harness (V73) contained a nonfunctional cache-hit branch --- it
-stored a flag instead of KV tensors and always re-ran full generation --- so
-the reordering comparison was invalid and is withdrawn rather than repaired
-post hoc (Section~\ref{sec:cache}).
+\textbf{implementation property}, now measured (V101): a 4D additive mask
+disables SDPA's flash dispatch and routes the prefill to the
+memory-efficient kernel, which reads the full bias and leaves block-sparsity
+unexploited ($\sim$1.5$\times$ slower than the 2D path at the 95\%-sparsity
+shape; identical for full-causal and 95\%-sparse masks).
+\item The trained contract requires its \textbf{mask and layout to cohere}
+(V110): executing the trained weights with either pure mode --- the isolated
+mask on the contract layout, or a full-causal mask on a plain sequential
+stream --- lands near the contract's quality (EM 0.42--0.48), while the
+mixed execution inherited from the V70 D arm (full-causal mask on the
+restart/link layout) collapses to EM 0.20. Full-causal execution itself is
+\emph{not} out-of-distribution for the trained weights.
+\item \textbf{A withdrawn baseline, redone genuinely (V112).} Our first
+prefix-cache harness had a nonfunctional hit branch and was withdrawn with
+root cause; the rebuilt cache stores real document-prefix K/V tensors and
+loads them on hits (instrumented: hits forward only query tokens). It wins
+fixed-order traffic ($12.2\times$ prefill, $8.5\times$ TTFT) and degrades
+exactly to monolithic under document reordering, while DDI's
+content-addressed cache keeps its win under both --- at the cost of exact
+identity: prefix hits reproduce monolithic outputs on 90\% of requests, not
+100\%.
 \item All displayed figure values are \textbf{rendered from the sha-pinned
 ledger} (including V14--V18), the renderer rejects changed artifacts and
 plotted numbers, failed gates stay visible, and a retracted experiment is
@@ -203,19 +210,30 @@ material speedup.}
 \end{figure}
 
 \paragraph{Why.}
-The measured latency profile is consistent with the 4D additive mask
-dispatching SDPA to its \emph{slow math backend}, which computes the full
-$QK^\top$ and masks afterward (inferred from timings and backend-selection
-behavior; we did not profile kernel dispatch directly). The block-sparse
-structure is invisible to this kernel. This is an \emph{implementation}
-property, not a mask property: custom sparse kernels are a plausible remedy,
-though Block-Attention's 98.7\% TTFT figure~\citep{ma2025blockattention}
+The mechanism is now measured (V101, Table~\ref{tab:dispatch}). At the
+95\%-sparsity shape ($N{=}25$, $L{=}512$, $Q{=}64$), the 2D causal path
+dispatches SDPA's \emph{flash} kernel, while either 4D additive mask ---
+byte-equivalent full-causal or the 95\%-sparse DDI-QF --- dispatches SDPA's
+\emph{memory-efficient} kernel, which reads the full bias matrix and leaves
+block-sparsity unexploited: both 4D cases cost the same
+($\sim$1.5$\times$ the 2D path). The block-sparse structure is invisible to
+the dispatched kernel; the gap is a dispatch property, not a mask property.
+Custom sparse kernels are a plausible remedy, though
+Block-Attention's 98.7\% TTFT figure~\citep{ma2025blockattention}
 rides on precomputed/reused document KVs and does not by itself price a
 \emph{cold} sparse prefill. FlexAttention~\citep{flex_attention} compiles
 block masks into sparse kernels
 (historical 1.77$\times$ whole-model gain, though with older mask semantics
 and unvalidated parity). The trained-contract serving path
 (Section~\ref{sec:cache}) bypasses the issue entirely by reusing cached KV.
+
+\begin{table}[H]
+\centering\footnotesize\input{generated/T19_sdpa_dispatch.tex}
+\caption{SDPA kernel dispatch and wall time per prefill forward at the
+95\%-sparsity shape (V101). The 4D additive mask trades flash for the
+memory-efficient kernel; sparsity changes nothing.}
+\label{tab:dispatch}
+\end{table}
 
 \begin{figure}[H]
 \centering\resizebox{.74\linewidth}{!}{\input{generated/V11_flex_history.tex}}
@@ -397,18 +415,44 @@ inspection happened after the V62 evaluation and before the V70/V72
 confirmations; no gate, margin, or treatment was changed in response to it,
 and the V68 population is reported post hoc only
 (experiments/v70\_preregistration.md, amendments 1--3).
-
-\paragraph{Within-contract quality contrasts (descriptive).}
-The gated contrast C$-$D (isolated cached vs.\ trained full-causal) passes
+\paragraph{Within-contract quality contrasts (V110 decomposition).}
+The gated contrast C$-$D (isolated cached vs.\ the V70 D construction) passes
 non-inferiority with large margins (EM $+0.240$ seed 47, $+0.277$ seed 1,
-$+0.123$ Llama). We report it as a characterization: D differs from C in
-mask, position treatment, and layout simultaneously, so the D degradation
-cannot be attributed to isolation training alone. Against its own monolithic-with-links twin (A), the cached
-path is descriptively close (C$-$A: EM $-0.013$, F1 $-0.027$ at seed 47) ---
-but no arm at $n{=}300$ is the original untrained model, so we make
-\emph{no} claim that the trained contract preserves original-model QA at
-this scale; the train-free isolation cost against the original model remains
-the $n{=}100$ measurement of Section~\ref{sec:quality}.
+$+0.123$ Llama), and V110 now explains the D side of that gap. Decomposing
+the D arm on the trained $k{=}5$ checkpoint (Table~\ref{tab:arms}): a plain
+sequential stream under a full-causal mask scores EM 0.4533
+($k5$-std), the same plain stream under the isolated DDI-QF mask scores EM
+0.4833 ($k5$-iso-seq) --- both near the contract's cached quality --- while
+the pinned D construction (full-causal mask \emph{on} the restart/link
+layout) collapses to EM 0.1967 ($k5$-d-replica; the pinned run measured
+0.1833 on an earlier runtime stack, deviation recorded in the prereg). In
+the mask $\times$ layout grid, only the mixed cell fails: the trained
+contract requires its mask and layout to cohere, and full-causal execution
+itself is \emph{not} out-of-distribution for the trained weights. We report
+this as a measured characterization and retract the earlier
+``full-causal is out-of-distribution'' wording.
+
+\paragraph{The original-model reference (V109).}
+The matched reference the confirmations lacked: the original
+Qwen2.5-7B-Instruct on the byte-identical token stream, sequential
+positions, full-causal mask (Table~\ref{tab:arms}). It reaches EM 0.5533 /
+F1 0.6928, so the cached contract's C arm sits $-0.130$ EM
+(95\% CI $[-0.187, -0.073]$) and $-0.137$ F1 below it: the isolation-plus-
+training pipeline does \emph{not} preserve original-model QA at $n{=}300$,
+and we claim only what the gates support --- exact cached-vs-fresh
+identity and the within-contract contrasts --- with the original-model gap
+stated as measured. Even the best plain-stream variant on the trained
+weights ($k5$-iso-seq, EM 0.4833) remains $-0.07$ EM below the original
+model.
+
+\begin{table}[H]
+\centering\footnotesize\input{generated/T18_v109_v110_arms.tex}
+\caption{Original-model reference (V109) and D-arm decomposition (V110) on
+the frozen confirmation300 records, with paired C$-$arm deltas against the
+pinned V70 C arm.}
+\label{tab:arms}
+\end{table}
+
 To our knowledge, no prior work frames cache reuse as an exact
 persisted-vs-fresh execution identity question; KVLink
 \citep{yang2025kvlink} targets approximate quality recovery, CacheBlend
@@ -520,18 +564,35 @@ the serving win. All displayed values are rendered from the pinned ledger.}
 \label{fig:timeline}
 \end{figure}
 
-\paragraph{Withdrawn prefix-cache baseline (V73).}
-We benchmarked an exact-prefix KV cache against DDI warm reuse and the
-monolithic reference on reorder-heavy HotpotQA. Pre-publication review of
-the harness found the cache-hit branch nonfunctional: on a hit it stored a
-boolean flag instead of KV tensors and then re-ran the \emph{full}
-generation regardless (scripts/v73\_prefix\_cache.py, hit branch is a
-no-op). The measured comparison therefore never exercised prefix reuse, and
-every empirical claim drawn from it --- fixed-order parity and
-reordering-degradation alike --- is \textbf{withdrawn}. We preserve the
-negative result as a provenance lesson rather than repairing the harness
-post hoc: a fixed-order positive control that actually skips prefill is a
-prerequisite for any future prefix-cache comparison.
+\paragraph{Prefix-cache baseline, redone genuinely (V112).}
+The withdrawn V73 comparison was rebuilt from scratch
+(VIBEQUEUE-114; prereg frozen before the run). The new harness implements a
+real exact-prefix cache: document-prefix K/V tensors are stored keyed by the
+\emph{ordered} document token tuple, and a hit loads them and prefills only
+the query tail --- verified by an instrumented counter that shows hits
+forward zero document tokens (the positive control the review demanded),
+and by a byte-identity gate on the first miss.
+
+\begin{table}[H]
+\centering\footnotesize\input{generated/T20_prefix_cache_redo.tex}
+\caption{Prefix-cache redo (V112): fixed-order traffic, reordered traffic,
+and the DDI canonical cache on the same requests.}
+\label{tab:prefixredo}
+\end{table}
+
+The measured outcome (Table~\ref{tab:prefixredo}): in fixed-order traffic
+the prefix cache cuts median prefill from 664.9\,ms to 54.3\,ms
+($12.2\times$; TTFT $8.5\times$) --- a real serving win that the broken V73
+harness never exercised. Under per-request document reordering its
+ordered-tuple keys miss every time and it degrades exactly to monolithic
+(665.3 vs 664.9\,ms), while DDI's content-addressed per-document keys keep
+their win under both orders. Two honest caveats distinguish this baseline
+from the DDI contract: prefix hits reproduce monolithic outputs on 90\% of
+requests (bf16 reduction-order divergence between the standalone prefix
+forward and the full-stream forward --- measured, not gated), and the cache
+is order-dependent by construction. The DDI canonical contract remains the
+only path that is simultaneously order-independent \emph{and}
+byte-identical.
 
 \section{Coverage and Limits}
 \label{sec:coverage}
@@ -558,12 +619,14 @@ cache-fidelity gates at $n{=}300$ (replicated across seeds and families on
 the same frozen records), and its serving boundary keeps the warm-path win
 with zero divergent decodes across 240 configurations --- measured against
 the untrained-restart monolithic reference, not against the original model,
-and without a concurrency sweep. No original-model QA reference exists at
-$n{=}300$; the train-free isolation cost against the original model remains
-the $n{=}100$ measurement. The segmented-kernel criterion is calibrated, not
-task-level confirmed. The V69 attribution of the 221$\to$62\,ms reduction
-(53.9\% validate\_entry, 37.2\% disk load, 8.9\% H2D) is in
-Appendix~\ref{app:cache}.
+and without a concurrency sweep. The original-model reference is now
+measured (V109): the cached contract sits $-0.130$ EM below it, so
+quality preservation against the original model is explicitly \emph{not}
+claimed. The mask$\times$layout decomposition (V110) explains the D-arm
+collapse as a mixed-execution effect; the segmented-kernel criterion is
+calibrated, not task-level confirmed. The V69 attribution of the
+221$\to$62\,ms reduction (53.9\% validate\_entry, 37.2\% disk load, 8.9\%
+H2D) is in Appendix~\ref{app:cache}.
 
 \paragraph{Conclusion.}
 \textbf{Warm document-KV reuse} is an audited win: 2.05$\times$ TTFT with
@@ -576,14 +639,24 @@ link-token training, across two seeds and two model families on the same
 frozen records; the trained contract's serving boundary keeps the win
 (all-hit TTFT up to $5.55\times$, wall at $d{=}1$ up to $6.55\times$, 240
 configurations, zero divergent decodes, against the untrained-restart
-monolithic reference). An exact-prefix baseline comparison was withdrawn
-after a harness defect was found; no prefix-cache claim is made.
+monolithic reference). The costs are now measured too: the cached contract
+sits $-0.130$ EM below the original model (V109), and the D-arm collapse is
+a mixed-execution effect --- full-causal on the contract layout --- not an
+out-of-distribution property of full-causal execution (V110). The
+prefix-cache baseline, rebuilt genuinely after the V73 withdrawal (V112),
+wins fixed-order traffic ($12.2\times$ prefill) and degrades to monolithic
+under reordering with 90\%-byte-identical hits --- while DDI's
+content-addressed cache is the only path that is order-independent
+\emph{and} byte-identical.
 \textbf{Sparse cold prefill} is real only at long-document shapes
 (1.12--1.29$\times$); the cold path remains 3.27$\times$ slower than
-monolithic. The honest claim is a measured, correctly-scoped warm-path
-acceleration whose cached-vs-fresh identity is exact --- not a
-quality-preservation result against the original model at $n{=}300$, and
-not yet a general replacement for full causal attention at scale.
+monolithic, and the 95\%-sparsity $\to$ 0\%-speedup gap is a measured
+dispatch property: 4D additive masks trade SDPA's flash kernel for the
+memory-efficient kernel, leaving block-sparsity unexploited (V101). The
+honest claim is a measured, correctly-scoped warm-path acceleration whose
+cached-vs-fresh identity is exact --- not a quality-preservation result
+against the original model, and not yet a general replacement for full
+causal attention at scale.
 
 \paragraph{Three paths from here.}
 \textit{(1) Deferred positional encoding} (LazyAttention~\citep{xia2026lazyattention}):
@@ -606,8 +679,9 @@ general-purpose RAG efficiency method.
 
 \paragraph{Reproducibility.}
 All displayed figure values --- including the V14--V18 charts --- are
-rendered from the sha-pinned ledger (V57--V72 artifacts plus the three
-confirmation verdicts); the renderer rejects changed hashes, changed
+rendered from the sha-pinned ledger (V57--V112 artifacts, including the
+three confirmation verdicts, the V109/V110 reference run, and the V101
+dispatch profile); the renderer rejects changed hashes, changed
 plotted numbers, incomplete request joins, and dropped failed gates, and
 \texttt{render.py -\/-check} fails on any drift between the ledger and the
 checked-in figures. Protocol details, the V69 attribution, and the evidence

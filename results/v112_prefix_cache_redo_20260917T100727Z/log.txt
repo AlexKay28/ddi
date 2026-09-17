@@ -1,0 +1,10 @@
+[2026-09-17T10:07:27Z] start smoke=False checkpoint=Qwen__Qwen2.5-7B-Instruct__ddi_qf__8L_restart
+[2026-09-17T10:08:04Z] checkpoint directory_tree 00df4c47d67660ca
+[2026-09-17T10:08:07Z] docs: 5 x 500; queries: 20
+[2026-09-17T10:08:07Z] repeat 1/3
+[2026-09-17T10:09:26Z]   repeat done: prefix-fixed hits/misses = 19/1
+[2026-09-17T10:09:26Z] repeat 2/3
+[2026-09-17T10:10:43Z]   repeat done: prefix-fixed hits/misses = 19/1
+[2026-09-17T10:10:43Z] repeat 3/3
+[2026-09-17T10:11:55Z]   repeat done: prefix-fixed hits/misses = 19/1
+[2026-09-17T10:11:55Z] done: /home/alexkay28/arcadia/junk/alexkay28/ddi/results/v112_prefix_cache_redo_2026-09-17T10:07:27Z

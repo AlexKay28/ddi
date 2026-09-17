@@ -1,0 +1,48 @@
+{
+  "schema": "v101-sdpa-dispatch-v1",
+  "created_utc": "2026-09-15T21:29:41Z",
+  "shape": {
+    "n_docs": 25,
+    "doc_len": 512,
+    "query_len": 64,
+    "total": 12809
+  },
+  "pair_sparsity": 0.9585771348197614,
+  "runtime": {
+    "torch": "2.13.0+cu126",
+    "gpu": "NVIDIA A100 80GB PCIe",
+    "dtype": "bfloat16",
+    "backend": "sdpa",
+    "warmup": 3,
+    "timed": 10
+  },
+  "cases": [
+    {
+      "label": "2d_causal_hf_default",
+      "kernels_us": {
+        "sdpa_flash": 2302917.002999984,
+        "math_path:void_at_native_unrolled_elementwise_kernel_at_na": 172758.36000000237,
+        "math_path:_bmm_outer_product_kernel": 61.118000000511984
+      },
+      "wall_s_per_call": 1.8890329390764236
+    },
+    {
+      "label": "4d_additive_full_causal",
+      "kernels_us": {
+        "sdpa_mem_efficient": 9979180.431000011,
+        "math_path:void_at_native_unrolled_elementwise_kernel_at_na": 159490.3210000211,
+        "math_path:_bmm_outer_product_kernel": 60.960999997561885
+      },
+      "wall_s_per_call": 2.8294581584632397
+    },
+    {
+      "label": "4d_additive_ddi_qf",
+      "kernels_us": {
+        "sdpa_mem_efficient": 10097180.095000003,
+        "math_path:void_at_native_unrolled_elementwise_kernel_at_na": 178371.67200002208,
+        "math_path:_bmm_outer_product_kernel": 62.01900000002979
+      },
+      "wall_s_per_call": 2.8691757664084436
+    }
+  ]
+}

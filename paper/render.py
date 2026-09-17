@@ -52,6 +52,9 @@ EXPECTED_ARTIFACTS = {
     "V15_v71_crossover_L128",
     "V16_gate_deltas",
     "V17_program_timeline",
+    "T18_v109_v110_arms",
+    "T19_sdpa_dispatch",
+    "T20_prefix_cache_redo",
 }
 GENERATED_FILES = (
     "T1_mask_taxonomy.md",
@@ -92,6 +95,9 @@ GENERATED_FILES = (
     "V16_gate_deltas.tex",
     "V17_program_timeline.tex",
     "V18_anatomy.tex",
+    "T18_v109_v110_arms.tex",
+    "T19_sdpa_dispatch.tex",
+    "T20_prefix_cache_redo.tex",
     "A1_cache_bins.tex",
     "analysis.json",
 )
@@ -195,6 +201,9 @@ def load_evidence(path: Path = DEFAULT_EVIDENCE) -> dict[str, Any]:
         "T15_v70_gates": 5,
         "T16_v68_anatomy": 2,
         "T17_v71_boundary": 6,
+        "T18_v109_v110_arms": 6,
+        "T19_sdpa_dispatch": 3,
+        "T20_prefix_cache_redo": 4,
         "F5": 2,
         "V53_cache_diagnostic": 2,
     }.items():
@@ -1333,6 +1342,129 @@ def _render_v18(evidence: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+_ARM_LABELS = {
+    "base-std": r"base model, full-causal, sequential (V109 R)",
+    "k5-std": r"trained $k5$, plain stream, full-causal, sequential (V110)",
+    "k5-iso-seq": r"trained $k5$, plain stream, isolated mask, sequential (V110)",
+    "k5-d-replica": r"trained $k5$, V70 D: full-causal on contract layout (V110)",
+}
+
+
+def _render_t18(evidence: dict[str, Any]) -> str:
+    rows = _rows(evidence["artifacts"], "T18_v109_v110_arms", 6)
+    lines = [
+        _source_header(evidence, "T18_v109_v110_arms").rstrip(),
+        r"\resizebox{\linewidth}{!}{%",
+        r"\begin{tabular}{lrrrr}",
+        r"\toprule",
+        r"Arm & EM & F1 & C$-$arm EM & 95\% CI \\",
+        r"\midrule",
+    ]
+    for arm, em, f1, delta, lo, hi in rows:
+        _require(arm in _ARM_LABELS, f"T18 unknown arm {arm}")
+        _require(_finite(em, f1, delta, lo, hi), f"T18 invalid values for {arm}")
+        label = _ARM_LABELS[arm]
+        lines.append(
+            rf"{label} & {em:.4f} & {f1:.4f} & {delta:+.4f} "
+            rf"& $[{lo:+.4f}, {hi:+.4f}]$ \\"
+        )
+    lines.append(r"\midrule")
+    lines.append(
+        r"\multicolumn{5}{p{0.97\linewidth}}{\footnotesize $n{=}300$ frozen "
+        r"confirmation300 records, greedy 64, bf16 eager, batch 1. Paired "
+        r"bootstrap (10k, seed 47) against the pinned V70 C arm (EM 0.4233, "
+        r"F1 0.5561). The pinned V70 C/B arms run the isolated mask on the "
+        r"restart/link contract layout; k5-d-replica reproduces the pinned D "
+        r"construction (runtime drift recorded as prereg Amendment 1).} \\"
+    )
+    lines.extend([r"\bottomrule", r"\end{tabular}}"])
+    return _table(lines)
+
+
+def _render_t19(evidence: dict[str, Any]) -> str:
+    artifact = evidence["artifacts"]["T19_sdpa_dispatch"]
+    rows = _rows(evidence["artifacts"], "T19_sdpa_dispatch", 3)
+    sparsity = artifact["pair_sparsity"]
+    _require(_finite(sparsity) and 0.9 < sparsity < 1.0, "T19 sparsity invalid")
+    lines = [
+        _source_header(evidence, "T19_sdpa_dispatch").rstrip(),
+        r"\resizebox{\linewidth}{!}{%",
+        r"\begin{tabular}{llr}",
+        r"\toprule",
+        r"Prefill mask & Dispatched kernel & wall s / forward \\",
+        r"\midrule",
+    ]
+    kernel_labels = {
+        "sdpa_flash": r"SDPA \emph{flash}",
+        "sdpa_mem_efficient": r"SDPA \emph{memory-efficient} (cutlass)",
+        "sdpa_cudnn": r"SDPA cuDNN",
+    }
+    for case, kernel, wall in rows:
+        _require(kernel in kernel_labels, f"T19 unknown kernel {kernel}")
+        _require(_finite(wall) and wall > 0, f"T19 invalid wall for {case}")
+        lines.append(f"{_tex_name(case)} & {kernel_labels[kernel]} & {wall:.3f} \\\\")
+    lines.append(r"\midrule")
+    lines.append(
+        rf"\multicolumn{{3}}{{p{{0.97\linewidth}}}}{{\footnotesize $N{{=}}25$, "
+        rf"$L{{=}}512$, $Q{{=}}64$ (12{{,}}809 tokens; {100 * sparsity:.2f}\% causal-pair "
+        r"sparsity), bf16, batch 1, 3 warmup + 10 profiled forwards. Block-sparsity "
+        r"is invisible to the dispatched kernel in every case: the 4D additive mask "
+        r"changes the kernel (flash $\to$ memory-efficient) and costs "
+        r"$\sim$1.5$\times$, not the work.} \\"
+    )
+    lines.extend([r"\bottomrule", r"\end{tabular}}"])
+    return _table(lines)
+
+
+def _render_t20(evidence: dict[str, Any]) -> str:
+    artifact = evidence["artifacts"]["T20_prefix_cache_redo"]
+    rows = _rows(evidence["artifacts"], "T20_prefix_cache_redo", 4)
+    gates = artifact["gates"]
+    for gate, expected in (
+        ("G1_first_request_identical", True),
+        ("G2_hit_forwards_query_only", True),
+        ("G4_prefix_fixed_under_half_mono", True),
+        ("G5a_prefix_reordered_no_win", True),
+        ("G5b_ddi_reordered_total_under_mono_total", True),
+    ):
+        _require(gates.get(gate) is expected, f"T20 gate {gate} failed")
+    lines = [
+        _source_header(evidence, "T20_prefix_cache_redo").rstrip(),
+        r"\resizebox{\linewidth}{!}{%",
+        r"\begin{tabular}{lrrr}",
+        r"\toprule",
+        r"Arm & prefill ms & TTFT ms & total ms \\",
+        r"\midrule",
+    ]
+    labels = {
+        "monolithic": r"monolithic (no cache)",
+        "prefix-fixed": r"prefix cache, fixed order (hits)",
+        "prefix-reordered": r"prefix cache, reordered (all miss)",
+        "ddi-fixed": r"DDI canonical, fixed order (all hit)",
+        "ddi-reordered": r"DDI canonical, reordered (all hit)",
+    }
+    for arm, pre, ttft, total in rows:
+        _require(arm in labels, f"T20 unknown arm {arm}")
+        _require(_finite(total) and total > 0, f"T20 invalid total for {arm}")
+        pre_text = "---" if pre is None else f"{pre:.1f}"
+        ttft_text = "---" if ttft is None else f"{ttft:.1f}"
+        lines.append(f"{labels[arm]} & {pre_text} & {ttft_text} & {total:.1f} \\\\")
+    lines.append(r"\midrule")
+    match = gates["prefix_hit_output_match_fraction_vs_mono"]
+    lines.append(
+        r"\multicolumn{4}{p{0.97\linewidth}}{\footnotesize Genuine exact-prefix KV "
+        r"cache: hits load stored document-prefix K/V and prefill only the query "
+        r"tail (instrumented); the first miss is byte-identical to monolithic. "
+        r"Prefix keys are ordered document tuples, so reordering misses every "
+        r"time while DDI's content-addressed keys keep their win. Hit outputs "
+        rf"match monolithic on {match * 100:.0f}\% of requests (bf16 "
+        r"reduction-order divergence; measured, not gated) --- DDI's canonical "
+        r"exact identity remains the contrast.} \\"
+    )
+    lines.extend([r"\bottomrule", r"\end{tabular}}"])
+    return _table(lines)
+
+
 def render(evidence: dict[str, Any]) -> dict[str, str]:
     rendered = _render_t1(evidence)
     visuals = render_visuals(evidence)
@@ -1371,6 +1503,9 @@ def render(evidence: dict[str, Any]) -> dict[str, str]:
             "V16_gate_deltas.tex": _render_v16(evidence),
             "V17_program_timeline.tex": _render_v17(evidence),
             "V18_anatomy.tex": _render_v18(evidence),
+            "T18_v109_v110_arms.tex": _render_t18(evidence),
+            "T19_sdpa_dispatch.tex": _render_t19(evidence),
+            "T20_prefix_cache_redo.tex": _render_t20(evidence),
         }
     )
     _require(set(rendered) == set(GENERATED_FILES), "renderer output set is incomplete")
